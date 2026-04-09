@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+import re
+from collections import Counter
+
+from .base import BaseRetriever, Document, DocumentChunk, IngestionPipeline, KnowledgeBase, RetrievalQuery, RetrievedChunk
+
+
+class KeywordRetriever(BaseRetriever):
+    def __init__(self, chunks: list[DocumentChunk]) -> None:
+        self.chunks = chunks
+
+    async def retrieve(self, query: RetrievalQuery) -> list[RetrievedChunk]:
+        terms = [term for term in re.findall(r"\w+", query.query.lower()) if term]
+        results: list[RetrievedChunk] = []
+        for chunk in self.chunks:
+            text = chunk.text.lower()
+            counts = Counter(term for term in terms if term in text)
+            if not counts:
+                continue
+            score = float(sum(counts.values()))
+            results.append(RetrievedChunk(chunk=chunk, score=score, source="keyword"))
+        results.sort(key=lambda item: item.score, reverse=True)
+        return results[: query.top_k]
+
+
+class InMemoryKnowledgeBase(KnowledgeBase, IngestionPipeline):
+    def __init__(self) -> None:
+        self.documents: dict[str, Document] = {}
+        self.chunks: list[DocumentChunk] = []
+
+    async def ingest(self, documents: list[Document]) -> None:
+        for document in documents:
+            self.documents[document.id] = document
+            self.chunks.append(
+                DocumentChunk(
+                    id=f"{document.id}-chunk-1",
+                    document_id=document.id,
+                    text=document.text,
+                    metadata=document.metadata,
+                )
+            )
+
+    def get_retriever(self) -> BaseRetriever:
+        return KeywordRetriever(self.chunks)

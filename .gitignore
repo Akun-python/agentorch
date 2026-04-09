@@ -1,0 +1,10 @@
+.env
+.agent_orchestrator/
+.agentorch/
+.orch/
+.vscode/
+__pycache__/
+*.pyc
+dist/
+build/
+*.egg-info/
