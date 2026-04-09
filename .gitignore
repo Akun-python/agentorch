@@ -11,7 +11,6 @@ build/
 *.egg-info/
 
 # Keep local-only project materials out of the remote repository.
-README.md
 pyproject.toml
 Tool设计规范.md
 api接口/
@@ -27,3 +26,5 @@ skill设计规范.txt
 # Keep the notebooks directory on remote even if it is otherwise empty.
 notebooks/*
 !notebooks/.gitkeep
+!notebooks/resources/
+!notebooks/resources/*.svg

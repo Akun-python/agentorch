@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" fill="none">
+  <rect width="1280" height="760" fill="#F5F1E8"/>
+  <rect x="40" y="40" width="1200" height="680" rx="32" fill="#FFFDF8" stroke="#D8CDBA" stroke-width="2"/>
+  <text x="72" y="104" fill="#1F2937" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="700">agentorch Architecture Overview</text>
+  <text x="72" y="138" fill="#6B7280" font-family="Segoe UI, Arial, sans-serif" font-size="18">Code-first, async-first orchestration runtime for tools, workflows, retrieval, and multi-agent delegation.</text>
+
+  <rect x="72" y="182" width="280" height="150" rx="24" fill="#FDE6B8" stroke="#E0B75B" stroke-width="2"/>
+  <text x="96" y="226" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Application Layer</text>
+  <text x="96" y="264" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="18">Agent</text>
+  <text x="96" y="292" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="18">Runtime</text>
+  <text x="96" y="320" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="18">Workflow / Supervisor</text>
+
+  <rect x="390" y="182" width="500" height="150" rx="24" fill="#DDEEE7" stroke="#6EA68C" stroke-width="2"/>
+  <text x="414" y="226" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Orchestration Core</text>
+  <text x="414" y="264" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">PromptBuilder</text>
+  <text x="610" y="264" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">Reasoning Policies</text>
+  <text x="414" y="292" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">TaskPacket / Handoff</text>
+  <text x="610" y="292" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">Observability / Tracing</text>
+  <text x="414" y="320" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">Tool Routing / Delegation / Retrieval</text>
+
+  <rect x="928" y="182" width="272" height="150" rx="24" fill="#E4E9FF" stroke="#7181D3" stroke-width="2"/>
+  <text x="952" y="226" fill="#27346C" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Model Layer</text>
+  <text x="952" y="264" fill="#27346C" font-family="Segoe UI, Arial, sans-serif" font-size="18">OpenAIModel</text>
+  <text x="952" y="292" fill="#27346C" font-family="Segoe UI, Arial, sans-serif" font-size="18">BaseModelAdapter</text>
+  <text x="952" y="320" fill="#27346C" font-family="Segoe UI, Arial, sans-serif" font-size="18">Streaming / Tool Calls</text>
+
+  <rect x="72" y="390" width="350" height="132" rx="24" fill="#FFE4DE" stroke="#D77C69" stroke-width="2"/>
+  <text x="96" y="434" fill="#7A271A" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Action Systems</text>
+  <text x="96" y="472" fill="#7A271A" font-family="Segoe UI, Arial, sans-serif" font-size="18">ToolRegistry / tool decorator</text>
+  <text x="96" y="500" fill="#7A271A" font-family="Segoe UI, Arial, sans-serif" font-size="18">SandboxManager / python_interpreter</text>
+
+  <rect x="464" y="390" width="350" height="132" rx="24" fill="#E4F2D8" stroke="#8BAC62" stroke-width="2"/>
+  <text x="488" y="434" fill="#375623" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">State Systems</text>
+  <text x="488" y="472" fill="#375623" font-family="Segoe UI, Arial, sans-serif" font-size="18">MemoryManager</text>
+  <text x="488" y="500" fill="#375623" font-family="Segoe UI, Arial, sans-serif" font-size="18">Thread Memory / Long-term Records / Checkpoints</text>
+
+  <rect x="856" y="390" width="344" height="132" rx="24" fill="#E5F0FF" stroke="#6D95C7" stroke-width="2"/>
+  <text x="880" y="434" fill="#153E75" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Knowledge Systems</text>
+  <text x="880" y="472" fill="#153E75" font-family="Segoe UI, Arial, sans-serif" font-size="18">KnowledgeBase / BaseRetriever</text>
+  <text x="880" y="500" fill="#153E75" font-family="Segoe UI, Arial, sans-serif" font-size="18">RAGContextBuilder / RetrievalQuery</text>
+
+  <rect x="72" y="572" width="520" height="108" rx="24" fill="#F5E3FF" stroke="#A579CC" stroke-width="2"/>
+  <text x="96" y="616" fill="#5A2A82" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Multi-Agent Layer</text>
+  <text x="96" y="652" fill="#5A2A82" font-family="Segoe UI, Arial, sans-serif" font-size="18">AgentRegistry · AgentSpec · Supervisor · Workflow agent nodes</text>
+
+  <rect x="636" y="572" width="564" height="108" rx="24" fill="#FFF0D9" stroke="#D49B39" stroke-width="2"/>
+  <text x="660" y="616" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Extension Surface</text>
+  <text x="660" y="652" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="18">skills · plugins · custom retrievers · custom policies · sandbox backends</text>
+
+  <path d="M352 256H390" stroke="#A78B5A" stroke-width="4" stroke-linecap="round"/>
+  <path d="M890 256H928" stroke="#7C94D9" stroke-width="4" stroke-linecap="round"/>
+  <path d="M247 332V390" stroke="#C27564" stroke-width="4" stroke-linecap="round"/>
+  <path d="M640 332V390" stroke="#6EA68C" stroke-width="4" stroke-linecap="round"/>
+  <path d="M1064 332V390" stroke="#6D95C7" stroke-width="4" stroke-linecap="round"/>
+  <path d="M247 522V572" stroke="#A579CC" stroke-width="4" stroke-linecap="round"/>
+  <path d="M1028 522V572" stroke="#D49B39" stroke-width="4" stroke-linecap="round"/>
+</svg>
