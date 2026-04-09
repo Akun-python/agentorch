@@ -2,9 +2,28 @@
 .agent_orchestrator/
 .agentorch/
 .orch/
+.pytest_cache/
 .vscode/
 __pycache__/
 *.pyc
 dist/
 build/
 *.egg-info/
+
+# Keep local-only project materials out of the remote repository.
+README.md
+pyproject.toml
+Tool设计规范.md
+api接口/
+langchain参考文档/
+skill设计规范.txt
+提示工程、上下文工程与编排治理工程.md
+方案.txt
+智能体三要素：提示工程、上下文工程与编排治理工程.pdf
+状态_记忆_持久化设计.md
+部署_观测_日志_Tracing.md
+需求.txt
+
+# Keep the notebooks directory on remote even if it is otherwise empty.
+notebooks/*
+!notebooks/.gitkeep
