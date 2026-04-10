@@ -17,7 +17,13 @@ class PluginManager:
             "model_provider": [],
             "tool": [],
             "memory_backend": [],
+            "memory_governance": [],
             "policy": [],
+            "reasoning_framework": [],
+            "evolution_algorithm": [],
+            "retriever": [],
+            "embedding_provider": [],
+            "reranker": [],
             "sandbox": [],
         }
 

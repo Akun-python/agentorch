@@ -19,6 +19,7 @@ class SkillLoader:
             triggers=self._to_list(metadata.get("triggers", "")),
             allowed_tools=self._to_list(metadata.get("allowed_tools", "")),
             tags=self._to_list(metadata.get("tags", "")),
+            summary=metadata.get("summary"),
         )
         return Skill(
             manifest=manifest,
@@ -28,6 +29,22 @@ class SkillLoader:
             scripts_path=(root / "scripts") if (root / "scripts").exists() else None,
             assets_path=(root / "assets") if (root / "assets").exists() else None,
         )
+
+    def discover(self, root: str | Path) -> list[Skill]:
+        base = Path(root)
+        if not base.exists() or not base.is_dir():
+            return []
+        skills: list[Skill] = []
+        if (base / "SKILL.md").exists():
+            skills.append(self.load(base))
+        for child in sorted(base.iterdir()):
+            if not child.is_dir():
+                continue
+            if child.name.startswith("."):
+                continue
+            if (child / "SKILL.md").exists():
+                skills.append(self.load(child))
+        return skills
 
     def _parse_frontmatter(self, raw: str) -> tuple[dict[str, str], str]:
         if not raw.startswith("---"):

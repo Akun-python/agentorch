@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -11,8 +12,56 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, BaseTool] = {}
 
+    @classmethod
+    def empty(cls) -> "ToolRegistry":
+        return cls()
+
+    @classmethod
+    def from_tools(cls, *tools: BaseTool) -> "ToolRegistry":
+        registry = cls()
+        for tool in tools:
+            registry.register(tool)
+        return registry
+
+    @classmethod
+    def with_bundles(
+        cls,
+        *,
+        workspace_root: str | Path,
+        sandbox: Any | None = None,
+        include_filesystem: bool = True,
+        include_execution: bool = True,
+        include_git: bool = True,
+        include_web: bool = False,
+        brave_api_key: str | None = None,
+    ) -> "ToolRegistry":
+        from .bundles import register_default_agent_tools
+
+        registry = cls()
+        register_default_agent_tools(
+            registry,
+            workspace_root=workspace_root,
+            sandbox=sandbox,
+            include_filesystem=include_filesystem,
+            include_execution=include_execution,
+            include_git=include_git,
+            include_web=include_web,
+            brave_api_key=brave_api_key,
+        )
+        return registry
+
     def register(self, tool: BaseTool) -> None:
         self._tools[tool.spec.name] = tool
+
+    def register_many(self, *tools: BaseTool) -> "ToolRegistry":
+        for tool in tools:
+            self.register(tool)
+        return self
+
+    def extend(self, other: "ToolRegistry") -> "ToolRegistry":
+        for tool in other._tools.values():
+            self.register(tool)
+        return self
 
     def get(self, name: str) -> BaseTool:
         if name not in self._tools:

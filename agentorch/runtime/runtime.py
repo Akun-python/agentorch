@@ -1,25 +1,213 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import uuid
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
-from agentorch.agents import AgentRegistry, Handoff, Supervisor, TaskPacket
-from agentorch.config import RuntimeConfig
-from agentorch.core import ActionType, ContextEnvelope, Message, ModelRequest, PromptContext, RunResult, ToolExecutionResult
-from agentorch.knowledge import BaseRetriever, KnowledgeBase, RAGContextBuilder, RetrievalQuery
+from agentorch.agents import (
+    AgentRegistry,
+    AgentResult,
+    Coordinator,
+    Handoff,
+    SharedNote,
+    Supervisor,
+    TaskArtifact,
+    TaskPacket,
+    TaskStatus,
+)
+from agentorch.config import ModelConfig, RuntimeConfig
+from agentorch.core import (
+    CompactionDecision,
+    ContextEnvelope,
+    ContextSegment,
+    Message,
+    ModelRequest,
+    ModelResponse,
+    PromptContext,
+    RunResult,
+    RunStreamEvent,
+    SalienceReport,
+    SegmentScore,
+    ToolExecutionResult,
+    UsageInfo,
+)
+from agentorch.feedback import FeedbackKind, HumanFeedbackManager
+from agentorch.knowledge import (
+    BaseRetriever,
+    Citation,
+    ClassicRetriever,
+    DeliberativeRetriever,
+    IndexedKnowledgeBase,
+    KnowledgeAsset,
+    KnowledgeBase,
+    RAGContextBuilder,
+    RagStrategyConfig,
+    RetrievalIntent,
+    RetrievalMode,
+    RetrievalPlan,
+    RetrievalQuery,
+    RetrievalReport,
+    RetrievalStep,
+    RetrievedEvidence,
+    HybridRetriever,
+    create_rag_retriever,
+)
 from agentorch.memory import MemoryManager, MemoryRecord
-from agentorch.models import BaseModelAdapter
+from agentorch.models import BaseModelAdapter, OpenAIModel, create_model_adapter
 from agentorch.observability import EventBus, Logger, Tracer, UsageTracker
 from agentorch.prompts import PromptBuilder
-from agentorch.reasoning import BasePolicy, ReactPolicy
+from agentorch.reasoning import BasePolicy, BaseReasoningFramework, LegacyPolicyAdapter, ReactPolicy, ReasoningSessionContext, ReasoningStrategyConfig
+from agentorch.runtime.context_compaction import (
+    apply_budget_aware_compaction,
+    apply_static_context_filters,
+    estimate_prompt_context_budget,
+    build_handoff_capsule,
+    compact_task_packet,
+    trim_message_content,
+)
 from agentorch.sandbox import SandboxManager
-from agentorch.skills import SkillRegistry
-from agentorch.tools import ToolError, ToolRegistry
+from agentorch.skills import SkillLoader, SkillRegistry
+from agentorch.skills import SkillRoutingConfig
+from agentorch.strategies import (
+    BaseContextStrategy,
+    BaseCooperationStrategy,
+    BaseLongHorizonStrategy,
+    BaseMemoryGovernanceStrategy,
+    ContextStrategyConfig,
+    CooperationStrategyConfig,
+    LongHorizonStrategyConfig,
+    MemoryGovernanceStrategyConfig,
+    create_memory_governance_strategy,
+    create_cooperation_strategy,
+)
+from agentorch.tools import BaseTool, ToolError, ToolRegistry
+from agentorch.tools.knowledge import (
+    create_deliberative_retrieve_tool,
+    create_open_retrieved_evidence_tool,
+    create_search_knowledge_assets_tool,
+)
 from agentorch.workflow import Context, Workflow, WorkflowRunner
 
 
 class Runtime:
+    @classmethod
+    async def acreate(
+        cls,
+        *,
+        model: BaseModelAdapter | None = None,
+        model_config: ModelConfig | dict[str, Any] | str | None = None,
+        tools: ToolRegistry | list[BaseTool] | tuple[BaseTool, ...] | None = None,
+        custom_tools: list[BaseTool] | tuple[BaseTool, ...] | None = None,
+        tool_bundles: bool = False,
+        include_web_tools: bool = False,
+        web_search_api_key: str | None = None,
+        workspace_root: str | Path | None = None,
+        skills: SkillRegistry | None = None,
+        memory: MemoryManager | None = None,
+        retriever: BaseRetriever | None = None,
+        knowledge_base: KnowledgeBase | None = None,
+        knowledge_paths: list[str | Path] | None = None,
+        knowledge_assets: list[KnowledgeAsset] | None = None,
+        knowledge_documents: list[Any] | None = None,
+        knowledge_scope: list[str] | None = None,
+        sandbox: SandboxManager | None = None,
+        agent_registry: AgentRegistry | None = None,
+        supervisor: Supervisor | None = None,
+        coordinator: Coordinator | None = None,
+        prompt_builder: PromptBuilder | None = None,
+        policy: BasePolicy | BaseReasoningFramework | None = None,
+        config: RuntimeConfig | dict[str, Any] | None = None,
+        tracer: Tracer | None = None,
+        human_feedback: HumanFeedbackManager | None = None,
+    ) -> "Runtime":
+        runtime_config = RuntimeConfig.from_any(config)
+        selected_model = model or create_model_adapter(model_config)
+        skill_root = Path(workspace_root or Path.cwd()) / ".skills"
+        selected_skills = skills or SkillRegistry()
+        for discovered_skill in SkillLoader().discover(skill_root):
+            selected_skills.register(discovered_skill)
+        selected_tools = cls._coerce_tool_registry(tools)
+        selected_tools.extend(cls._coerce_tool_registry(custom_tools))
+        if not selected_tools.list_specs():
+            if tool_bundles:
+                selected_tools = ToolRegistry.with_bundles(
+                    workspace_root=workspace_root or Path.cwd(),
+                    sandbox=sandbox,
+                    include_execution=sandbox is not None,
+                    include_web=include_web_tools,
+                    brave_api_key=web_search_api_key,
+                )
+            else:
+                selected_tools = ToolRegistry()
+        elif include_web_tools:
+            selected_tools.extend(
+                ToolRegistry.with_bundles(
+                    workspace_root=workspace_root or Path.cwd(),
+                    sandbox=sandbox,
+                    include_filesystem=False,
+                    include_execution=False,
+                    include_git=False,
+                    include_web=True,
+                    brave_api_key=web_search_api_key,
+                )
+            )
+        selected_knowledge_base = knowledge_base
+        if selected_knowledge_base is None and any((knowledge_paths, knowledge_assets, knowledge_documents)):
+            selected_knowledge_base = IndexedKnowledgeBase()
+        if isinstance(selected_knowledge_base, IndexedKnowledgeBase):
+            if knowledge_paths:
+                await selected_knowledge_base.ingest_paths(list(knowledge_paths), scopes=knowledge_scope)
+            if knowledge_assets:
+                await selected_knowledge_base.ingest_assets(list(knowledge_assets))
+            if knowledge_documents:
+                await selected_knowledge_base.ingest(list(knowledge_documents))
+        return cls(
+            model=selected_model,
+            tools=selected_tools,
+            skills=selected_skills,
+            memory=memory,
+            retriever=retriever,
+            knowledge_base=selected_knowledge_base,
+            sandbox=sandbox,
+            agent_registry=agent_registry,
+            supervisor=supervisor,
+            coordinator=coordinator,
+            prompt_builder=prompt_builder,
+            policy=policy,
+            config=runtime_config,
+            tracer=tracer,
+            human_feedback=human_feedback,
+        )
+
+    @staticmethod
+    def _coerce_tool_registry(
+        tools: ToolRegistry | list[BaseTool] | tuple[BaseTool, ...] | None,
+    ) -> ToolRegistry:
+        registry = ToolRegistry.empty()
+        if tools is None:
+            return registry
+        if isinstance(tools, ToolRegistry):
+            registry.extend(tools)
+            return registry
+        for tool in tools:
+            registry.register(tool)
+        return registry
+
+    @classmethod
+    def create(cls, **kwargs: Any) -> "Runtime":
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(cls.acreate(**kwargs))
+        raise RuntimeError(
+            "Runtime.create() cannot be used inside a running event loop. "
+            "Use 'await Runtime.acreate(...)' in async applications and notebooks."
+        )
+
     def __init__(
         self,
         *,
@@ -32,10 +220,12 @@ class Runtime:
         sandbox: SandboxManager | None = None,
         agent_registry: AgentRegistry | None = None,
         supervisor: Supervisor | None = None,
+        coordinator: Coordinator | None = None,
         prompt_builder: PromptBuilder | None = None,
         policy: BasePolicy | None = None,
         config: RuntimeConfig | None = None,
         tracer: Tracer | None = None,
+        human_feedback: HumanFeedbackManager | None = None,
     ) -> None:
         self.model = model
         self.tools = tools or ToolRegistry()
@@ -46,13 +236,341 @@ class Runtime:
         self.sandbox = sandbox or SandboxManager()
         self.agent_registry = agent_registry or AgentRegistry()
         self.supervisor = supervisor
+        self.coordinator = coordinator or Coordinator.default()
         self.rag_context_builder = RAGContextBuilder()
-        self.prompt_builder = prompt_builder or PromptBuilder()
-        self.policy = policy or ReactPolicy()
-        self.config = config or RuntimeConfig()
+        self.config = RuntimeConfig.from_any(config)
+        self.policy = policy or self.config.reasoning_strategy or ReactPolicy()
+        self.prompt_builder = prompt_builder or PromptBuilder(chat_template=self.config.prompt_template)
         self.tracer = tracer or Tracer(EventBus(), Logger(file_path=".agentorch/runtime.log"))
+        self.human_feedback = human_feedback
+        if self.human_feedback is not None:
+            self.human_feedback.bind_runtime(self)
+        self.reasoning_framework = self._normalize_reasoning(self.policy)
+        self._register_builtin_knowledge_tools()
 
-    async def run(
+    def _register_builtin_knowledge_tools(self) -> None:
+        if self.knowledge_base is None and self.retriever is None:
+            return
+        for factory in (
+            create_deliberative_retrieve_tool,
+            create_search_knowledge_assets_tool,
+            create_open_retrieved_evidence_tool,
+        ):
+            tool = factory(self)
+            if tool.spec.name not in self.tools:
+                self.tools.register(tool)
+
+    def _to_stream_event(self, event_type: str, payload: dict[str, Any]) -> RunStreamEvent:
+        payload_copy = dict(payload)
+        request_id = str(payload_copy.pop("request_id", ""))
+        run_id = str(payload_copy.pop("run_id", ""))
+        thread_id = str(payload_copy.pop("thread_id", ""))
+        tool_calls = payload_copy.get("tool_calls", [])
+        if not isinstance(tool_calls, list):
+            tool_calls = []
+        else:
+            payload_copy.pop("tool_calls", None)
+        return RunStreamEvent(
+            event_type=event_type,
+            request_id=request_id,
+            run_id=run_id,
+            thread_id=thread_id,
+            agent_name=payload_copy.pop("agent_name", None),
+            task_id=payload_copy.pop("task_id", None),
+            parent_task_id=payload_copy.pop("parent_task_id", None),
+            delta_text=payload_copy.pop("delta_text", ""),
+            tool_calls=tool_calls,
+            finish_reason=payload_copy.pop("finish_reason", None),
+            payload=payload_copy,
+        )
+
+    async def _emit_event(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+        *,
+        stream_writer: Callable[[RunStreamEvent], Awaitable[None]] | None = None,
+    ) -> None:
+        self.tracer.emit(event_type, payload)
+        if stream_writer is not None:
+            await stream_writer(self._to_stream_event(event_type, payload))
+
+    def _normalize_reasoning(self, policy: BasePolicy | BaseReasoningFramework):
+        if isinstance(policy, BaseReasoningFramework):
+            return policy
+        if isinstance(policy, ReasoningStrategyConfig):
+            from agentorch.reasoning import create_reasoning_framework
+
+            return create_reasoning_framework(policy.kind, **policy.config)
+        if isinstance(policy, str):
+            from agentorch.reasoning import create_reasoning_framework
+
+            return create_reasoning_framework(policy)
+        if isinstance(policy, dict):
+            from agentorch.reasoning import create_reasoning_framework
+
+            payload = dict(policy)
+            kind = payload.pop("kind")
+            return create_reasoning_framework(kind, **payload)
+        return LegacyPolicyAdapter(policy)
+
+    def _legacy_rag_strategy(self, *, knowledge_scope: list[str] | None = None) -> RagStrategyConfig:
+        return RagStrategyConfig(
+            mode="deliberative" if self.config.retrieval_backend == "deliberative" else "classic",
+            mount="inline",
+            injection_policy="full_report",
+            knowledge_scope=list(knowledge_scope or self.config.default_knowledge_scope),
+            source_types=list(self.config.retrieval_allowed_source_types),
+            file_types=list(self.config.retrieval_allowed_file_types),
+            top_k=self.config.max_retrieved_chunks,
+            max_steps=self.config.retrieval_budget_steps,
+            classic={"top_k": self.config.max_retrieved_chunks, "rerank_enabled": self.config.retrieval_backend == "classic"},
+            deliberative={"max_steps": self.config.retrieval_budget_steps, "max_documents": self.config.retrieval_budget_documents},
+        )
+
+    def _resolve_rag_strategy(
+        self,
+        *,
+        knowledge_scope: list[str] | None = None,
+        retrieval_overrides: dict[str, Any] | None = None,
+    ) -> RagStrategyConfig:
+        retrieval_overrides = retrieval_overrides or {}
+        base = self.config.rag_strategy.model_copy(deep=True) if self.config.rag_strategy is not None else self._legacy_rag_strategy(knowledge_scope=knowledge_scope)
+        if knowledge_scope:
+            base.knowledge_scope = list(knowledge_scope)
+        if "rag_mode" in retrieval_overrides and retrieval_overrides["rag_mode"]:
+            base.mode = retrieval_overrides["rag_mode"]
+        if "mount" in retrieval_overrides and retrieval_overrides["mount"]:
+            base.mount = retrieval_overrides["mount"]
+        if "injection_policy" in retrieval_overrides and retrieval_overrides["injection_policy"]:
+            base.injection_policy = retrieval_overrides["injection_policy"]
+        if retrieval_overrides.get("sources"):
+            base.source_types = list(retrieval_overrides["sources"])
+        if retrieval_overrides.get("file_types"):
+            base.file_types = list(retrieval_overrides["file_types"])
+        if retrieval_overrides.get("must_cover"):
+            base.must_cover = list(retrieval_overrides["must_cover"])
+        if retrieval_overrides.get("max_steps"):
+            base.max_steps = int(retrieval_overrides["max_steps"])
+        if retrieval_overrides.get("max_documents"):
+            base.top_k = int(retrieval_overrides["max_documents"])
+        if base.mode == "off" and base.fallback_mode != "off":
+            base.mode = base.fallback_mode
+        return base
+
+    def _select_rag_retriever(self, strategy: RagStrategyConfig) -> BaseRetriever | None:
+        if strategy.mode == "off":
+            return None
+        if isinstance(self.knowledge_base, IndexedKnowledgeBase):
+            try:
+                return create_rag_retriever(self.knowledge_base, strategy)
+            except Exception:
+                pass
+        if self.retriever is not None:
+            return self.retriever
+        return None
+
+    def _apply_injection_policy(self, payload: dict[str, Any], strategy: RagStrategyConfig) -> dict[str, Any]:
+        updated = dict(payload)
+        if strategy.injection_policy == "disabled":
+            updated["context"] = ""
+            updated["evidence"] = []
+            updated["citations"] = []
+            updated["report"] = {}
+            return updated
+        if strategy.injection_policy == "summary_only":
+            updated["evidence"] = []
+            updated["citations"] = []
+        elif strategy.injection_policy == "evidence_only":
+            updated["context"] = ""
+        return updated
+
+    def _resolve_context_strategy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> ContextStrategyConfig:
+        metadata = metadata or {}
+        node_config = node_config or {}
+        if node_config.get("context_strategy") is not None:
+            value = node_config["context_strategy"]
+            return value.config if isinstance(value, BaseContextStrategy) else ContextStrategyConfig.from_any(value)
+        if metadata.get("context_strategy") is not None:
+            value = metadata["context_strategy"]
+            return value.config if isinstance(value, BaseContextStrategy) else ContextStrategyConfig.from_any(value)
+        if agent_role:
+            registered = self.agent_registry.get(agent_role) if agent_role in {spec.name for spec in self.agent_registry.list_specs()} else None
+            if registered and registered.spec.policy_profile.default_context_strategy is not None:
+                value = registered.spec.policy_profile.default_context_strategy
+                return value.config if isinstance(value, BaseContextStrategy) else ContextStrategyConfig.from_any(value)
+        value = self.config.context_strategy
+        if value is None:
+            return ContextStrategyConfig.balanced(
+                include_tool_descriptions=True,
+                include_retrieval_report=True,
+            )
+        return value.config if isinstance(value, BaseContextStrategy) else ContextStrategyConfig.from_any(value)
+
+    def _resolve_long_horizon_strategy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> LongHorizonStrategyConfig:
+        metadata = metadata or {}
+        node_config = node_config or {}
+        if node_config.get("long_horizon_strategy") is not None:
+            value = node_config["long_horizon_strategy"]
+            return value.config if isinstance(value, BaseLongHorizonStrategy) else LongHorizonStrategyConfig.from_any(value)
+        if metadata.get("long_horizon_strategy") is not None:
+            value = metadata["long_horizon_strategy"]
+            return value.config if isinstance(value, BaseLongHorizonStrategy) else LongHorizonStrategyConfig.from_any(value)
+        if agent_role:
+            registered = self.agent_registry.get(agent_role) if agent_role in {spec.name for spec in self.agent_registry.list_specs()} else None
+            if registered and registered.spec.policy_profile.default_long_horizon_strategy is not None:
+                value = registered.spec.policy_profile.default_long_horizon_strategy
+                return value.config if isinstance(value, BaseLongHorizonStrategy) else LongHorizonStrategyConfig.from_any(value)
+        value = self.config.long_horizon_strategy
+        return value.config if isinstance(value, BaseLongHorizonStrategy) else LongHorizonStrategyConfig.from_any(value)
+
+    def _resolve_cooperation_strategy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> CooperationStrategyConfig:
+        metadata = metadata or {}
+        node_config = node_config or {}
+        if node_config.get("cooperation_strategy") is not None:
+            value = node_config["cooperation_strategy"]
+            return value.config if isinstance(value, BaseCooperationStrategy) else CooperationStrategyConfig.from_any(value)
+        if metadata.get("cooperation_strategy") is not None:
+            value = metadata["cooperation_strategy"]
+            return value.config if isinstance(value, BaseCooperationStrategy) else CooperationStrategyConfig.from_any(value)
+        if agent_role:
+            registered = self.agent_registry.get(agent_role) if agent_role in {spec.name for spec in self.agent_registry.list_specs()} else None
+            if registered and registered.spec.policy_profile.default_cooperation_strategy is not None:
+                value = registered.spec.policy_profile.default_cooperation_strategy
+                return value.config if isinstance(value, BaseCooperationStrategy) else CooperationStrategyConfig.from_any(value)
+        value = self.config.cooperation_strategy
+        return value.config if isinstance(value, BaseCooperationStrategy) else CooperationStrategyConfig.from_any(value)
+
+    def _resolve_memory_governance_strategy(self, *, metadata: dict[str, Any] | None = None) -> MemoryGovernanceStrategyConfig:
+        metadata = metadata or {}
+        if metadata.get("memory_governance_strategy") is not None:
+            value = metadata["memory_governance_strategy"]
+            return value.config if isinstance(value, BaseMemoryGovernanceStrategy) else MemoryGovernanceStrategyConfig.from_any(value)
+        value = self.config.memory_governance_strategy
+        return value.config if isinstance(value, BaseMemoryGovernanceStrategy) else MemoryGovernanceStrategyConfig.from_any(value)
+
+    async def _rerank_context_segments(
+        self,
+        segments: list[ContextSegment],
+        top_k: int,
+        *,
+        user_input: str,
+        stage: str,
+        agent_role: str | None,
+    ) -> dict[str, tuple[float, str]]:
+        if not segments:
+            return {}
+        try:
+            response = await self.model.generate(
+                ModelRequest(
+                    messages=[
+                        Message(
+                            role="system",
+                            content=(
+                                "You are a context salience reranker. Return JSON with key 'adjustments'. "
+                                "Each item must contain segment_id, adjustment between -0.25 and 0.25, and reason."
+                            ),
+                        ),
+                        Message(
+                            role="user",
+                            content=json.dumps(
+                                {
+                                    "user_input": user_input,
+                                    "stage": stage,
+                                    "agent_role": agent_role,
+                                    "candidates": [
+                                        {
+                                            "segment_id": segment.segment_id,
+                                            "segment_type": segment.segment_type,
+                                            "source": segment.source,
+                                            "content": segment.display_content[:240],
+                                        }
+                                        for segment in segments[:top_k]
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        ),
+                    ],
+                    response_format={"type": "json_object"},
+                    max_tokens=256,
+                    metadata={"purpose": "context_salience_rerank", "stage": stage},
+                )
+            )
+            payload = json.loads(response.content or "{}")
+            reranked: dict[str, tuple[float, str]] = {}
+            for item in payload.get("adjustments", []):
+                segment_id = str(item.get("segment_id") or "")
+                if not segment_id:
+                    continue
+                adjustment = max(-0.25, min(0.25, float(item.get("adjustment", 0.0))))
+                reranked[segment_id] = (adjustment, str(item.get("reason") or "model_rerank"))
+            return reranked
+        except Exception:
+            return {}
+
+    async def _apply_context_strategy_to_prompt_context(
+        self,
+        prompt_context: PromptContext,
+        *,
+        context_strategy: ContextStrategyConfig,
+        long_horizon_strategy: LongHorizonStrategyConfig,
+        stage: str,
+        selected_skill_routes: list[dict[str, Any]] | None = None,
+    ) -> tuple[PromptContext, dict[str, Any]]:
+        updated, truncated_sections = apply_static_context_filters(
+            prompt_context,
+            context_strategy=context_strategy,
+            long_horizon_strategy=long_horizon_strategy,
+        )
+        if not context_strategy.budget_aware_compaction or context_strategy.salience_mode == "off":
+            budget = estimate_prompt_context_budget(updated, truncated_sections=truncated_sections)
+            budget["estimated_total_chars_before"] = budget["estimated_total_chars"]
+            budget["estimated_total_chars_after"] = budget["estimated_total_chars"]
+            budget["selected_segment_count"] = 0
+            budget["dropped_segment_count"] = 0
+            budget["segment_scores"] = []
+            budget["inhibition_events"] = []
+            budget["compression_reason"] = "static_compaction_only"
+            budget["compaction_applied"] = False
+            return updated, budget
+        return await apply_budget_aware_compaction(
+            updated,
+            context_strategy=context_strategy,
+            stage=stage,
+            selected_skill_routes=selected_skill_routes or [],
+            rerank_callback=lambda segments, top_k: self._rerank_context_segments(
+                segments,
+                top_k,
+                user_input=prompt_context.user_input,
+                stage=stage,
+                agent_role=prompt_context.agent_role,
+            ),
+        )
+
+    def _create_context_envelope(self, *, thread_id: str, metadata: dict[str, Any] | None = None) -> ContextEnvelope:
+        return ContextEnvelope(
+            request_id=str(uuid.uuid4()),
+            run_id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            trace_id=str(uuid.uuid4()),
+            metadata=metadata or {},
+        )
+
+    def run(
+        self,
+        user_input: str,
+        *,
+        thread_id: str,
+        workflow: Workflow | None = None,
+        metadata: dict[str, Any] | None = None,
+        stream: bool = False,
+    ) -> Any:
+        if stream:
+            return self._run_stream(user_input, thread_id=thread_id, workflow=workflow, metadata=metadata)
+        return self._run(user_input, thread_id=thread_id, workflow=workflow, metadata=metadata)
+
+    async def _run(
         self,
         user_input: str,
         *,
@@ -60,113 +578,268 @@ class Runtime:
         workflow: Workflow | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> RunResult:
-        envelope = ContextEnvelope(
-            request_id=str(uuid.uuid4()),
-            run_id=str(uuid.uuid4()),
-            thread_id=thread_id,
-            trace_id=str(uuid.uuid4()),
-            metadata=metadata or {},
-        )
+        return await self._run_impl(user_input, thread_id=thread_id, workflow=workflow, metadata=metadata, stream_writer=None)
+
+    async def _run_stream(
+        self,
+        user_input: str,
+        *,
+        thread_id: str,
+        workflow: Workflow | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> AsyncIterator[RunStreamEvent]:
+        queue: asyncio.Queue[RunStreamEvent | None] = asyncio.Queue()
+        error: Exception | None = None
+
+        async def writer(event: RunStreamEvent) -> None:
+            await queue.put(event)
+
+        async def producer() -> None:
+            nonlocal error
+            try:
+                result = await self._run_impl(
+                    user_input,
+                    thread_id=thread_id,
+                    workflow=workflow,
+                    metadata=metadata,
+                    stream_writer=writer,
+                )
+                await writer(
+                    RunStreamEvent(
+                        event_type="final_result",
+                        request_id=result.request_id,
+                        run_id=result.run_id,
+                        thread_id=result.thread_id,
+                        payload={"status": result.status, "finish_reason": result.finish_reason},
+                        result=result,
+                    )
+                )
+            except Exception as exc:  # pragma: no cover
+                error = exc
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(producer())
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield event
+            if error is not None:
+                raise error
+            await task
+        finally:
+            if not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+    async def _run_impl(
+        self,
+        user_input: str,
+        *,
+        thread_id: str,
+        workflow: Workflow | None = None,
+        metadata: dict[str, Any] | None = None,
+        stream_writer: Callable[[RunStreamEvent], Awaitable[None]] | None = None,
+    ) -> RunResult:
+        metadata = metadata or {}
+        envelope = self._create_context_envelope(thread_id=thread_id, metadata=metadata)
         usage_tracker = UsageTracker()
         tool_results: list[ToolExecutionResult] = []
-        self.tracer.emit("run_started", envelope.model_dump())
+        await self._emit_event("run_started", envelope.model_dump(), stream_writer=stream_writer)
+        await self._emit_event(
+            "task_created",
+            {**envelope.model_dump(), "task_id": envelope.run_id, "parent_task_id": metadata.get("parent_task_id")},
+            stream_writer=stream_writer,
+        )
+        feedback_token = None
+        if self.human_feedback is not None:
+            feedback_token = self.human_feedback.set_context(
+                thread_id=thread_id,
+                run_id=envelope.run_id,
+                task_id=(metadata.get("task_packet") or {}).get("task_id"),
+                source_agent=metadata.get("agent_role"),
+            )
 
-        await self.memory.append_message(thread_id, Message(role="user", content=user_input))
+        try:
+            await self.memory.append_message(thread_id, Message(role="user", content=user_input))
 
-        if self.supervisor is not None and not (metadata or {}).get("_delegated"):
-            result = await self._run_supervisor(user_input, envelope)
-            self.tracer.emit("run_completed", {**envelope.model_dump(), "status": "completed"})
-            return result
+            if self.supervisor is not None and not metadata.get("_delegated"):
+                result = await self._run_supervisor(user_input, envelope, stream_writer=stream_writer)
+                await self._emit_event("run_completed", {**envelope.model_dump(), "status": result.status}, stream_writer=stream_writer)
+                return result
 
-        if workflow is not None:
-            result = await self._run_workflow(workflow, thread_id=thread_id, user_input=user_input)
-            self.tracer.emit("run_completed", {**envelope.model_dump(), "status": "completed"})
+            if workflow is not None:
+                result = await self._run_workflow(workflow, thread_id=thread_id, user_input=user_input, metadata=metadata)
+                status = result.get("status", "completed")
+                await self._emit_event("run_completed", {**envelope.model_dump(), "status": status}, stream_writer=stream_writer)
+                return RunResult(
+                    request_id=envelope.request_id,
+                    run_id=envelope.run_id,
+                    thread_id=thread_id,
+                    output_text=json.dumps(result, ensure_ascii=False),
+                    usage=usage_tracker.summary(),
+                    status=status,
+                    feedback_id=result.get("feedback_id"),
+                    await_reason=result.get("await_reason"),
+                    requires_response=bool(result.get("requires_response", False)),
+                    response_schema=result.get("response_schema"),
+                )
+
+            conversation = await self.memory.get_context_window(thread_id)
+            selected_skill_routes = (
+                self.skills.route_for(
+                    user_input,
+                    config=metadata.get("skill_routing") or self.config.skill_routing or SkillRoutingConfig(),
+                    available_tools=[spec["function"]["name"] for spec in self.tools.list_specs()],
+                )
+                if self.config.auto_select_skills
+                else []
+            )
+            selected_skills = [route.content for route in selected_skill_routes]
+            envelope.metadata["resolved_skill_routing"] = SkillRoutingConfig.from_any(
+                metadata.get("skill_routing") or self.config.skill_routing or SkillRoutingConfig()
+            ).model_dump()
+            envelope.metadata["selected_skill_routes"] = [route.model_dump() for route in selected_skill_routes]
+            memory_summary = await self.memory.summarize_thread(thread_id)
+            local_reasoning = self.reasoning_framework
+            if metadata.get("reasoning_strategy") is not None:
+                local_reasoning = self._normalize_reasoning(metadata["reasoning_strategy"])
+            retrieval_payload = await self._build_retrieval_context(
+                user_input,
+                envelope,
+                knowledge_scope=metadata.get("knowledge_scope") or self.config.default_knowledge_scope,
+                retrieval_overrides={"mount_context": "runtime", "rag_mode": (metadata.get("rag_strategy") or {}).get("mode"), "mount": (metadata.get("rag_strategy") or {}).get("mount"), "injection_policy": (metadata.get("rag_strategy") or {}).get("injection_policy"), "sources": (metadata.get("rag_strategy") or {}).get("source_types", []), "file_types": (metadata.get("rag_strategy") or {}).get("file_types", []), "must_cover": (metadata.get("rag_strategy") or {}).get("must_cover", []), "max_steps": (metadata.get("rag_strategy") or {}).get("max_steps"), "max_documents": (metadata.get("rag_strategy") or {}).get("top_k")},
+                stream_writer=stream_writer,
+            )
+            task_packet = metadata.get("task_packet")
+            delegation_context = {"handoff": metadata.get("handoff")} if metadata.get("handoff") else {}
+            agent_role = metadata.get("agent_role")
+            if agent_role:
+                await self.memory.append_agent_memory(thread_id, agent_role, {"task_packet": task_packet, "user_input": user_input})
+
+            reasoning_context = ReasoningSessionContext(
+                user_input=user_input,
+                thread_id=thread_id,
+                envelope=envelope,
+                conversation=conversation,
+                memory_summary=memory_summary,
+                retrieval_payload=retrieval_payload,
+                task_packet=task_packet,
+                delegation_context=delegation_context,
+                agent_role=agent_role,
+                selected_skills=selected_skills,
+                usage=usage_tracker.summary(),
+                messages=[],
+                tool_results=tool_results,
+                stream_enabled=stream_writer is not None,
+                stream_writer=stream_writer,
+            )
+            await self._emit_event(
+                "reasoning_started",
+                {**envelope.model_dump(), "reasoning_kind": local_reasoning.config.kind.value},
+                stream_writer=stream_writer,
+            )
+            reasoning_result = await local_reasoning.execute(self, reasoning_context)
+            final_text = reasoning_result.final_output
+            messages = reasoning_context.messages
+            tool_results = reasoning_context.tool_results
+            usage_tracker.prompt_tokens = reasoning_context.usage.prompt_tokens
+            usage_tracker.completion_tokens = reasoning_context.usage.completion_tokens
+            usage_tracker.total_tokens = reasoning_context.usage.total_tokens
+            await self._emit_event(
+                "reasoning_completed",
+                {
+                    **envelope.model_dump(),
+                    "reasoning_kind": local_reasoning.config.kind.value,
+                    "step_count": len(reasoning_result.steps),
+                },
+                stream_writer=stream_writer,
+            )
+            await self.memory.remember(MemoryRecord(thread_id=thread_id, kind="run_summary", content=final_text, tags=["run"]))
+            await self._emit_event("memory_written", {**envelope.model_dump(), "kind": "run_summary"}, stream_writer=stream_writer)
+            memory_governance_strategy = self._resolve_memory_governance_strategy(metadata=envelope.metadata)
+            memory_strategy = create_memory_governance_strategy(memory_governance_strategy)
+            promotion_trace = await memory_strategy.promote_episode(
+                self.memory,
+                thread_id=thread_id,
+                user_input=user_input,
+                final_output=final_text,
+                retrieval_payload=retrieval_payload,
+                task_packet=task_packet,
+                agent_role=agent_role,
+                knowledge_scope=metadata.get("knowledge_scope") or self.config.default_knowledge_scope,
+                conversation=conversation,
+            )
+            if promotion_trace:
+                envelope.metadata["memory_promotion_trace"] = promotion_trace
+            if agent_role:
+                await self.memory.add_shared_note(
+                    thread_id,
+                    SharedNote(
+                        note_id=f"{envelope.run_id}:final",
+                        task_id=(task_packet or {}).get("task_id", envelope.run_id),
+                        author_agent=agent_role,
+                        content=final_text,
+                        metadata={
+                            "parent_task_id": metadata.get("parent_task_id"),
+                            "collective_candidate": True,
+                            "memory_kind": "lesson_learned",
+                        },
+                    ),
+                )
+
+            reasoning_metadata = dict(reasoning_result.metadata)
+            for key in (
+                "resolved_strategies",
+                "resolved_context_strategy",
+                "resolved_long_horizon_strategy",
+                "resolved_memory_governance_strategy",
+                "resolved_skill_routing",
+                "selected_skill_routes",
+                "context_budget_report",
+                "memory_governance_report",
+                "memory_recall_report",
+                "memory_promotion_trace",
+                "selected_context_segments",
+                "dropped_context_segments",
+                "salience_report",
+                "attention_profile",
+                "compaction_trace",
+            ):
+                if key in envelope.metadata:
+                    reasoning_metadata[key] = envelope.metadata[key]
+            await self._emit_event("run_completed", {**envelope.model_dump(), "status": "completed"}, stream_writer=stream_writer)
             return RunResult(
                 request_id=envelope.request_id,
                 run_id=envelope.run_id,
                 thread_id=thread_id,
-                output_text=json.dumps(result, ensure_ascii=False),
+                output_text=final_text,
+                messages=messages,
+                tool_results=tool_results,
                 usage=usage_tracker.summary(),
+                finish_reason="completed",
+                reasoning={
+                    "final_output": reasoning_result.final_output,
+                    "steps": [step.model_dump() for step in reasoning_result.steps],
+                    "trace_text": reasoning_result.trace_text,
+                },
+                reasoning_trace=reasoning_result.trace_text,
+                reasoning_kind=local_reasoning.config.kind.value,
+                reasoning_metadata=reasoning_metadata,
             )
-
-        conversation = await self.memory.get_context_window(thread_id)
-        selected_skills = self.skills.instructions_for(user_input) if self.config.auto_select_skills else []
-        memory_summary = await self.memory.summarize_thread(thread_id)
-        retrieval_context = await self._build_retrieval_context(user_input, envelope)
-        task_packet = (metadata or {}).get("task_packet")
-        delegation_context = {"handoff": (metadata or {}).get("handoff")} if (metadata or {}).get("handoff") else {}
-        agent_role = (metadata or {}).get("agent_role")
-
-        final_text = ""
-        messages: list[Message] = []
-        for step in range(self.config.max_steps):
-            prompt_context = PromptContext(
-                system_prompt=self.config.system_prompt,
-                user_input=user_input,
-                memory_summary=memory_summary,
-                retrieval_context=retrieval_context,
-                tool_descriptions=self.tools.list_specs(),
-                skill_instructions=selected_skills,
-                task_packet=task_packet,
-                agent_role=agent_role,
-                delegation_context=delegation_context,
-                conversation=conversation,
+        except Exception as exc:
+            await self._emit_event(
+                "run_failed",
+                {**envelope.model_dump(), "error": str(exc)},
+                stream_writer=stream_writer,
             )
-            request_messages = self.prompt_builder.build_messages(prompt_context)
-            self.tracer.emit("prompt_built", {**envelope.model_dump(), "step": step, "message_count": len(request_messages)})
-
-            response = await self.model.generate(ModelRequest(messages=request_messages, tools=self.tools.list_specs()))
-            usage_tracker.add(response.usage)
-            self.tracer.emit(
-                "model_called",
-                {**envelope.model_dump(), "step": step, "finish_reason": response.finish_reason, "tool_calls": len(response.tool_calls)},
-            )
-
-            if response.message:
-                await self.memory.append_message(thread_id, response.message)
-                conversation.append(response.message)
-                messages.append(response.message)
-
-            decision = await self.policy.decide(response)
-            if decision.action == ActionType.CALL_TOOL:
-                for tool_call in decision.tool_calls:
-                    result = await self._execute_tool(tool_call.name, tool_call.arguments, envelope)
-                    tool_result = ToolExecutionResult(
-                        tool_call_id=tool_call.id,
-                        tool_name=tool_call.name,
-                        output=result.data,
-                        is_error=not result.success,
-                        error_message=result.error,
-                        duration=result.duration,
-                    )
-                    tool_results.append(tool_result)
-                    tool_message = Message(
-                        role="tool",
-                        content=json.dumps(result.data, ensure_ascii=False),
-                        name=tool_call.name,
-                        tool_call_id=tool_call.id,
-                    )
-                    await self.memory.append_message(thread_id, tool_message)
-                    conversation.append(tool_message)
-                    self.tracer.emit("tool_called", {**envelope.model_dump(), "tool_name": tool_call.name})
-                continue
-
-            final_text = decision.content or response.content
-            await self.memory.remember(MemoryRecord(thread_id=thread_id, kind="run_summary", content=final_text, tags=["run"]))
-            self.tracer.emit("memory_written", {**envelope.model_dump(), "kind": "run_summary"})
-            break
-
-        self.tracer.emit("run_completed", {**envelope.model_dump(), "status": "completed"})
-        return RunResult(
-            request_id=envelope.request_id,
-            run_id=envelope.run_id,
-            thread_id=thread_id,
-            output_text=final_text,
-            messages=messages,
-            tool_results=tool_results,
-            usage=usage_tracker.summary(),
-            finish_reason="completed",
-        )
+            raise
+        finally:
+            if self.human_feedback is not None and feedback_token is not None:
+                self.human_feedback.reset_context(feedback_token)
 
     async def _execute_tool(self, name: str, arguments: dict[str, Any], envelope: ContextEnvelope):
         tool = self.tools.get(name)
@@ -187,31 +860,589 @@ class Runtime:
 
             return ToolResult(tool_name=name, data={}, success=False, error=str(exc))
 
-    async def _build_retrieval_context(self, user_input: str, envelope: ContextEnvelope) -> str:
-        if not self.config.enable_retrieval or self.retriever is None:
-            return ""
-        self.tracer.emit("retrieval_started", {**envelope.model_dump(), "query": user_input})
-        chunks = await self.retriever.retrieve(
-            RetrievalQuery(query=user_input, top_k=self.config.max_retrieved_chunks)
+    async def _build_retrieval_context(
+        self,
+        user_input: str,
+        envelope: ContextEnvelope,
+        *,
+        knowledge_scope: list[str] | None = None,
+        retrieval_overrides: dict[str, Any] | None = None,
+        stream_writer: Callable[[RunStreamEvent], Awaitable[None]] | None = None,
+    ) -> dict[str, Any]:
+        retrieval_enabled = self.config.enable_retrieval or self.config.retrieval_mode != RetrievalMode.OFF
+        strategy = self._resolve_rag_strategy(knowledge_scope=knowledge_scope, retrieval_overrides=retrieval_overrides)
+        selected_retriever = self._select_rag_retriever(strategy)
+        mount_context = (retrieval_overrides or {}).get("mount_context", "runtime")
+        if strategy.mount == "workflow_only" and mount_context != "workflow":
+            selected_retriever = None
+        if strategy.mount == "agent_only" and mount_context not in {"runtime", "agent"}:
+            selected_retriever = None
+        if not retrieval_enabled or selected_retriever is None or strategy.mount == "tool_only":
+            return {
+                "context": "",
+                "evidence": [],
+                "citations": [],
+                "plan": None,
+                "knowledge_scope": knowledge_scope or [],
+                "report": {},
+                "coverage": {"covered": [], "missing": []},
+                "visited_sources": [],
+                "rag_strategy": strategy.model_dump(),
+            }
+        retrieval_overrides = retrieval_overrides or {}
+        effective_scope = strategy.knowledge_scope or knowledge_scope or []
+        filters = {
+            "source_types": retrieval_overrides.get("sources") or strategy.source_types or self.config.retrieval_allowed_source_types,
+            "file_types": retrieval_overrides.get("file_types") or strategy.file_types or self.config.retrieval_allowed_file_types,
+            "path_filters": retrieval_overrides.get("path_filters", []),
+            "mime_filters": retrieval_overrides.get("mime_filters", []),
+        }
+        requested_top_k = retrieval_overrides.get("max_documents")
+        if requested_top_k is None:
+            requested_top_k = strategy.top_k
+        plan = RetrievalPlan(
+            query=user_input,
+            top_k=max(1, min(strategy.top_k, int(requested_top_k))),
+            scopes=effective_scope,
+            strategy=strategy.mode,
+            metadata=filters,
         )
-        context = self.rag_context_builder.build(chunks)
-        self.tracer.emit(
+        await self._emit_event(
+            "retrieval_started",
+            {**envelope.model_dump(), "query": user_input},
+            stream_writer=stream_writer,
+        )
+        intent = RetrievalIntent(
+            question=user_input,
+            goal=retrieval_overrides.get("goal"),
+            must_cover=list(retrieval_overrides.get("must_cover", strategy.must_cover)),
+            constraints=filters,
+            preferred_sources=list(retrieval_overrides.get("sources", [])),
+            knowledge_scope=plan.scopes,
+            file_types=list(retrieval_overrides.get("file_types", strategy.file_types)),
+            max_steps=int(retrieval_overrides.get("max_steps") or strategy.max_steps),
+            max_documents=int(retrieval_overrides.get("max_documents") or strategy.top_k),
+            metadata={"retrieval_mode": self.config.retrieval_mode.value, "rag_strategy": strategy.model_dump()},
+            rag_mode=strategy.mode,
+        )
+        if hasattr(selected_retriever, "retrieve_report"):
+            report = await selected_retriever.retrieve_report(intent)
+        else:
+            chunks = await selected_retriever.retrieve(
+                RetrievalQuery(query=user_input, top_k=plan.top_k, scopes=plan.scopes, filters=filters)
+            )
+            report = RetrievalReport(
+                summary=self.rag_context_builder.build(chunks),
+                retrieval_context=self.rag_context_builder.build(chunks),
+                evidence=self.rag_context_builder.build_evidence(chunks),
+                citations=[item.citation for item in self.rag_context_builder.build_evidence(chunks)],
+                plan=[RetrievalStep(step_type="retrieve", query=user_input)],
+                visited_documents=[item.chunk.document_id for item in chunks],
+                visited_sources=sorted({item.source for item in chunks}),
+            )
+        memory_governance_strategy = self._resolve_memory_governance_strategy(metadata=envelope.metadata)
+        memory_strategy = create_memory_governance_strategy(memory_governance_strategy)
+        report, memory_recall_report = await self._augment_report_with_memory_sources(
+            report,
+            thread_id=envelope.thread_id,
+            query=user_input,
+            knowledge_scope=plan.scopes,
+            source_filters=filters.get("source_types", []),
+            memory_strategy=memory_strategy,
+            task_packet=envelope.metadata.get("task_packet"),
+            agent_role=envelope.metadata.get("agent_role"),
+        )
+        envelope.metadata["memory_recall_report"] = memory_recall_report
+        context = self.rag_context_builder.build_report(report)
+        evidence = report.evidence
+        await self._emit_event(
             "retrieval_completed",
-            {**envelope.model_dump(), "query": user_input, "chunk_count": len(chunks)},
+            {
+                **envelope.model_dump(),
+                "query": user_input,
+                "chunk_count": len(evidence),
+                "knowledge_scope": plan.scopes,
+                "visited_sources": report.visited_sources,
+            },
+            stream_writer=stream_writer,
         )
-        return context
+        payload = {
+            "context": context,
+            "evidence": [item.model_dump() for item in evidence],
+            "citations": [item.model_dump() if isinstance(item, Citation) else item.citation.model_dump() for item in report.citations],
+            "plan": plan.model_dump(),
+            "knowledge_scope": plan.scopes,
+            "report": report.model_dump(),
+            "coverage": report.coverage.model_dump(),
+            "visited_sources": report.visited_sources,
+            "rag_strategy": strategy.model_dump(),
+        }
+        return self._apply_injection_policy(payload, strategy)
 
-    async def _run_supervisor(self, user_input: str, envelope: ContextEnvelope) -> RunResult:
+    async def _augment_report_with_memory_sources(
+        self,
+        report: RetrievalReport,
+        *,
+        thread_id: str,
+        query: str,
+        knowledge_scope: list[str],
+        source_filters: list[str],
+        memory_strategy,
+        task_packet: dict[str, Any] | None = None,
+        agent_role: str | None = None,
+    ) -> tuple[RetrievalReport, dict[str, Any]]:
+        allowed = {item.lower() for item in source_filters if item}
+        include_workspace = not allowed or "workspace_artifact" in allowed or "workspace_records" in allowed
+        include_notes = not allowed or "shared_notes" in allowed
+        evidence = list(report.evidence)
+        citations = list(report.citations)
+        visited_sources = set(report.visited_sources)
+        visited_documents = set(report.visited_documents)
+        if include_workspace:
+            for artifact in await self.memory.read_workspace_records(thread_id):
+                text = artifact.content if isinstance(artifact.content, str) else json.dumps(artifact.content, ensure_ascii=False)
+                if query.lower() not in text.lower():
+                    continue
+                citation = Citation(
+                    source="workspace_artifact",
+                    document_id=f"artifact:{artifact.artifact_id}",
+                    chunk_id=f"artifact:{artifact.artifact_id}",
+                    quote=text,
+                    locator={"artifact_id": artifact.artifact_id, "task_id": artifact.task_id},
+                    metadata={"owner_agent": artifact.owner_agent},
+                )
+                evidence.append(
+                    RetrievedEvidence(
+                        chunk=self._memory_evidence_chunk(citation.document_id, citation.chunk_id, text, "workspace_artifact", citation.locator, []),
+                        citation=citation,
+                        summary=text,
+                        source_type="workspace_artifact",
+                        locator=citation.locator,
+                        claim=artifact.name,
+                        snippet=text,
+                        relevance_score=0.7,
+                        support_score=0.7,
+                    )
+                )
+                citations.append(citation)
+                visited_sources.add("workspace_artifact")
+                visited_documents.add(citation.document_id)
+        if include_notes:
+            for note in await self.memory.get_shared_notes(thread_id):
+                if query.lower() not in note.content.lower():
+                    continue
+                citation = Citation(
+                    source="shared_notes",
+                    document_id=f"note:{note.note_id}",
+                    chunk_id=f"note:{note.note_id}",
+                    quote=note.content,
+                    locator={"note_id": note.note_id, "task_id": note.task_id},
+                    metadata={"author_agent": note.author_agent},
+                )
+                evidence.append(
+                    RetrievedEvidence(
+                        chunk=self._memory_evidence_chunk(citation.document_id, citation.chunk_id, note.content, "shared_notes", citation.locator, []),
+                        citation=citation,
+                        summary=note.content,
+                        source_type="shared_notes",
+                        locator=citation.locator,
+                        claim=note.author_agent,
+                        snippet=note.content,
+                        relevance_score=0.65,
+                        support_score=0.65,
+                    )
+                )
+                citations.append(citation)
+                visited_sources.add("shared_notes")
+                visited_documents.add(citation.document_id)
+        long_term_candidates = await memory_strategy.search_long_term_memory(
+            self.memory,
+            thread_id=thread_id,
+            query=query,
+            knowledge_scope=knowledge_scope,
+            task_packet=task_packet,
+            agent_role=agent_role,
+            source_filters=source_filters,
+        )
+        memory_evidence, memory_citations, memory_recall_report = memory_strategy.build_memory_evidence(
+            runtime=self,
+            candidates=long_term_candidates,
+            thread_id=thread_id,
+            knowledge_scope=knowledge_scope,
+        )
+        evidence.extend(memory_evidence)
+        citations.extend(memory_citations)
+        for citation in memory_citations:
+            visited_sources.add(citation.source)
+            visited_documents.add(citation.document_id)
+        evidence.sort(key=lambda item: item.relevance_score, reverse=True)
+        evidence = evidence[: max(self.config.max_retrieved_chunks, 1)]
+        return (
+            report.model_copy(
+                update={
+                    "evidence": evidence,
+                    "citations": [item.citation for item in evidence] if evidence else citations,
+                    "visited_sources": sorted(visited_sources),
+                    "visited_documents": sorted(visited_documents),
+                }
+            ),
+            memory_recall_report,
+        )
+
+    def _memory_evidence_chunk(
+        self,
+        document_id: str,
+        chunk_id: str,
+        text: str,
+        source_type: str,
+        locator: dict[str, Any],
+        scopes: list[str],
+    ):
+        from agentorch.knowledge import RetrievedChunk, DocumentChunk
+
+        return RetrievedChunk(
+            chunk=DocumentChunk(
+                id=chunk_id,
+                document_id=document_id,
+                text=text,
+                metadata={"source_type": source_type, "locator": locator, "scopes": scopes},
+            ),
+            score=0.7,
+            source=source_type,
+        )
+
+    async def _build_prompt_context(
+        self,
+        context: ReasoningSessionContext,
+        *,
+        output_instruction: str | None = None,
+        stage: str = "respond",
+    ) -> PromptContext:
+        context_strategy = self._resolve_context_strategy(metadata=context.envelope.metadata, agent_role=context.agent_role)
+        long_horizon_strategy = self._resolve_long_horizon_strategy(metadata=context.envelope.metadata, agent_role=context.agent_role)
+        task_context = (context.task_packet or {}).get("context", {})
+        selected_skill_routes = list(context.envelope.metadata.get("selected_skill_routes") or [])
+        prompt_context = PromptContext(
+            system_prompt=self.config.system_prompt,
+            user_input=context.user_input,
+            memory_summary=context.memory_summary,
+            retrieval_context=context.retrieval_payload.get("context"),
+            collective_memory_context=task_context.get("collective_memory_context"),
+            retrieved_evidence=context.retrieval_payload.get("evidence", []),
+            citations=context.retrieval_payload.get("citations", []),
+            retrieval_report=context.retrieval_payload.get("report"),
+            retrieval_coverage=context.retrieval_payload.get("coverage"),
+            collective_memory_evidence=task_context.get("collective_memory_evidence", []),
+            collective_memory_citations=task_context.get("collective_memory_citations", []),
+            retrieval_plan=context.retrieval_payload.get("plan"),
+            knowledge_scope=context.retrieval_payload.get("knowledge_scope", []),
+            tool_descriptions=self.tools.list_specs(),
+            skill_instructions=context.selected_skills,
+            task_packet=context.task_packet,
+            agent_role=context.agent_role,
+            delegation_context=context.delegation_context,
+            conversation=context.conversation,
+            output_instruction=output_instruction,
+            prompt_variables={
+                "thread_id": context.thread_id,
+                "user_input": context.user_input,
+                "task_context": task_context,
+                "retrieval_payload": context.retrieval_payload,
+            },
+        )
+        compacted, budget = await self._apply_context_strategy_to_prompt_context(
+            prompt_context,
+            context_strategy=context_strategy,
+            long_horizon_strategy=long_horizon_strategy,
+            stage=stage,
+            selected_skill_routes=selected_skill_routes,
+        )
+        memory_governance_strategy = self._resolve_memory_governance_strategy(metadata=context.envelope.metadata)
+        memory_governance_runtime = create_memory_governance_strategy(memory_governance_strategy)
+        context.envelope.metadata["context_budget_report"] = budget
+        for key in ("selected_context_segments", "dropped_context_segments", "salience_report", "attention_profile", "compaction_trace"):
+            if key in budget:
+                context.envelope.metadata[key] = budget[key]
+        context.envelope.metadata["resolved_context_strategy"] = context_strategy.model_dump()
+        context.envelope.metadata["resolved_long_horizon_strategy"] = long_horizon_strategy.model_dump()
+        context.envelope.metadata["resolved_memory_governance_strategy"] = memory_governance_strategy.model_dump()
+        context.envelope.metadata["resolved_strategies"] = {
+            "context": context_strategy.model_dump(),
+            "long_horizon": long_horizon_strategy.model_dump(),
+            "memory_governance": memory_governance_strategy.model_dump(),
+        }
+        context.envelope.metadata["memory_governance_report"] = {
+            "kind": memory_governance_strategy.kind,
+            "collective_promotion_policy": memory_governance_strategy.collective_promotion_policy,
+            "policy_bundle": memory_governance_runtime.policy_bundle(),
+            "runtime_config": memory_governance_runtime.resolved_runtime_config(),
+            "trail_knowledge_enabled": memory_governance_strategy.trail_knowledge_enabled,
+            "validation_threshold": memory_governance_strategy.validation_threshold,
+        }
+        return compacted
+
+    async def _model_round(
+        self,
+        context: ReasoningSessionContext,
+        *,
+        reasoning_kind: str,
+        stage: str,
+        output_instruction: str | None = None,
+        prompt_profile=None,
+    ):
+        prompt_context = await self._build_prompt_context(context, output_instruction=output_instruction, stage=stage)
+        if prompt_profile is not None:
+            request_messages = self.prompt_builder.build_reasoning_messages(prompt_context, prompt_profile)
+        else:
+            request_messages = self.prompt_builder.build_messages(prompt_context)
+        step_index = len(context.messages) + len(context.tool_results)
+        await self._emit_event(
+            "reasoning_step_started",
+            {**context.envelope.model_dump(), "reasoning_kind": reasoning_kind, "stage": stage, "step_index": step_index},
+            stream_writer=context.stream_writer,
+        )
+        await self._emit_event(
+            "prompt_built",
+            {**context.envelope.model_dump(), "step": step_index, "message_count": len(request_messages)},
+            stream_writer=context.stream_writer,
+        )
+        if context.envelope.metadata.get("context_budget_report"):
+            await self._emit_event(
+                "context_budget_reported",
+                {**context.envelope.model_dump(), "step": step_index, "context_budget": context.envelope.metadata["context_budget_report"]},
+                stream_writer=context.stream_writer,
+            )
+        request = ModelRequest(
+            messages=request_messages,
+            tools=self.tools.list_specs(),
+            metadata={
+                "reasoning_kind": reasoning_kind,
+                "stage": stage,
+                **(
+                    {"model_override": context.envelope.metadata["model_override"]}
+                    if context.envelope.metadata.get("model_override") is not None
+                    else {}
+                ),
+            },
+        )
+        if context.stream_enabled:
+            accumulated_text = ""
+            accumulated_tool_calls: list[Any] = []
+            tool_call_by_id: dict[str, Any] = {}
+            finish_reason = None
+            async for chunk in self.model.stream(request):
+                accumulated_text += chunk.delta_text or ""
+                finish_reason = chunk.finish_reason or finish_reason
+                for tool_call in chunk.tool_calls:
+                    key = tool_call.id or f"{tool_call.name}:{len(accumulated_tool_calls)}"
+                    existing = tool_call_by_id.get(key)
+                    if existing is None:
+                        existing = tool_call.model_copy(deep=True)
+                        tool_call_by_id[key] = existing
+                        accumulated_tool_calls.append(existing)
+                    else:
+                        if tool_call.name:
+                            existing.name = tool_call.name
+                        if tool_call.arguments:
+                            existing.arguments.update(tool_call.arguments)
+                await self._emit_event(
+                    "model_delta",
+                    {
+                        **context.envelope.model_dump(),
+                        "step": step_index,
+                        "delta_text": chunk.delta_text or "",
+                        "tool_calls": [call.model_dump() for call in chunk.tool_calls],
+                        "finish_reason": chunk.finish_reason,
+                    },
+                    stream_writer=context.stream_writer,
+                )
+            response = ModelResponse(
+                message=Message(
+                    role="assistant",
+                    content=accumulated_text,
+                    tool_calls=[call.model_copy(deep=True) for call in accumulated_tool_calls],
+                    metadata={"tool_calls": [call.model_dump() for call in accumulated_tool_calls]},
+                ),
+                content=accumulated_text,
+                tool_calls=[call.model_copy(deep=True) for call in accumulated_tool_calls],
+                finish_reason=finish_reason,
+            )
+        else:
+            response = await self.model.generate(request)
+            context.usage.prompt_tokens += response.usage.prompt_tokens
+            context.usage.completion_tokens += response.usage.completion_tokens
+            context.usage.total_tokens += response.usage.total_tokens
+        await self._emit_event(
+            "budget_consumed",
+            {
+                **context.envelope.model_dump(),
+                "task_id": (context.task_packet or {}).get("task_id", context.envelope.run_id),
+                "total_tokens": context.usage.total_tokens,
+            },
+            stream_writer=context.stream_writer,
+        )
+        await self._emit_event(
+            "model_called",
+            {**context.envelope.model_dump(), "step": step_index, "finish_reason": response.finish_reason, "tool_calls": len(response.tool_calls)},
+            stream_writer=context.stream_writer,
+        )
+        if response.message:
+            await self.memory.append_message(context.thread_id, response.message)
+            context.conversation.append(response.message)
+            context.messages.append(response.message)
+        await self._emit_event(
+            "reasoning_step_completed",
+            {**context.envelope.model_dump(), "reasoning_kind": reasoning_kind, "stage": stage, "step_index": step_index},
+            stream_writer=context.stream_writer,
+        )
+        return response
+
+    async def _append_tool_observation(self, context: ReasoningSessionContext, tool_call, result) -> None:
+        tool_result = ToolExecutionResult(
+            tool_call_id=tool_call.id,
+            tool_name=tool_call.name,
+            output=result.data,
+            is_error=not result.success,
+            error_message=result.error,
+            duration=result.duration,
+        )
+        context.tool_results.append(tool_result)
+        tool_message_content, tool_message_truncated = self._tool_message_content(result.data)
+        tool_message = Message(
+            role="tool",
+            content=tool_message_content,
+            name=tool_call.name,
+            tool_call_id=tool_call.id,
+            metadata={"truncated": tool_message_truncated},
+        )
+        await self.memory.append_message(context.thread_id, tool_message)
+        context.conversation.append(tool_message)
+        await self._emit_event(
+            "tool_called",
+            {**context.envelope.model_dump(), "tool_name": tool_call.name, "tool_call_id": tool_call.id},
+            stream_writer=context.stream_writer,
+        )
+        await self._emit_event(
+            "tool_result",
+            {
+                **context.envelope.model_dump(),
+                "tool_name": tool_call.name,
+                "tool_call_id": tool_call.id,
+                "is_error": not result.success,
+                "output": self._summarize_tool_output(result.data),
+                "error": result.error,
+            },
+            stream_writer=context.stream_writer,
+        )
+
+    def _aggregate_supervisor_usage(self, results: list[AgentResult]) -> UsageInfo:
+        usage = UsageInfo()
+        for result in results:
+            budget = result.budget_used or {}
+            usage.prompt_tokens += int(budget.get("prompt_tokens", 0) or 0)
+            usage.completion_tokens += int(budget.get("completion_tokens", 0) or 0)
+            usage.total_tokens += int(budget.get("total_tokens", 0) or 0)
+        return usage
+
+    def _aggregate_supervisor_reasoning(self, results: list[AgentResult], aggregation_metadata: dict[str, Any]) -> dict[str, Any]:
+        child_reasoning: dict[str, Any] = {}
+        for result in results:
+            child_reasoning[result.agent_name] = {
+                "status": result.status.value,
+                "task_id": result.metadata.get("task_id"),
+                "reasoning_kind": result.metadata.get("reasoning_kind"),
+                "reasoning_metadata": result.metadata.get("reasoning_metadata", {}),
+            }
+        return {
+            "aggregation": aggregation_metadata,
+            "child_reasoning": child_reasoning,
+            "completed_agents": [result.agent_name for result in results if result.status == TaskStatus.COMPLETED],
+            "failed_agents": [result.agent_name for result in results if result.status == TaskStatus.FAILED],
+        }
+
+    def _summarize_tool_output(self, value: Any, *, depth: int = 0) -> Any:
+        if depth >= 2:
+            if isinstance(value, dict):
+                return {"type": "dict", "size": len(value)}
+            if isinstance(value, list):
+                return {"type": "list", "size": len(value)}
+        if isinstance(value, dict):
+            items = list(value.items())
+            summary = {str(key): self._summarize_tool_output(item, depth=depth + 1) for key, item in items[:8]}
+            if len(items) > 8:
+                summary["_truncated_keys"] = len(items) - 8
+            return summary
+        if isinstance(value, list):
+            summary = [self._summarize_tool_output(item, depth=depth + 1) for item in value[:5]]
+            if len(value) > 5:
+                summary.append({"_truncated_items": len(value) - 5})
+            return summary
+        if isinstance(value, str):
+            return trim_message_content(value, max_chars=500)
+        if isinstance(value, (int, float, bool)) or value is None:
+            return value
+        return trim_message_content(str(value), max_chars=500)
+
+    def _tool_message_content(self, output: dict[str, Any], *, max_chars: int = 8000) -> tuple[str, bool]:
+        try:
+            summarized = self._summarize_tool_output(output)
+            serialized = json.dumps(summarized, ensure_ascii=False)
+        except Exception:
+            serialized = trim_message_content(str(type(output)), max_chars=200)
+        return trim_message_content(serialized, max_chars=max_chars), len(serialized) > max_chars
+
+    async def _run_supervisor(
+        self,
+        user_input: str,
+        envelope: ContextEnvelope,
+        *,
+        stream_writer: Callable[[RunStreamEvent], Awaitable[None]] | None = None,
+    ) -> RunResult:
+        collective_memory = await self.memory.search_collective_memory(
+            query=user_input,
+            thread_id=envelope.thread_id,
+            limit=self.config.max_retrieved_chunks,
+        )
+        collective_payload = self._collective_memory_payload(collective_memory)
+        cooperation_config = self._resolve_cooperation_strategy()
+        cooperation = create_cooperation_strategy(cooperation_config)
+        collective_payload["cooperation"] = cooperation.build_supervisor_context(task_context={"goal": user_input, "scope": self.config.default_knowledge_scope})
+        collective_payload["cooperation_report"] = {
+            "topology": cooperation_config.topology,
+            "handoff_policy": cooperation_config.handoff_policy,
+            "shared_workspace_policy": cooperation_config.shared_workspace_policy,
+            "trail_knowledge_policy": cooperation_config.trail_knowledge_policy,
+        }
         task = TaskPacket(
             task_id=envelope.run_id,
             goal=user_input,
-            metadata={"thread_id": envelope.thread_id, "delegation_depth": 0},
+            context=collective_payload,
+            origin_agent="supervisor",
+            knowledge_scope=self.config.default_knowledge_scope,
+                metadata={
+                    "thread_id": envelope.thread_id,
+                    "delegation_depth": 0,
+                    "collective_memory_refs": [item["id"] for item in collective_memory],
+                    "cooperation_strategy": cooperation_config.model_dump(),
+                },
         )
-        self.tracer.emit("supervisor_routed", {**envelope.model_dump(), "task_id": task.task_id})
+        self.coordinator.validate_task(task)
+        await self._emit_event("supervisor_routed", {**envelope.model_dump(), "task_id": task.task_id}, stream_writer=stream_writer)
+        await self._emit_event("aggregation_started", {**envelope.model_dump(), "task_id": task.task_id}, stream_writer=stream_writer)
         plan = await self.supervisor.create_plan(task)
-        delegated_results = []
+        delegated_results: list[AgentResult] = []
         for invocation in plan.invocations:
             registered = self.agent_registry.get(invocation.agent_name)
+            self.coordinator.permission_manager.ensure_knowledge_scope(
+                registered.spec.allowed_knowledge_scopes,
+                invocation.task.knowledge_scope,
+            )
+            if not self.coordinator.permission_manager.can_delegate(
+                current_depth=invocation.delegation_depth - 1,
+                allowed_depth=min(self.config.max_delegation_depth, registered.spec.max_delegation_depth),
+            ):
+                raise RuntimeError(f"Delegation depth exceeded for agent '{registered.spec.name}'.")
+
             handoff = Handoff(
                 from_agent="supervisor",
                 to_agent=registered.spec.name,
@@ -219,43 +1450,207 @@ class Runtime:
                 reason=plan.reason,
                 metadata={"parent_run_id": envelope.run_id},
             )
-            self.tracer.emit(
+            await self._emit_event(
                 "handoff_created",
-                {**envelope.model_dump(), "agent_name": registered.spec.name, "task_id": invocation.task.task_id},
+                {
+                    **envelope.model_dump(),
+                    "agent_name": registered.spec.name,
+                    "task_id": invocation.task.task_id,
+                    "parent_task_id": invocation.task.parent_task_id,
+                    "delegation_depth": invocation.delegation_depth,
+                },
+                stream_writer=stream_writer,
             )
-            self.tracer.emit(
+            await self._emit_event(
                 "agent_delegated",
-                {**envelope.model_dump(), "agent_name": registered.spec.name, "task_id": invocation.task.task_id},
+                {
+                    **envelope.model_dump(),
+                    "agent_name": registered.spec.name,
+                    "task_id": invocation.task.task_id,
+                    "parent_task_id": invocation.task.parent_task_id,
+                    "delegation_depth": invocation.delegation_depth,
+                    "knowledge_scope": invocation.task.knowledge_scope,
+                },
+                stream_writer=stream_writer,
             )
-            run_result = await registered.agent.run(
-                invocation.task.goal,
-                thread_id=invocation.task.metadata.get("thread_id", invocation.task.task_id),
-                metadata={"task_packet": invocation.task.model_dump(), "handoff": handoff.model_dump(), "_delegated": True},
+            child_metadata = {
+                "task_packet": compact_task_packet(invocation.task.model_dump()),
+                "handoff": build_handoff_capsule(invocation.task.model_dump(), handoff.model_dump()),
+                "_delegated": True,
+                "agent_role": registered.spec.name,
+                "knowledge_scope": invocation.task.knowledge_scope,
+                "parent_task_id": invocation.task.parent_task_id,
+                "cooperation_strategy": cooperation_config.model_dump(),
+            }
+            if stream_writer is None:
+                run_result = await registered.agent.run(
+                    invocation.task.goal,
+                    thread_id=invocation.task.task_id,
+                    metadata=child_metadata,
+                    stream=False,
+                )
+            else:
+                run_result = None
+                async for child_event in registered.agent.run(
+                    invocation.task.goal,
+                    thread_id=invocation.task.task_id,
+                    metadata=child_metadata,
+                    stream=True,
+                ):
+                    forwarded = child_event.model_copy(deep=True)
+                    if not forwarded.agent_name:
+                        forwarded.agent_name = registered.spec.name
+                    if not forwarded.task_id:
+                        forwarded.task_id = invocation.task.task_id
+                    if not forwarded.parent_task_id:
+                        forwarded.parent_task_id = invocation.task.parent_task_id
+                    await stream_writer(forwarded)
+                    if child_event.event_type == "final_result" and child_event.result is not None:
+                        run_result = child_event.result
+                if run_result is None:  # pragma: no cover
+                    raise RuntimeError(f"Delegated agent '{registered.spec.name}' did not produce a final_result event.")
+            run_status = TaskStatus.COMPLETED if run_result.status == "completed" else TaskStatus.WAITING_HUMAN if run_result.status == "waiting_human" else TaskStatus.FAILED
+            agent_result = AgentResult(
+                agent_name=registered.spec.name,
+                output_text=run_result.output_text,
+                status=run_status,
+                summary=run_result.output_text,
+                structured_output={
+                    "reasoning_kind": run_result.reasoning_kind,
+                    "reasoning_metadata": run_result.reasoning_metadata,
+                    "reasoning_trace": run_result.reasoning_trace,
+                    "usage": run_result.usage.model_dump(),
+                    "tool_results": [item.model_dump() for item in run_result.tool_results],
+                    "messages": [message.model_dump() for message in run_result.messages],
+                },
+                metadata={
+                    "task_id": invocation.task.task_id,
+                    "parent_task_id": invocation.task.parent_task_id,
+                    "handoff": handoff.model_dump(),
+                    "cooperation_strategy": cooperation_config.model_dump(),
+                    "cooperation_report": collective_payload["cooperation_report"],
+                    "reasoning_kind": run_result.reasoning_kind,
+                    "reasoning_metadata": run_result.reasoning_metadata,
+                },
+                budget_used=run_result.usage.model_dump(),
             )
-            delegated_results.append((registered.spec.name, invocation.task.task_id, run_result.output_text))
-            self.tracer.emit(
+            delegated_results.append(agent_result)
+            collective_candidate = self._build_collective_candidate(
+                task=task,
+                invocation_task=invocation.task,
+                result=agent_result,
+            )
+            await self.memory.add_shared_note(
+                envelope.thread_id,
+                SharedNote(
+                    note_id=f"{invocation.task.task_id}:candidate",
+                    task_id=invocation.task.task_id,
+                    author_agent=registered.spec.name,
+                    content=run_result.output_text,
+                    metadata={
+                        "parent_task_id": task.task_id,
+                        "collective_candidate": True,
+                        "memory_kind": "lesson_learned",
+                        "scope": ",".join(invocation.task.knowledge_scope) if invocation.task.knowledge_scope else None,
+                        "collective_memory": collective_candidate,
+                    },
+                ),
+            )
+            await self._emit_event(
                 "handoff_completed",
-                {**envelope.model_dump(), "agent_name": registered.spec.name, "task_id": invocation.task.task_id},
+                {
+                    **envelope.model_dump(),
+                    "agent_name": registered.spec.name,
+                    "task_id": invocation.task.task_id,
+                    "parent_task_id": invocation.task.parent_task_id,
+                },
+                stream_writer=stream_writer,
             )
+
         for result in delegated_results:
-            self.tracer.emit(
+            await self._emit_event(
                 "agent_completed",
-                {**envelope.model_dump(), "agent_name": result[0], "task_id": result[1]},
+                {
+                    **envelope.model_dump(),
+                    "agent_name": result.agent_name,
+                    "task_id": result.metadata.get("task_id"),
+                    "parent_task_id": result.metadata.get("parent_task_id"),
+                },
+                stream_writer=stream_writer,
             )
-        output = "\n\n".join(f"[{item[0]}] {item[2]}" for item in delegated_results)
+            for artifact in result.artifacts:
+                workspace_record = await self.memory.write_workspace_record(
+                    envelope.thread_id,
+                    task_id=result.metadata.get("task_id", envelope.run_id),
+                    owner_agent=result.agent_name,
+                    artifact=artifact,
+                )
+                await self._emit_event(
+                    "artifact_created",
+                    {
+                        **envelope.model_dump(),
+                        "artifact_id": workspace_record.artifact_id,
+                        "agent_name": result.agent_name,
+                        "task_id": result.metadata.get("task_id"),
+                    },
+                    stream_writer=stream_writer,
+                )
+
+        aggregated = self.coordinator.aggregate_results(delegated_results)
+        aggregated_reasoning_metadata = self._aggregate_supervisor_reasoning(delegated_results, aggregated.metadata)
+        aggregated_usage = self._aggregate_supervisor_usage(delegated_results)
+        for record_id in task.metadata.get("collective_memory_refs", []):
+            await self.memory.validate_collective_memory(record_id)
+        await self._promote_candidate_collective_memory(envelope.thread_id, task.task_id)
+        await self._emit_event(
+            "aggregation_completed",
+            {**envelope.model_dump(), "task_id": task.task_id, "agent_count": len(delegated_results)},
+            stream_writer=stream_writer,
+        )
         return RunResult(
             request_id=envelope.request_id,
             run_id=envelope.run_id,
             thread_id=envelope.thread_id,
-            output_text=output,
-            usage=UsageTracker().summary(),
+            output_text=aggregated.summary,
+            usage=aggregated_usage,
+            finish_reason="completed",
+            reasoning_kind="supervisor_aggregate",
+            reasoning_metadata=aggregated_reasoning_metadata,
         )
 
-    async def _run_workflow(self, workflow: Workflow, *, thread_id: str, user_input: str) -> dict[str, Any]:
-        context = Context(thread_id=thread_id, user_input=user_input)
+    async def _run_workflow(self, workflow: Workflow, *, thread_id: str, user_input: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        metadata = metadata or {}
+        context = Context(
+            thread_id=thread_id,
+            user_input=user_input,
+            state=dict(metadata.get("workflow_state", {})),
+            variables=dict(metadata.get("workflow_variables", {})),
+            resume_from=metadata.get("resume_from"),
+        )
 
         async def handle_model(node, ctx):
-            result = await self.run(node.config.get("prompt", ctx.user_input), thread_id=thread_id)
+            child_metadata = dict(metadata)
+            if node.config.get("model") is not None:
+                child_metadata["model_override"] = node.config["model"]
+            elif node.config.get("model_config") is not None:
+                child_metadata["model_override"] = ModelConfig.from_any(node.config["model_config"]).model
+            for key in (
+                "reasoning_strategy",
+                "rag_strategy",
+                "context_strategy",
+                "long_horizon_strategy",
+                "cooperation_strategy",
+                "memory_governance_strategy",
+                "knowledge_scope",
+                "skill_routing",
+            ):
+                if node.config.get(key) is not None:
+                    child_metadata[key] = node.config[key]
+            result = await self.run(
+                node.config.get("prompt", ctx.user_input),
+                thread_id=thread_id,
+                metadata=child_metadata,
+            )
             return {"status": "completed", "output_text": result.output_text}
 
         async def handle_tool(node, ctx):
@@ -272,6 +1667,88 @@ class Runtime:
             if variable and ctx.variables.get(variable):
                 route = ctx.variables[variable].get("route", route)
             return {"status": "completed", "route": route}
+
+        async def handle_retrieve(node, ctx):
+            query = node.config.get("question", node.config.get("query", ctx.user_input))
+            local_envelope = self._create_context_envelope(thread_id=thread_id)
+            payload = await self._build_retrieval_context(
+                query,
+                local_envelope,
+                knowledge_scope=node.config.get("knowledge_scope", self.config.default_knowledge_scope),
+                retrieval_overrides={
+                    "mount_context": "workflow",
+                    "goal": node.config.get("goal"),
+                    "must_cover": node.config.get("must_cover", []),
+                    "rag_mode": node.config.get("rag_mode"),
+                    "mount": node.config.get("mount", "workflow_only"),
+                    "injection_policy": node.config.get("injection_policy"),
+                    "sources": node.config.get("sources", []),
+                    "file_types": node.config.get("file_types", []),
+                    "path_filters": node.config.get("path_filters", []),
+                    "mime_filters": node.config.get("mime_filters", []),
+                    "max_steps": node.config.get("max_steps", self.config.retrieval_budget_steps),
+                    "max_documents": node.config.get("max_documents", self.config.retrieval_budget_documents),
+                },
+            )
+            result = {
+                "status": "completed",
+                "summary": payload.get("report", {}).get("summary", payload["context"]),
+                "retrieval_context": payload["context"],
+                "evidence": payload["evidence"],
+                "citations": payload["citations"],
+                "coverage": payload.get("coverage", {}),
+                "visited_sources": payload.get("visited_sources", []),
+                "visited_documents": payload.get("report", {}).get("visited_documents", []),
+                "report": payload.get("report", {}),
+            }
+            if output_key := node.config.get("output_key"):
+                ctx.variables[output_key] = result
+            return result
+
+        async def handle_rag_router(node, ctx):
+            route = node.config.get("default_route", "deliberative")
+            query = node.config.get("question", ctx.user_input).lower()
+            if any(token in query for token in ("summary", "summarize", "overview", "概述", "总结")):
+                route = "classic"
+            elif any(token in query for token in ("page", "section", "evidence", "where", "哪一页", "证据")):
+                route = "deliberative"
+            if output_key := node.config.get("output_key"):
+                ctx.variables[output_key] = {"route": route}
+            return {"status": "completed", "route": route}
+
+        async def handle_rag_mount(node, ctx):
+            source = ctx.variables.get(node.config.get("from_variable", ""), {})
+            mount_to = node.config.get("mount_result_to", "context")
+            target_key = node.config.get("target_key", "mounted_retrieval")
+            if mount_to in {"context", "variable", "agent_input"}:
+                ctx.variables[target_key] = source
+                return {"status": "completed", "mounted_to": mount_to, "target_key": target_key}
+            artifact = TaskArtifact(
+                name=node.config.get("name", node.id),
+                kind="retrieval_report",
+                content=source,
+                metadata={"artifact_id": node.config.get("artifact_id", f"{thread_id}:{node.id}")},
+            )
+            record = await self.memory.write_workspace_record(thread_id, task_id=f"{thread_id}:{node.id}", owner_agent="workflow", artifact=artifact)
+            ctx.variables[target_key] = {"artifact_id": record.artifact_id, "report": source}
+            return {"status": "completed", "mounted_to": "artifact", "artifact_id": record.artifact_id, "target_key": target_key}
+
+        async def handle_rag_evaluate(node, ctx):
+            source = ctx.variables.get(node.config.get("from_variable", ""), {})
+            coverage = source.get("coverage", {})
+            evidence = source.get("evidence", [])
+            missing = coverage.get("missing", [])
+            score = float(len(evidence)) - 2.0 * float(len(missing))
+            result = {
+                "status": "completed",
+                "score": score,
+                "coverage": coverage,
+                "evidence_count": len(evidence),
+                "visited_sources": source.get("visited_sources", []),
+            }
+            if output_key := node.config.get("output_key"):
+                ctx.variables[output_key] = result
+            return result
 
         async def handle_memory(node, ctx):
             action = node.config.get("action")
@@ -291,12 +1768,18 @@ class Runtime:
 
         async def handle_agent(node, ctx):
             registered = self.agent_registry.get(node.config["agent_name"])
+            task_input = dict(node.config.get("input", {}))
+            if input_var := node.config.get("input_from_variable"):
+                task_input["retrieval_input"] = ctx.variables.get(input_var, {})
             task = TaskPacket(
                 task_id=f"{thread_id}:{node.id}",
                 goal=node.config.get("goal", ctx.user_input),
-                input=node.config.get("input", {}),
+                input=task_input,
                 context={"workflow_node": node.id, "variables": ctx.variables},
                 expected_output=node.config.get("expected_output"),
+                parent_task_id=node.config.get("parent_task_id"),
+                origin_agent=node.config.get("origin_agent", "workflow"),
+                knowledge_scope=node.config.get("knowledge_scope", registered.spec.allowed_knowledge_scopes),
                 metadata={"thread_id": thread_id, "delegation_depth": 1},
             )
             self.tracer.emit(
@@ -306,13 +1789,34 @@ class Runtime:
             run_result = await registered.agent.run(
                 task.goal,
                 thread_id=node.config.get("share_thread_id", thread_id) if node.config.get("share_thread_id", True) else task.task_id,
-                metadata={"task_packet": task.model_dump(), "_delegated": True, "agent_role": registered.spec.description},
+                metadata={
+                    "task_packet": task.model_dump(),
+                    "_delegated": True,
+                    "agent_role": registered.spec.name,
+                    "knowledge_scope": task.knowledge_scope,
+                    "parent_task_id": task.parent_task_id,
+                    "rag_strategy": node.config.get("rag_strategy"),
+                    "reasoning_strategy": node.config.get("reasoning_strategy"),
+                    "context_strategy": node.config.get("context_strategy"),
+                    "long_horizon_strategy": node.config.get("long_horizon_strategy"),
+                    "cooperation_strategy": node.config.get("cooperation_strategy"),
+                },
             )
             result = {
-                "status": "completed",
+                "status": run_result.status,
                 "output_text": run_result.output_text,
+                "structured_output": {"messages": [message.model_dump() for message in run_result.messages]},
                 "route": node.config.get("success_route"),
             }
+            if run_result.status == "waiting_human":
+                result.update(
+                    {
+                        "feedback_id": run_result.feedback_id,
+                        "await_reason": run_result.await_reason,
+                        "requires_response": run_result.requires_response,
+                        "response_schema": run_result.response_schema,
+                    }
+                )
             if output_key := node.config.get("output_key"):
                 ctx.variables[output_key] = result
             self.tracer.emit(
@@ -321,13 +1825,273 @@ class Runtime:
             )
             return result
 
+        async def handle_artifact(node, ctx):
+            payload = ctx.variables.get(node.config.get("from_variable", ""), {})
+            artifact = TaskArtifact(
+                name=node.config.get("name", node.id),
+                kind=node.config.get("artifact_kind", "text"),
+                content=payload,
+                metadata={"artifact_id": node.config.get("artifact_id", f"{thread_id}:{node.id}")},
+            )
+            record = await self.memory.write_workspace_record(thread_id, task_id=f"{thread_id}:{node.id}", owner_agent="workflow", artifact=artifact)
+            self.tracer.emit("artifact_created", {"thread_id": thread_id, "artifact_id": record.artifact_id, "node_id": node.id})
+            return {"status": "completed", "artifact_id": record.artifact_id}
+
+        async def handle_aggregate(node, ctx):
+            sources = node.config.get("sources", [])
+            combined = {source: ctx.variables.get(source, {}) for source in sources}
+            result = {"status": "completed", "summary": json.dumps(combined, ensure_ascii=False), "combined": combined}
+            if output_key := node.config.get("output_key"):
+                ctx.variables[output_key] = result
+            self.tracer.emit("aggregation_completed", {"thread_id": thread_id, "node_id": node.id, "source_count": len(sources)})
+            return result
+
+        async def handle_approval(node, ctx):
+            approved = node.config.get("approved", True)
+            return {
+                "status": "completed",
+                "approved": approved,
+                "route": node.config.get("approved_route", "approved" if approved else "rejected"),
+            }
+
+        async def _resolved_human_response(node, ctx):
+            feedback_id = node.config.get("feedback_id") or ctx.state.get(f"{node.id}:feedback_id")
+            if feedback_id and self.human_feedback is not None:
+                pending = await self.human_feedback.get(feedback_id)
+                if pending is not None and pending.response is not None:
+                    return feedback_id, pending.response
+            return feedback_id, None
+
+        async def handle_human_notify(node, ctx):
+            if self.human_feedback is None:
+                return {"status": "completed", "skipped": True}
+            handle = await self.human_feedback.notify(
+                kind=node.config.get("kind", FeedbackKind.PROGRESS_UPDATE),
+                title=node.config.get("title", node.id),
+                message=node.config.get("message", ctx.user_input),
+                task_id=f"{thread_id}:{node.id}",
+                metadata={"workflow_node_id": node.id},
+            )
+            return {"status": "completed", "feedback_id": handle.feedback_id}
+
+        async def handle_human_input(node, ctx):
+            if self.human_feedback is None:
+                return {"status": "failed", "error": "human_feedback_not_configured"}
+            feedback_id, response = await _resolved_human_response(node, ctx)
+            if response is not None:
+                result = {"status": "completed", "feedback_id": feedback_id, "response": response.content}
+                if output_key := node.config.get("output_key"):
+                    ctx.variables[output_key] = result
+                return result
+            handle = await self.human_feedback.request_input(
+                title=node.config.get("title", node.id),
+                message=node.config.get("message", ctx.user_input),
+                response_schema=node.config.get("response_schema"),
+                task_id=f"{thread_id}:{node.id}",
+                metadata={
+                    "workflow_node_id": node.id,
+                    "resume_from": node.id,
+                    "workflow_state": dict(ctx.state),
+                    "workflow_variables": dict(ctx.variables),
+                },
+                blocking=True,
+            )
+            ctx.state[f"{node.id}:feedback_id"] = handle.feedback_id
+            return {
+                "status": "waiting_human",
+                "feedback_id": handle.feedback_id,
+                "await_reason": node.config.get("title", node.id),
+                "requires_response": True,
+                "response_schema": node.config.get("response_schema"),
+                "resume_from": node.id,
+                "workflow_state": dict(ctx.state),
+                "workflow_variables": dict(ctx.variables),
+            }
+
+        async def handle_human_approval(node, ctx):
+            if self.human_feedback is None:
+                return {"status": "failed", "error": "human_feedback_not_configured"}
+            feedback_id, response = await _resolved_human_response(node, ctx)
+            if response is not None:
+                approved = bool(response.content.get("approved")) if isinstance(response.content, dict) else bool(response.content)
+                return {
+                    "status": "completed",
+                    "feedback_id": feedback_id,
+                    "approved": approved,
+                    "response": response.content,
+                    "route": node.config.get("approved_route", "approved" if approved else "rejected"),
+                }
+            handle = await self.human_feedback.request_approval(
+                title=node.config.get("title", node.id),
+                message=node.config.get("message", ctx.user_input),
+                response_schema=node.config.get("response_schema"),
+                task_id=f"{thread_id}:{node.id}",
+                metadata={
+                    "workflow_node_id": node.id,
+                    "resume_from": node.id,
+                    "workflow_state": dict(ctx.state),
+                    "workflow_variables": dict(ctx.variables),
+                },
+                blocking=True,
+            )
+            ctx.state[f"{node.id}:feedback_id"] = handle.feedback_id
+            return {
+                "status": "waiting_human",
+                "feedback_id": handle.feedback_id,
+                "await_reason": node.config.get("title", node.id),
+                "requires_response": True,
+                "response_schema": node.config.get("response_schema"),
+                "resume_from": node.id,
+                "workflow_state": dict(ctx.state),
+                "workflow_variables": dict(ctx.variables),
+            }
+
         runner = WorkflowRunner(
             handlers={
                 "agent": handle_agent,
-                "model": handle_model,
-                "tool": handle_tool,
-                "router": handle_router,
+                "aggregate": handle_aggregate,
+                "approval": handle_approval,
+                "artifact": handle_artifact,
+                "human_approval": handle_human_approval,
+                "human_input": handle_human_input,
+                "human_notify": handle_human_notify,
                 "memory": handle_memory,
+                "model": handle_model,
+                "rag_evaluate": handle_rag_evaluate,
+                "rag_mount": handle_rag_mount,
+                "rag_router": handle_rag_router,
+                "retrieve": handle_retrieve,
+                "router": handle_router,
+                "tool": handle_tool,
             }
         )
         return await runner.run(workflow, context)
+
+    def _next_workflow_node(self, workflow: Workflow, node_id: str) -> str | None:
+        for edge in workflow.get_edges(node_id):
+            if edge.kind == "success":
+                return edge.target
+        return None
+
+    async def resume_from_feedback(
+        self,
+        feedback_id: str,
+        *,
+        workflow: Workflow,
+        thread_id: str,
+        user_input: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> RunResult:
+        if self.human_feedback is None:
+            raise RuntimeError("Human feedback is not configured.")
+        pending = await self.human_feedback.get(feedback_id)
+        if pending is None or pending.response is None:
+            raise RuntimeError(f"No submitted response found for feedback '{feedback_id}'.")
+        resume_metadata = dict(metadata or {})
+        resume_metadata.setdefault("resume_from", pending.event.metadata.get("resume_from"))
+        resume_metadata.setdefault("workflow_state", dict(pending.event.metadata.get("workflow_state", {})))
+        resume_metadata.setdefault("workflow_variables", dict(pending.event.metadata.get("workflow_variables", {})))
+        workflow_node_id = pending.event.metadata.get("workflow_node_id")
+        if workflow_node_id:
+            resume_metadata["workflow_state"][f"{workflow_node_id}:feedback_id"] = feedback_id
+        return await self.run(user_input, thread_id=thread_id, workflow=workflow, metadata=resume_metadata)
+
+    def _collective_memory_payload(self, records: list[dict[str, Any]]) -> dict[str, Any]:
+        if not records:
+            return {
+                "collective_memory_context": "",
+                "collective_memory_evidence": [],
+                "collective_memory_citations": [],
+                "collective_memory_refs": [],
+            }
+        evidence = [
+            {
+                "id": item["id"],
+                "kind": item["kind"],
+                "content": item["content"],
+                "confidence": item["confidence"],
+                "source_agents": item["source_agents"],
+            }
+            for item in records
+        ]
+        context = "\n".join(f"- [{item['kind']}] {item['content']}" for item in records)
+        citations = [{"record_id": item["id"], "kind": item["kind"]} for item in records]
+        return {
+            "collective_memory_context": context,
+            "collective_memory_evidence": evidence,
+            "collective_memory_citations": citations,
+            "collective_memory_refs": [item["id"] for item in records],
+        }
+
+    def _build_collective_candidate(
+        self,
+        *,
+        task: TaskPacket,
+        invocation_task: TaskPacket,
+        result: AgentResult,
+    ) -> dict[str, Any] | None:
+        evidence = list((invocation_task.context or {}).get("collective_memory_evidence", []))
+        if not evidence:
+            return None
+        primary = evidence[0]
+        kind = primary.get("kind", "lesson_learned")
+        content = primary.get("content", "").strip()
+        if not content:
+            return None
+        source_name = result.agent_name or "specialist"
+        candidate_content = f"validated {kind}: {content}"
+        return {
+            "kind": "lesson_learned",
+            "content": candidate_content,
+            "tags": sorted(
+                {
+                    "collective-memory",
+                    "validated",
+                    kind,
+                    source_name,
+                }
+            ),
+            "scope": ",".join(invocation_task.knowledge_scope) if invocation_task.knowledge_scope else None,
+            "source_memory_refs": [item.get("id") for item in evidence if item.get("id") is not None],
+            "validation_task_goal": task.goal,
+        }
+
+    async def _promote_candidate_collective_memory(self, thread_id: str, task_id: str) -> None:
+        candidate_notes = await self.memory.collect_candidate_notes(thread_id, task_id=task_id)
+        grouped: dict[tuple[str, str], list[SharedNote]] = {}
+        for note in candidate_notes:
+            candidate = dict(note.metadata.get("collective_memory") or {})
+            if not candidate:
+                candidate = {
+                    "kind": note.metadata.get("memory_kind", "lesson_learned"),
+                    "content": note.content,
+                    "tags": note.metadata.get("tags", []),
+                    "scope": note.metadata.get("scope"),
+                }
+            key = (candidate.get("kind", "lesson_learned"), candidate.get("content", "").strip().lower())
+            if key[1]:
+                grouped.setdefault(key, []).append(note)
+
+        for (kind, normalized_content), notes in grouped.items():
+            source_agents = sorted({note.author_agent for note in notes if note.author_agent})
+            task_ids = {note.task_id for note in notes if note.task_id}
+            if len(source_agents) < 2 and len(task_ids) < 2:
+                continue
+            representative = notes[0]
+            candidate = dict(representative.metadata.get("collective_memory") or {})
+            content = candidate.get("content") or representative.content
+            tags = candidate.get("tags") or representative.metadata.get("tags", [])
+            scope = candidate.get("scope") or representative.metadata.get("scope")
+            confidence = min(0.95, 0.6 + 0.1 * len(source_agents) + 0.05 * max(len(task_ids) - 1, 0))
+            existing = await self.memory.search_collective_memory(query=content, thread_id=thread_id, status=None, limit=20)
+            if any(item["kind"] == kind and item["content"].strip().lower() == normalized_content for item in existing):
+                continue
+            await self.memory.promote_collective_memory(
+                thread_id=thread_id,
+                kind=kind,
+                content=content,
+                tags=tags,
+                source_agents=source_agents,
+                confidence=confidence,
+                scope=scope,
+            )

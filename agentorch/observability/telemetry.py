@@ -45,6 +45,28 @@ class Tracer:
             self.logger.log(event_type, payload)
 
 
+class ExecutionTrace:
+    def __init__(self, events: list[dict[str, Any]] | None = None) -> None:
+        self.events = events or []
+
+    def event_types(self) -> list[str]:
+        return [event.get("event_type", "") for event in self.events]
+
+
+class TaskGraphSnapshot:
+    def __init__(self, events: list[dict[str, Any]]) -> None:
+        self.events = events
+
+    def edges(self) -> list[tuple[str, str]]:
+        graph_edges: list[tuple[str, str]] = []
+        for event in self.events:
+            task_id = event.get("task_id")
+            parent_task_id = event.get("parent_task_id")
+            if task_id and parent_task_id:
+                graph_edges.append((parent_task_id, task_id))
+        return graph_edges
+
+
 class UsageTracker:
     def __init__(self) -> None:
         self.prompt_tokens = 0
