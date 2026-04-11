@@ -1,0 +1,13 @@
+variant,budget,quality_score,retained_context_ratio,token_usage
+full_framework,3000,0.4769,0.3125,24.0
+full_framework,6000,0.8982,0.625,24.0
+full_framework,9000,0.9638,0.8125,24.0
+full_framework,12000,1.0,1.0,24.0
+multi_agent_no_compression,3000,0.3761,0.3125,24.0
+multi_agent_no_compression,6000,0.7006,0.625,24.0
+multi_agent_no_compression,9000,0.7517,0.8125,24.0
+multi_agent_no_compression,12000,0.78,1.0,24.0
+multi_agent_no_long_horizon,3000,0.3838,0.3125,24.0
+multi_agent_no_long_horizon,6000,0.7904,0.625,24.0
+multi_agent_no_long_horizon,9000,0.8481,0.8125,24.0
+multi_agent_no_long_horizon,12000,0.88,1.0,24.0

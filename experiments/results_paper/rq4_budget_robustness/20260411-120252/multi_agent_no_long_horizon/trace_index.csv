@@ -1,0 +1,3 @@
+task_id,benchmark_id,benchmark_name,run_id,thread_id,sqlite_path,status
+rq4-longbench-local-001,longbench,LongBench,ddb87987-8f57-42ae-9cf8-5a9518bf1536,rq4_budget_robustness-rq4-longbench-local-001-rep-0,experiments\results_paper\rq4_budget_robustness\20260411-120252\multi_agent_no_long_horizon\observability.db,completed
+rq4-infinitebench-local-002,infinitebench,InfiniteBench,0ec79ba0-5bd1-4f28-845d-c5d7b8c2d827,rq4_budget_robustness-rq4-infinitebench-local-002-rep-0,experiments\results_paper\rq4_budget_robustness\20260411-120252\multi_agent_no_long_horizon\observability.db,completed

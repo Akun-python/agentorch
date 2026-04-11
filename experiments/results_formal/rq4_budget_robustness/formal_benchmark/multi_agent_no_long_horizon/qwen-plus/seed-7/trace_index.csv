@@ -1,0 +1,3 @@
+task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
+rq4-longbench-formal-001,longbench,LongBench,qwen-plus,7,1a2bc1b2-b2a8-4f81-98c6-35456c1b92dc,rq4_budget_robustness-rq4-longbench-formal-001-rep-0,experiments\results_formal\rq4_budget_robustness\formal_benchmark\multi_agent_no_long_horizon\qwen-plus\seed-7\observability.db,completed
+rq4-longbench-formal-002,longbench,LongBench,qwen-plus,7,69c2c983-34a9-48b8-98e0-94ed269abe81,rq4_budget_robustness-rq4-longbench-formal-002-rep-0,experiments\results_formal\rq4_budget_robustness\formal_benchmark\multi_agent_no_long_horizon\qwen-plus\seed-7\observability.db,completed

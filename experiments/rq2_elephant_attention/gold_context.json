@@ -1,0 +1,25 @@
+{
+  "rq2-hotpotqa-local-001": [
+    "conversation:0"
+  ],
+  "rq2-musique-local-001": [
+    "conversation:0",
+    "conversation:2"
+  ],
+  "rq2-hotpot-formal-001": [
+    "c0",
+    "c2"
+  ],
+  "rq2-hotpot-formal-002": [
+    "c0",
+    "c2"
+  ],
+  "rq2-musique-formal-001": [
+    "c0",
+    "c2"
+  ],
+  "rq2-musique-formal-002": [
+    "c0",
+    "c2"
+  ]
+}

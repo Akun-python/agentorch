@@ -27,9 +27,14 @@ class SandboxPolicy(BaseModel):
 
     def validate_workdir(self, workdir: str | Path | None) -> Path:
         target = Path(workdir or Path.cwd()).resolve()
-        if not any(str(target).startswith(str(path.resolve())) for path in self.allowed_paths):
-            raise PermissionError(f"Workdir '{target}' is outside the allowed sandbox paths.")
-        return target
+        for path in self.allowed_paths:
+            allowed = path.resolve()
+            try:
+                target.relative_to(allowed)
+                return target
+            except ValueError:
+                continue
+        raise PermissionError(f"Workdir '{target}' is outside the allowed sandbox paths.")
 
     def validate_command(self, command: str) -> None:
         head = shlex.split(command)[0] if command else ""

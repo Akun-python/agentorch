@@ -1,0 +1,2 @@
+total_runs,success_rate,avg_quality_score,avg_token_usage,avg_latency_ms
+1,1.0,0.25,68.0,574.0

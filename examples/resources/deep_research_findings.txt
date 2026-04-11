@@ -1,0 +1,3 @@
+Workflow-based review keeps research steps inspectable.
+Evidence-first orchestration makes it easier to diagnose why an answer failed.
+Chinese and English phrasing should both be represented in local knowledge to improve retrieval recall.
