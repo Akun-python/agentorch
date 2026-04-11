@@ -753,7 +753,15 @@ def bootstrap_strategy_defaults() -> None:
     register_orchestration_profile(
         "coding_agent",
         lambda: {
-            "context_strategy": ContextStrategyConfig.compact(include_tool_descriptions=False).model_dump(),
+            "context_strategy": ContextStrategyConfig.compact(
+                include_tool_descriptions=False,
+                max_conversation_messages=4,
+                tool_result_policy="truncate",
+                tool_result_max_chars=320,
+                budget_aware_compaction=True,
+                salience_mode="rule",
+                prompt_char_budget=10000,
+            ).model_dump(),
             "long_horizon_strategy": LongHorizonStrategyConfig.state_centric().model_dump(),
             "cooperation_strategy": CooperationStrategyConfig.distributed().model_dump(),
             "memory_governance_strategy": MemoryGovernanceStrategyConfig.default().model_dump(),

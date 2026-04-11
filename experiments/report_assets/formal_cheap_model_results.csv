@@ -1,0 +1,14 @@
+experiment,variant,models,n,success_mean,primary_metric,primary_mean,primary_std,token_mean
+rq1_long_horizon_tasks,full_framework,"deepseek-chat,gpt-4o-mini,qwen-plus",24,0.6667,quality_score,0.441,0.3193,2422.4167
+rq1_long_horizon_tasks,multi_agent_no_elephant,gpt-4o-mini,8,0.5,quality_score,0.5638,0.0296,2980.875
+rq1_long_horizon_tasks,single_agent_basic,"deepseek-chat,gpt-4o-mini,qwen-plus",24,0.0,quality_score,0.2567,0.1906,785.5
+rq2_elephant_attention,full_framework,"gpt-4o-mini,qwen-plus",4,1.0,context_precision,1.0,0.0,1470.25
+rq2_elephant_attention,multi_agent_no_elephant,"gpt-4o-mini,qwen-plus",4,1.0,context_precision,0.6667,0.0,1442.75
+rq3_seagull_memory,full_framework,"gpt-4o-mini,qwen-plus",8,1.0,memory_reuse_hit_rate,0.44,0.4704,1685.75
+rq3_seagull_memory,multi_agent_naive_memory,"gpt-4o-mini,qwen-plus",8,1.0,memory_reuse_hit_rate,0.22,0.2352,1499.875
+rq3_seagull_memory,multi_agent_no_seagull,"gpt-4o-mini,qwen-plus",8,1.0,memory_reuse_hit_rate,0.0,0.0,1766.375
+rq4_budget_robustness,full_framework,"gpt-4o-mini,qwen-plus",4,0.5,quality_score,0.4446,0.0062,3535.0
+rq4_budget_robustness,multi_agent_no_compression,"gpt-4o-mini,qwen-plus",4,0.0,quality_score,0.3468,0.0048,3005.75
+rq4_budget_robustness,multi_agent_no_long_horizon,"gpt-4o-mini,qwen-plus",4,0.0,quality_score,0.3079,0.0908,2925.0
+rq5_observability,full_framework,"gpt-4o-mini,qwen-plus",4,1.0,diagnostic_accuracy,1.0,0.0,3132.0
+rq5_observability,multi_agent_plain_logs,"gpt-4o-mini,qwen-plus",4,1.0,diagnostic_accuracy,0.0,0.0,3184.5

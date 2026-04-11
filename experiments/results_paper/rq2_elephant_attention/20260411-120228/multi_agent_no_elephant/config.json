@@ -1,0 +1,20 @@
+{
+  "experiment_name": "rq2_elephant_attention",
+  "variant_name": "multi_agent_no_elephant",
+  "model_name": "mock:echo",
+  "judge_model_name": null,
+  "max_steps": 8,
+  "prompt_budget": 12000,
+  "enable_elephant_attention": false,
+  "enable_seagull_memory": true,
+  "enable_long_horizon_attention": true,
+  "enable_context_compression": true,
+  "enable_observability": true,
+  "enable_multi_agent": true,
+  "enable_retrieval": true,
+  "enable_live_web_search": false,
+  "seed": 7,
+  "task_limit": 2,
+  "repeat_count": 1,
+  "output_dir": "experiments\\results_paper"
+}

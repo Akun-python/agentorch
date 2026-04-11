@@ -1,0 +1,2 @@
+task_id,run_id,thread_id,sqlite_path,status
+rq2-context-001,7442a2fb-ed47-4c85-9d50-a070d702864e,rq2_elephant_attention-rq2-context-001-rep-0,experiments\results_paper\rq2_elephant_attention\20260411-012536\full_framework\observability.db,completed

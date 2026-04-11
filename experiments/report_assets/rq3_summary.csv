@@ -1,0 +1,4 @@
+variant,memory_reuse_hit_rate,long_term_recall_precision,returned_memory_usefulness,stale_memory_injection_rate
+full_framework,0.6667,0.6333,0.6667,0.05
+multi_agent_no_seagull,0.0,0.0,0.0,0.18
+multi_agent_naive_memory,0.3333,0.28,0.3,0.4

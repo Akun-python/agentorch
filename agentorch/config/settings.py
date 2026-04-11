@@ -144,6 +144,22 @@ class SandboxConfig(BaseModel):
     command_blocklist: list[str] = Field(default_factory=list)
 
 
+class ObservabilityConfig(BaseModel):
+    enabled: bool = False
+    store_backend: Literal["sqlite"] = "sqlite"
+    sqlite_path: Path = Path(".agentorch/observability.db")
+    console_mode: Literal["silent", "important_only", "all"] = "silent"
+    capture_todos: bool = True
+
+    @classmethod
+    def from_any(cls, value: "ObservabilityConfig | dict[str, object] | None") -> "ObservabilityConfig":
+        if value is None:
+            return cls()
+        if isinstance(value, cls):
+            return value.model_copy(deep=True)
+        return cls.model_validate(value)
+
+
 class RuntimeConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
@@ -176,6 +192,7 @@ class RuntimeConfig(BaseModel):
     default_knowledge_scope: list[str] = Field(default_factory=list)
     max_delegation_depth: int = 2
     enable_parallel_tasks: bool = False
+    observability: ObservabilityConfig | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -187,7 +204,8 @@ class RuntimeConfig(BaseModel):
         if profile_name:
             profile = resolve_orchestration_profile(profile_name)
             for key, value in profile.items():
-                normalized.setdefault(key, value)
+                if key not in normalized or normalized[key] is None:
+                    normalized[key] = value
         if "rag_strategy" in normalized and normalized["rag_strategy"] is not None:
             normalized["rag_strategy"] = RagStrategyConfig.from_any(normalized["rag_strategy"])
         if "reasoning_strategy" in normalized and normalized["reasoning_strategy"] is not None:
@@ -206,6 +224,8 @@ class RuntimeConfig(BaseModel):
         if "memory_governance_strategy" in normalized and normalized["memory_governance_strategy"] is not None:
             if not isinstance(normalized["memory_governance_strategy"], BaseMemoryGovernanceStrategy):
                 normalized["memory_governance_strategy"] = MemoryGovernanceStrategyConfig.from_any(normalized["memory_governance_strategy"])
+        if "observability" in normalized and normalized["observability"] is not None:
+            normalized["observability"] = ObservabilityConfig.from_any(normalized["observability"])
         return normalized
 
     @classmethod
@@ -233,6 +253,7 @@ class RuntimeConfig(BaseModel):
         long_horizon_strategy: LongHorizonStrategyConfig | BaseLongHorizonStrategy | str | dict[str, object] | None = None,
         cooperation_strategy: CooperationStrategyConfig | BaseCooperationStrategy | str | dict[str, object] | None = None,
         memory_governance_strategy: MemoryGovernanceStrategyConfig | BaseMemoryGovernanceStrategy | str | dict[str, object] | None = None,
+        observability: ObservabilityConfig | dict[str, object] | None = None,
         prompt_template: ChatPromptTemplate | None = None,
         skill_routing: SkillRoutingConfig | str | dict[str, object] | None = None,
         default_knowledge_scope: list[str] | None = None,
@@ -276,6 +297,8 @@ class RuntimeConfig(BaseModel):
                 if isinstance(memory_governance_strategy, BaseMemoryGovernanceStrategy)
                 else MemoryGovernanceStrategyConfig.from_any(memory_governance_strategy)
             )
+        if observability is not None:
+            payload["observability"] = ObservabilityConfig.from_any(observability)
         return cls(**payload)
 
     @classmethod
@@ -290,6 +313,7 @@ class RuntimeConfig(BaseModel):
         long_horizon_strategy: LongHorizonStrategyConfig | BaseLongHorizonStrategy | str | dict[str, object] | None = None,
         cooperation_strategy: CooperationStrategyConfig | BaseCooperationStrategy | str | dict[str, object] | None = None,
         memory_governance_strategy: MemoryGovernanceStrategyConfig | BaseMemoryGovernanceStrategy | str | dict[str, object] | None = None,
+        observability: ObservabilityConfig | dict[str, object] | None = None,
         skill_routing: SkillRoutingConfig | str | dict[str, object] | None = None,
         **kwargs: object,
     ) -> "RuntimeConfig":
@@ -302,6 +326,7 @@ class RuntimeConfig(BaseModel):
             long_horizon_strategy=long_horizon_strategy,
             cooperation_strategy=cooperation_strategy,
             memory_governance_strategy=memory_governance_strategy,
+            observability=observability,
             skill_routing=skill_routing,
             **kwargs,
         )

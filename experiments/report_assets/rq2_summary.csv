@@ -1,0 +1,4 @@
+variant,context_precision,context_recall,key_evidence_retention_rate,prompt_redundancy_ratio
+full_framework,0.75,1.0,1.0,0.4166
+single_agent_long_context,0.25,0.25,0.25,0.4166
+multi_agent_no_elephant,0.5,1.0,1.0,0.125

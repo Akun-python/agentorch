@@ -1,0 +1,2 @@
+task_id,run_id,thread_id,sqlite_path,status
+rq4-budget-001,fd041462-6a0a-4bb0-a379-67707219ccb9,rq4_budget_robustness-rq4-budget-001-rep-0,experiments\results_paper\rq4_budget_robustness\20260411-012237\multi_agent_no_compression\observability.db,completed

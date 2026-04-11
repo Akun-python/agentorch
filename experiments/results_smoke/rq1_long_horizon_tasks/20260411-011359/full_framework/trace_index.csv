@@ -1,0 +1,2 @@
+task_id,run_id,thread_id,sqlite_path,status
+rq1-local-001,070b4f8c-0bee-4cc9-95e3-11a636432520,rq1_long_horizon_tasks-rq1-local-001-rep-0,experiments\results_smoke\rq1_long_horizon_tasks\20260411-011359\full_framework\observability.db,completed

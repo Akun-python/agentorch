@@ -75,6 +75,9 @@ class HumanFeedbackManager:
                     "kind": event.kind.value,
                     "severity": event.severity.value,
                     "blocking": decision.block_run,
+                    "title": event.title,
+                    "message": event.message,
+                    "metadata": event.metadata,
                 },
             )
         return FeedbackHandle(
@@ -211,4 +214,3 @@ class HumanFeedbackManager:
 
     async def get(self, feedback_id: str):
         return await self.inbox.get(feedback_id)
-

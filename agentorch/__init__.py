@@ -45,6 +45,7 @@ from .feedback import (
     InMemoryHumanInbox,
     PendingHumanFeedback,
 )
+from .facade import create_agent, create_multi_agent
 from .memory import (
     AgentLocalMemoryMechanism,
     CollectiveMemoryRecord,
@@ -460,6 +461,8 @@ __all__ = [
     "reasoning_strategy_from_genome",
     "runtime_config_from_genome",
     "build_deep_research_system_prompt",
+    "create_agent",
+    "create_multi_agent",
     "WorkspaceMemoryMechanism",
     "ArtifactFirstStrategy",
     "BalancedContextStrategy",

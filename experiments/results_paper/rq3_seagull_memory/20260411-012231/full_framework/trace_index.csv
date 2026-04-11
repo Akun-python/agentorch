@@ -1,0 +1,3 @@
+task_id,run_id,thread_id,sqlite_path,status
+rq3-memory-001,79c6dc60-816c-4e23-aa06-256e0e32ff97,rq3_seagull_memory-rq3-memory-001-rep-0,experiments\results_paper\rq3_seagull_memory\20260411-012231\full_framework\observability.db,completed
+rq3-memory-002,63224abc-9568-4c7a-9b44-1d1ac6dfbbfe,rq3_seagull_memory-rq3-memory-002-rep-0,experiments\results_paper\rq3_seagull_memory\20260411-012231\full_framework\observability.db,completed

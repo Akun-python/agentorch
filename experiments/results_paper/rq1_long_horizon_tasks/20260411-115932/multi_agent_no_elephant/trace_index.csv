@@ -1,0 +1,4 @@
+task_id,benchmark_id,benchmark_name,run_id,thread_id,sqlite_path,status
+rq1-gaia-local-001,gaia,GAIA,fb10f4be-2eb6-441f-b182-11f71563966d,rq1_long_horizon_tasks-rq1-gaia-local-001-rep-0,experiments\results_paper\rq1_long_horizon_tasks\20260411-115932\multi_agent_no_elephant\observability.db,completed
+rq1-hotpotqa-local-001,hotpotqa,HotpotQA,a3d36e05-d5af-46ee-831c-3cb6bc9ad781,rq1_long_horizon_tasks-rq1-hotpotqa-local-001-rep-0,experiments\results_paper\rq1_long_horizon_tasks\20260411-115932\multi_agent_no_elephant\observability.db,completed
+rq1-musique-local-001,musique,MuSiQue,aedd42c0-4c02-43bd-a8c2-400bb2d95d82,rq1_long_horizon_tasks-rq1-musique-local-001-rep-0,experiments\results_paper\rq1_long_horizon_tasks\20260411-115932\multi_agent_no_elephant\observability.db,completed

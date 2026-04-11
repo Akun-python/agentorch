@@ -22,9 +22,8 @@ from agentorch.config import MemoryConfig, RuntimeConfig
 from agentorch.knowledge import Document, IndexedKnowledgeBase
 from agentorch.memory import MemoryManager
 from agentorch.models import OpenAIModel
-from agentorch.presets import DeepResearchAgent, DeepResearchAgentConfig
+from agentorch.presets import DeepResearchAgentConfig
 from agentorch.reasoning import ReasoningStrategyConfig
-from agentorch.runtime import Runtime
 from agentorch.runtime.agent import Agent
 from agentorch.sandbox import SandboxManager, SandboxPolicy
 from agentorch.skills import SkillLoader, SkillRegistry
@@ -34,6 +33,7 @@ from agentorch.strategies import (
     LongHorizonStrategyConfig,
     MemoryGovernanceStrategyConfig,
 )
+from agentorch import create_agent, create_multi_agent
 from agentorch.tools import ToolError, ToolRegistry, create_python_interpreter_tool
 
 
@@ -438,7 +438,7 @@ async def build_research_specialist(
         include_retrieval_report=False,
     )
     specialist_reasoning = ReasoningStrategyConfig.react(config={"max_steps": 4})
-    runtime = await Runtime.acreate(
+    return create_agent(
         model=OpenAIModel(
             model=model_name,
             timeout=180.0,
@@ -448,13 +448,14 @@ async def build_research_specialist(
             retry_jitter=0.5,
             min_request_interval=3.0,
         ),
+        profile="research",
         knowledge_base=kb,
         memory=memory,
         tools=tools,
         skills=skills,
         sandbox=sandbox,
         knowledge_scope=config.knowledge_scope,
-        config=RuntimeConfig.agent(
+        runtime_config=RuntimeConfig.agent(
             system_prompt=(
                 f"You are {name}. {role_prompt} "
                 "Start with local retrieval. If local retrieval is sparse or clearly insufficient and web search is available, "
@@ -471,7 +472,6 @@ async def build_research_specialist(
             default_knowledge_scope=config.knowledge_scope,
         ),
     )
-    return Agent(runtime=runtime)
 
 
 async def main(
@@ -576,7 +576,7 @@ async def main(
 
     supervisor = ResearchSupervisor(registry=registry)
 
-    agent = await DeepResearchAgent.acreate(
+    agent = create_multi_agent(
         model=OpenAIModel(
             model=model_name,
             timeout=180.0,
@@ -586,13 +586,30 @@ async def main(
             retry_jitter=0.5,
             min_request_interval=3.0,
         ),
-        knowledge_base=kb,
-        memory=shared_memory,
-        tools=custom_tools,
-        skills=skills,
-        sandbox=sandbox,
-        config=config,
-        agent_registry=registry,
+        agents=[
+            {
+                "agent": evidence_scout,
+                "name": "evidence_scout",
+                "role": "evidence_scout",
+                "description": "Collects supporting evidence and retrieves grounded facts.",
+                "capabilities": [AgentCapability.RETRIEVE, AgentCapability.TOOL_USE],
+                "knowledge_scope": ["research"],
+            },
+            {
+                "agent": synthesis_analyst,
+                "name": "synthesis_analyst",
+                "role": "synthesis_analyst",
+                "description": "Synthesizes research findings into a trustworthy answer.",
+                "capabilities": [AgentCapability.AGGREGATE, AgentCapability.REVIEW],
+                "knowledge_scope": ["research"],
+            },
+        ],
+        shared_memory=shared_memory,
+        shared_knowledge=kb,
+        system_prompt=config.system_prompt,
+        reasoning=config.reasoning_strategy,
+        cooperation_strategy=config.cooperation_strategy,
+        runtime_config=config.runtime_config(),
         supervisor=supervisor,
     )
 
@@ -610,7 +627,7 @@ async def main(
                 "recall_policy": getattr(agent.runtime.config.memory_governance_strategy, "recall_policy", None),
                 "decay_policy": getattr(agent.runtime.config.memory_governance_strategy, "decay_policy", None),
             },
-            "rag_mode": agent.runtime.config.rag_strategy.mode if agent.runtime.config.rag_strategy else None,
+            "rag_mode": config.rag_strategy.mode,
             "memory_record_path": str(shared_memory.config.record_path),
         }
     )
@@ -618,10 +635,10 @@ async def main(
     print("- elephant_context: handoff + collective sharing + prompt compaction")
     print("- nutcracker_memory: episodic promotion + scene indexing + long-term recall")
     print("Available tools:")
-    for spec in agent.runtime.tools.list_specs():
+    for spec in evidence_scout.runtime.tools.list_specs():
         print("-", spec["function"]["name"])
 
-    web_health = await _check_web_search_health(agent.runtime.tools)
+    web_health = await _check_web_search_health(evidence_scout.runtime.tools)
     print("Web search configured:", _is_web_search_configured())
     print("Web search health:", web_health)
     if not web_health.get("available"):
@@ -652,7 +669,7 @@ async def main(
             print()
             _print_result_summary(final_result)
             if _looks_like_insufficient_coverage(final_result.output_text):
-                fallback_results = await _run_web_search_fallback(agent.runtime.tools, prompt)
+                fallback_results = await _run_web_search_fallback(evidence_scout.runtime.tools, prompt)
                 _print_web_fallback_summary(fallback_results)
         return
 

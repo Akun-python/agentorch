@@ -1,0 +1,2 @@
+task_id,run_id,thread_id,sqlite_path,status
+rq1-local-001,afb80548-8b32-42ea-bfd4-364e72656b0c,rq1_long_horizon_tasks-rq1-local-001-rep-0,,completed

@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from agentorch import Agent, OpenAIModel, Runtime, ToolRegistry, tool
+from agentorch import OpenAIModel, ToolRegistry, create_agent, tool
 
 
 class EchoInput(BaseModel):
@@ -13,11 +13,14 @@ async def echo(input: EchoInput):
 
 
 async def main() -> None:
-    model = OpenAIModel(model="gpt-4.1-mini", api_key="YOUR_API_KEY")
     tools = ToolRegistry()
     tools.register(echo)
-    runtime = Runtime(model=model, tools=tools)
-    agent = Agent(runtime=runtime)
+    agent = create_agent(
+        model=OpenAIModel(model="gpt-4.1-mini", api_key="YOUR_API_KEY"),
+        tools=tools,
+        system_prompt="You are a careful assistant.",
+        name="basic-agent",
+    )
     result = await agent.run("Say hello and use the echo tool if helpful.", thread_id="example-thread")
     print(result.output_text)
 

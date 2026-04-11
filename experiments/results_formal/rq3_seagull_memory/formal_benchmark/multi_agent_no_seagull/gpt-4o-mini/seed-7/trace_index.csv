@@ -1,0 +1,5 @@
+task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
+rq3-locomo-formal-001,locomo,LoCoMo,gpt-4o-mini,7,dd4e841b-ce9f-4bd7-89c0-de1e32d431af,rq3_seagull_memory-rq3-locomo-formal-001-rep-0,experiments\results_formal\rq3_seagull_memory\formal_benchmark\multi_agent_no_seagull\gpt-4o-mini\seed-7\observability.db,completed
+rq3-locomo-formal-002,locomo,LoCoMo,gpt-4o-mini,7,038f2194-798a-4105-8e9c-eabbbe8e32ed,rq3_seagull_memory-rq3-locomo-formal-002-rep-0,experiments\results_formal\rq3_seagull_memory\formal_benchmark\multi_agent_no_seagull\gpt-4o-mini\seed-7\observability.db,completed
+rq3-longmem-formal-001,longmemeval,LongMemEval,gpt-4o-mini,7,8f12076c-24c2-4492-8a5c-2160865ba57c,rq3_seagull_memory-rq3-longmem-formal-001-rep-0,experiments\results_formal\rq3_seagull_memory\formal_benchmark\multi_agent_no_seagull\gpt-4o-mini\seed-7\observability.db,completed
+rq3-longmem-formal-002,longmemeval,LongMemEval,gpt-4o-mini,7,d1f1b58d-ad0d-4e04-82ae-bd0dfa073ded,rq3_seagull_memory-rq3-longmem-formal-002-rep-0,experiments\results_formal\rq3_seagull_memory\formal_benchmark\multi_agent_no_seagull\gpt-4o-mini\seed-7\observability.db,completed

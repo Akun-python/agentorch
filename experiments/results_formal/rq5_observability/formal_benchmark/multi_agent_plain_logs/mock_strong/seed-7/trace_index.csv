@@ -1,0 +1,5 @@
+task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
+rq5-formal-001,agentorch_failure_suite,AgentOrch Failure Suite,mock:strong,7,33a66ba1-6205-4ea8-8950-9e21e50814c9,rq5_observability-rq5-formal-001-rep-0,,completed
+rq5-formal-002,agentorch_failure_suite,AgentOrch Failure Suite,mock:strong,7,53683fba-45a7-489b-98e7-693ed3407f4a,rq5_observability-rq5-formal-002-rep-0,,completed
+rq5-formal-003,agentorch_failure_suite,AgentOrch Failure Suite,mock:strong,7,b96d2cb4-cb4c-4e62-81e1-e1f7223b7a22,rq5_observability-rq5-formal-003-rep-0,,completed
+rq5-formal-004,agentorch_failure_suite,AgentOrch Failure Suite,mock:strong,7,ac517684-4505-4207-9906-3259bd67b189,rq5_observability-rq5-formal-004-rep-0,,completed

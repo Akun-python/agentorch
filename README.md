@@ -43,6 +43,13 @@ The goal is not to hide orchestration, but to make it programmable, inspectable,
 
 The current recommended API style is:
 
+High-level entrypoints:
+
+- `create_agent(...)`
+- `create_multi_agent(...)`
+
+Core assembly:
+
 - `ModelConfig.from_any(...)`
 - `OpenAIModel.from_config(...)`
 - `RuntimeConfig.agent(...)` and `RuntimeConfig.workflow(...)`
@@ -54,7 +61,7 @@ The current recommended API style is:
 - `Agent.create(...)` / `acreate(...)`
 - `WorkflowBuilder()` plus `Node.*(...)` shortcuts
 
-Use `create(...)` in normal scripts and `await ...acreate(...)` in notebooks or async applications.
+Use the facade entrypoints for day-to-day work. Drop to `create(...)` / `acreate(...)` when you want fully manual runtime assembly.
 
 ## Installation
 
@@ -93,15 +100,12 @@ If you use an OpenAI-compatible gateway, a full `.../chat/completions` URL is no
 Normal Python script:
 
 ```python
-from agentorch import Agent
-from agentorch.config import RuntimeConfig
+from agentorch import create_agent
 
-agent = Agent.create(
-    model_config="gpt-4.1-mini",
-    config=RuntimeConfig.agent(
-        system_prompt="You are a concise and accurate assistant.",
-        reasoning="react",
-    ),
+agent = create_agent(
+    model="gpt-4.1-mini",
+    system_prompt="You are a concise and accurate assistant.",
+    reasoning="react",
 )
 
 result = agent.run_sync(
@@ -112,25 +116,15 @@ result = agent.run_sync(
 print(result.output_text)
 ```
 
-Notebook / async app:
-
-```python
-agent = await Agent.acreate(
-    model_config="gpt-4.1-mini",
-    config=RuntimeConfig.agent(reasoning="react"),
-)
-
-result = await agent.run("Explain what agentorch is.", thread_id="nb-001")
-print(result.output_text)
-```
+`create_agent(...)` is the recommended high-level entry point for single agents.
+Use `Agent.create(...)` / `Runtime.create(...)` when you want full manual runtime assembly.
 
 ### 2. Structured tool calling
 
 ```python
 from pydantic import BaseModel
 
-from agentorch import Agent, ToolRegistry, tool
-from agentorch.config import RuntimeConfig
+from agentorch import ToolRegistry, create_agent, tool
 
 
 class AddInput(BaseModel):
@@ -143,10 +137,10 @@ async def add_numbers(input: AddInput):
     return {"sum": input.a + input.b}
 
 
-agent = Agent.create(
-    model_config="gpt-4.1-mini",
+agent = create_agent(
+    model="gpt-4.1-mini",
     tools=ToolRegistry.from_tools(add_numbers),
-    config=RuntimeConfig.agent(reasoning="react"),
+    reasoning="react",
 )
 
 result = agent.run_sync(
@@ -187,8 +181,7 @@ This registers the standard filesystem, execution, and git tool bundles in one s
 ```python
 from pathlib import Path
 
-from agentorch import Agent, IndexedKnowledgeBase
-from agentorch.config import RuntimeConfig
+from agentorch import IndexedKnowledgeBase, create_agent
 from agentorch.knowledge import RagStrategyConfig
 
 knowledge_base = IndexedKnowledgeBase.create(
@@ -200,18 +193,16 @@ knowledge_base = IndexedKnowledgeBase.create(
     scopes=["architecture", "ops", "legal"],
 )
 
-agent = Agent.create(
-    model_config="gpt-4.1-mini",
+agent = create_agent(
+    model="gpt-4.1-mini",
     knowledge_base=knowledge_base,
-    config=RuntimeConfig.agent(
-        rag=RagStrategyConfig.for_deliberative(
-            knowledge_scope=["architecture", "ops", "legal"],
-            file_types=[".md", ".docx", ".pdf"],
-            must_cover=["deployment restrictions"],
-            max_steps=3,
-        ),
-        reasoning="react",
+    rag=RagStrategyConfig.for_deliberative(
+        knowledge_scope=["architecture", "ops", "legal"],
+        file_types=[".md", ".docx", ".pdf"],
+        must_cover=["deployment restrictions"],
+        max_steps=3,
     ),
+    reasoning="react",
 )
 
 result = agent.run_sync(
@@ -275,35 +266,37 @@ agent = Agent.create(
 ### 7. Multi-agent supervisor delegation
 
 ```python
-from agentorch import Agent, AgentCapability, AgentRegistry, AgentSpec, Supervisor
+from agentorch import AgentCapability, create_agent, create_multi_agent
 
-planner = Agent.create(
-    model_config="gpt-4.1-mini",
-    config=RuntimeConfig.agent(reasoning="plan_execute", rag="hybrid"),
+planner = create_agent(
+    model="gpt-4.1-mini",
+    reasoning="plan_execute",
+    rag="hybrid",
+    name="planner",
+    description="Architecture planning specialist",
 )
 
-registry = AgentRegistry()
-registry.register(
-    AgentSpec.assistant(
-        "planner",
-        description="Architecture planning specialist",
-        capabilities=[AgentCapability.PLAN],
-        knowledge_scopes=["architecture"],
-        default_rag_strategy="hybrid",
-        preferred_reasoning_kind="plan_execute",
-    ),
-    planner,
-)
-
-orchestrator = Agent.create(
-    model_config="gpt-4.1-mini",
-    agent_registry=registry,
-    supervisor=Supervisor(registry=registry),
-    config=RuntimeConfig.agent(reasoning="react"),
+orchestrator = create_multi_agent(
+    model="gpt-4.1-mini",
+    agents=[
+        {
+            "agent": planner,
+            "name": "planner",
+            "role": "planner",
+            "description": "Architecture planning specialist",
+            "capabilities": [AgentCapability.PLAN],
+            "knowledge_scope": ["architecture"],
+        }
+    ],
+    system_prompt="You coordinate specialists and delegate each task to the right agent.",
 )
 ```
 
-### 8. Evolution search
+### 8. Deep research recipe
+
+`DeepResearchAgentConfig` remains available as a preset/config recipe, but the recommended path is to build research systems with `create_agent(...)` and `create_multi_agent(...)`.
+
+### 9. Evolution search
 
 ```python
 from agentorch import EvolutionConfig, EvolutionManager, SearchSpace
@@ -355,9 +348,8 @@ The current top-level API includes:
 ```python
 from agentorch import (
     Agent,
-    AgentRegistry,
-    AgentSpec,
     ChatPromptTemplate,
+    DeepResearchAgentConfig,
     IndexedKnowledgeBase,
     KnowledgeAsset,
     OpenAIModel,
@@ -367,6 +359,8 @@ from agentorch import (
     ToolRegistry,
     Workflow,
     WorkflowBuilder,
+    create_agent,
+    create_multi_agent,
     tool,
 )
 ```
@@ -397,9 +391,14 @@ agentorch/
 
 ## Examples
 
-Runnable examples are available in:
+High-level examples:
 
 - [`examples/basic_agent.py`](examples/basic_agent.py)
+- [`examples/deep_research_agent.py`](examples/deep_research_agent.py)
+- [`examples/supervisor_agents.py`](examples/supervisor_agents.py)
+
+Core / advanced examples:
+
 - [`examples/code_interpreter_agent.py`](examples/code_interpreter_agent.py)
 - [`examples/evolution_demo.py`](examples/evolution_demo.py)
 - [`examples/evolution_multi_mechanism.py`](examples/evolution_multi_mechanism.py)
@@ -410,7 +409,6 @@ Runnable examples are available in:
 - [`examples/rag_multiformat_runtime.py`](examples/rag_multiformat_runtime.py)
 - [`examples/rag_ready_runtime.py`](examples/rag_ready_runtime.py)
 - [`examples/rag_workflow_orchestrated.py`](examples/rag_workflow_orchestrated.py)
-- [`examples/supervisor_agents.py`](examples/supervisor_agents.py)
 - [`examples/workflow_selectable_rag.py`](examples/workflow_selectable_rag.py)
 
 Interactive notebook:

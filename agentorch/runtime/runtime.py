@@ -19,7 +19,7 @@ from agentorch.agents import (
     TaskPacket,
     TaskStatus,
 )
-from agentorch.config import ModelConfig, RuntimeConfig
+from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
 from agentorch.core import (
     CompactionDecision,
     ContextEnvelope,
@@ -58,7 +58,7 @@ from agentorch.knowledge import (
 )
 from agentorch.memory import MemoryManager, MemoryRecord
 from agentorch.models import BaseModelAdapter, OpenAIModel, create_model_adapter
-from agentorch.observability import EventBus, Logger, Tracer, UsageTracker
+from agentorch.observability import ConsoleEventSink, EventBus, ObservabilityManager, SQLiteEventStore, Tracer, UsageTracker
 from agentorch.prompts import PromptBuilder
 from agentorch.reasoning import BasePolicy, BaseReasoningFramework, LegacyPolicyAdapter, ReactPolicy, ReasoningSessionContext, ReasoningStrategyConfig
 from agentorch.runtime.context_compaction import (
@@ -241,12 +241,40 @@ class Runtime:
         self.config = RuntimeConfig.from_any(config)
         self.policy = policy or self.config.reasoning_strategy or ReactPolicy()
         self.prompt_builder = prompt_builder or PromptBuilder(chat_template=self.config.prompt_template)
-        self.tracer = tracer or Tracer(EventBus(), Logger(file_path=".agentorch/runtime.log"))
+        self.observability = ObservabilityManager.disabled()
+        self.tracer = tracer or Tracer(EventBus(), sinks=[])
+        self._configure_observability()
         self.human_feedback = human_feedback
         if self.human_feedback is not None:
             self.human_feedback.bind_runtime(self)
         self.reasoning_framework = self._normalize_reasoning(self.policy)
         self._register_builtin_knowledge_tools()
+
+    def _configure_observability(self) -> None:
+        observability_config = ObservabilityConfig.from_any(self.config.observability)
+        if not observability_config.enabled:
+            return
+        if observability_config.store_backend != "sqlite":
+            raise ValueError(f"Unsupported observability store backend '{observability_config.store_backend}'.")
+        store = SQLiteEventStore(observability_config.sqlite_path, capture_todos=observability_config.capture_todos)
+        self.observability = ObservabilityManager(store)
+        self.tracer.add_sink(self.observability)
+        if observability_config.console_mode != "silent":
+            self.tracer.add_sink(ConsoleEventSink(mode=observability_config.console_mode))
+
+    def _attach_observability_metadata(self, result: RunResult) -> RunResult:
+        if not self.observability.enabled:
+            return result
+        todo_payload = self.observability.get_run_todos(result.run_id)
+        reasoning_metadata = dict(result.reasoning_metadata)
+        reasoning_metadata["observability_enabled"] = True
+        reasoning_metadata["todo_query"] = {"run_id": result.run_id, "thread_id": result.thread_id}
+        reasoning_metadata["todo_summary"] = (
+            todo_payload.get("summary")
+            if todo_payload is not None
+            else {"total": 0, "completed": 0, "failed": 0, "waiting": 0, "in_progress": 0}
+        )
+        return result.model_copy(update={"reasoning_metadata": reasoning_metadata})
 
     def _register_builtin_knowledge_tools(self) -> None:
         if self.knowledge_base is None and self.retriever is None:
@@ -669,13 +697,14 @@ class Runtime:
             if self.supervisor is not None and not metadata.get("_delegated"):
                 result = await self._run_supervisor(user_input, envelope, stream_writer=stream_writer)
                 await self._emit_event("run_completed", {**envelope.model_dump(), "status": result.status}, stream_writer=stream_writer)
-                return result
+                return self._attach_observability_metadata(result)
 
             if workflow is not None:
                 result = await self._run_workflow(workflow, thread_id=thread_id, user_input=user_input, metadata=metadata)
                 status = result.get("status", "completed")
                 await self._emit_event("run_completed", {**envelope.model_dump(), "status": status}, stream_writer=stream_writer)
-                return RunResult(
+                return self._attach_observability_metadata(
+                    RunResult(
                     request_id=envelope.request_id,
                     run_id=envelope.run_id,
                     thread_id=thread_id,
@@ -686,6 +715,7 @@ class Runtime:
                     await_reason=result.get("await_reason"),
                     requires_response=bool(result.get("requires_response", False)),
                     response_schema=result.get("response_schema"),
+                    )
                 )
 
             conversation = await self.memory.get_context_window(thread_id)
@@ -812,7 +842,8 @@ class Runtime:
                 if key in envelope.metadata:
                     reasoning_metadata[key] = envelope.metadata[key]
             await self._emit_event("run_completed", {**envelope.model_dump(), "status": "completed"}, stream_writer=stream_writer)
-            return RunResult(
+            return self._attach_observability_metadata(
+                RunResult(
                 request_id=envelope.request_id,
                 run_id=envelope.run_id,
                 thread_id=thread_id,
@@ -829,6 +860,7 @@ class Runtime:
                 reasoning_trace=reasoning_result.trace_text,
                 reasoning_kind=local_reasoning.config.kind.value,
                 reasoning_metadata=reasoning_metadata,
+                )
             )
         except Exception as exc:
             await self._emit_event(
