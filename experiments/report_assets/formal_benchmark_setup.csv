@@ -1,0 +1,10 @@
+experiment,benchmark_name,category,samples,models,seeds
+rq1_long_horizon_tasks,GAIA,tool_augmented_long_horizon,2,4,3
+rq1_long_horizon_tasks,HotpotQA,multi_hop_reasoning,2,4,3
+rq1_long_horizon_tasks,MuSiQue,compositional_multi_hop_reasoning,2,4,3
+rq1_long_horizon_tasks,AgentOrch MultiTurn Suite,multi_agent_multi_turn_dialogue,2,4,1
+rq2_elephant_attention,HotpotQA,multi_hop_reasoning,2,3,1
+rq3_seagull_memory,LoCoMo,long_term_conversational_memory,2,3,1
+rq3_seagull_memory,LongMemEval,cross_session_memory,2,3,1
+rq4_budget_robustness,LongBench,long_context_evaluation,2,3,1
+rq5_observability,AgentOrch Failure Suite,observability_diagnostics,2,3,1

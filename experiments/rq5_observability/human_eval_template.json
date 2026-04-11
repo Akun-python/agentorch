@@ -1,0 +1,7 @@
+{
+  "questions": [
+    "What failed?",
+    "At which stage did the failure happen?",
+    "Which todo item best describes the failure?"
+  ]
+}

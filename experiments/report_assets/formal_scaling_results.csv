@@ -1,0 +1,4 @@
+agent_count,quality_mean,quality_std,quality_ci95_low,quality_ci95_high,avg_latency_ms
+1,0.4645,0.0364,0.4477,0.4813,678.6111
+2,0.7433,0.0295,0.7297,0.757,1864.1111
+4,0.7433,0.0295,0.7297,0.757,2913.4444

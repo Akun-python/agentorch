@@ -2,7 +2,7 @@ import asyncio
 
 from pydantic import BaseModel
 
-from agentorch import Agent, AgentRegistry, AgentSpec, OpenAIModel, Runtime, Supervisor, ToolRegistry, tool
+from agentorch import Agent, AgentCapability, OpenAIModel, ToolRegistry, create_agent, create_multi_agent, tool
 
 
 class EchoInput(BaseModel):
@@ -17,19 +17,30 @@ async def echo(input: EchoInput):
 async def build_specialist(name: str, description: str) -> Agent:
     tools = ToolRegistry()
     tools.register(echo)
-    runtime = Runtime(model=OpenAIModel(model="gpt-4.1"), tools=tools)
-    agent = Agent(runtime=runtime)
-    return agent
+    return create_agent(
+        model=OpenAIModel(model="gpt-4.1"),
+        tools=tools,
+        name=name,
+        description=description,
+    )
 
 
 async def main() -> None:
-    registry = AgentRegistry()
     planner = await build_specialist("planner", "Planning specialist for decomposition tasks")
-    registry.register(AgentSpec(name="planner", description="Planning specialist", tags=["plan", "task"]), planner)
-
-    supervisor = Supervisor(registry=registry)
-    runtime = Runtime(model=OpenAIModel(model="gpt-4.1"), agent_registry=registry, supervisor=supervisor)
-    agent = Agent(runtime=runtime)
+    agent = create_multi_agent(
+        model=OpenAIModel(model="gpt-4.1"),
+        agents=[
+            {
+                "agent": planner,
+                "name": "planner",
+                "role": "planner",
+                "description": "Planning specialist",
+                "capabilities": [AgentCapability.PLAN, AgentCapability.TOOL_USE],
+                "knowledge_scope": ["planning"],
+            }
+        ],
+        system_prompt="You are a supervisor that delegates planning tasks to the best specialist.",
+    )
     result = await agent.run("Please plan the implementation steps for a Python agent framework.", thread_id="supervisor-demo")
     print(result.output_text)
 
