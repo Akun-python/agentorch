@@ -28,3 +28,22 @@ notebooks/*
 !notebooks/.gitkeep
 !notebooks/resources/
 !notebooks/resources/*.svg
+
+# Local paper / latex build artifacts.
+cas-sc-template.abs
+cas-sc-template.aux
+cas-sc-template.log
+cas-sc-template.out
+cas-sc-template.pdf
+cas-sc-template.synctex.gz
+cas-sc-template.tex
+
+# Local experiment caches and run outputs.
+experiments/formal/cache/
+experiments/results_formal/
+experiments/results_paper/
+experiments/results_smoke/
+
+# Local research materials and ad hoc scripts.
+参考文献/
+联网搜索.py
