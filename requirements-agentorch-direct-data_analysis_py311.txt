@@ -1,0 +1,7 @@
+# Generated from agentorch pyproject.toml against current env: data_analysis_py311
+# Python: 3.11.13
+
+httpx==0.28.1
+Jinja2==3.1.6
+openai==2.8.1
+pydantic==2.11.7
