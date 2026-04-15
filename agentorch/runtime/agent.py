@@ -11,25 +11,11 @@ from agentorch.parsing import OutputParser, ParsedRunResult, TextParser
 from agentorch.workflow import Workflow
 
 from .runtime import Runtime
+from agentorch.security import RedactionConfig, sanitize_for_export
 
 
-def _safe_export(value: Any) -> Any:
-    if isinstance(value, BaseModel):
-        return {key: _safe_export(item) for key, item in value.model_dump(exclude_none=True).items()}
-    if isinstance(value, dict):
-        return {str(key): _safe_export(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_safe_export(item) for item in value]
-    if hasattr(value, "value") and not isinstance(value, str):
-        try:
-            return value.value
-        except AttributeError:
-            pass
-    if hasattr(value, "as_posix"):
-        return str(value)
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return repr(value)
+def _safe_export(value: Any, *, config: RedactionConfig | dict[str, object] | None = None, unsafe: bool = False) -> Any:
+    return sanitize_for_export(value, config=config, unsafe=unsafe)
 
 
 def _workflow_summary(workflow: Workflow | None) -> dict[str, Any] | None:
@@ -69,7 +55,7 @@ def _model_summary(runtime: Runtime) -> dict[str, Any]:
     config = getattr(model, "config", None)
     return {
         "adapter": model.__class__.__name__,
-        "config": _safe_export(config) if config is not None else None,
+        "config": _safe_export(config, config=runtime.config.redaction, unsafe=runtime.config.unsafe_export) if config is not None else None,
     }
 
 
@@ -77,16 +63,16 @@ def _resolved_strategy_summary(runtime: Runtime) -> dict[str, Any]:
     config = runtime.config
     return {
         "orchestration_profile": config.orchestration_profile,
-        "context": _safe_export(config.context_strategy),
-        "long_horizon": _safe_export(config.long_horizon_strategy),
-        "cooperation": _safe_export(config.cooperation_strategy),
-        "memory_governance": _safe_export(config.memory_governance_strategy),
+        "context": _safe_export(config.context_strategy, config=config.redaction, unsafe=config.unsafe_export),
+        "long_horizon": _safe_export(config.long_horizon_strategy, config=config.redaction, unsafe=config.unsafe_export),
+        "cooperation": _safe_export(config.cooperation_strategy, config=config.redaction, unsafe=config.unsafe_export),
+        "memory_governance": _safe_export(config.memory_governance_strategy, config=config.redaction, unsafe=config.unsafe_export),
     }
 
 
 def _runtime_summary(runtime: Runtime) -> dict[str, Any]:
     return {
-        "config": _safe_export(runtime.config),
+        "config": _safe_export(runtime.config, config=runtime.config.redaction, unsafe=runtime.config.unsafe_export),
         "model": _model_summary(runtime),
         "tools": _tool_names(runtime),
         "skills": _skill_names(runtime),
@@ -99,12 +85,23 @@ def _runtime_summary(runtime: Runtime) -> dict[str, Any]:
     }
 
 
+def _resource_state(runtime: Runtime) -> dict[str, Any]:
+    return {
+        "closed": getattr(runtime, "_closed", False),
+        "has_sandbox": runtime.sandbox is not None,
+        "has_observability": runtime.observability.enabled,
+        "background_managed": getattr(runtime, "_background_managed", False),
+    }
+
+
 def _core_assembly(runtime: Runtime, workflow: Workflow | None, blueprint: dict[str, Any] | None = None) -> dict[str, Any]:
     assembly = {
         "agent_constructor": "Agent(runtime=..., workflow=...)",
         "runtime_constructor": "Runtime.create(...)",
         "runtime": _runtime_summary(runtime),
         "workflow": _workflow_summary(workflow),
+        "redaction_applied": not getattr(runtime.config, "unsafe_export", False),
+        "resource_state": _resource_state(runtime),
     }
     if blueprint is not None:
         assembly["facade"] = blueprint.get("facade", "core")
@@ -215,14 +212,16 @@ class Agent:
         )
 
     def bind_blueprint(self, blueprint: dict[str, Any]) -> "Agent":
-        self._assembly_blueprint = _safe_export(blueprint)
+        self._assembly_blueprint = _safe_export(blueprint, config=self.runtime.config.redaction, unsafe=self.runtime.config.unsafe_export)
         return self
 
     def export_config(self) -> dict[str, Any]:
         base = {
             "model": _model_summary(self.runtime),
-            "runtime": _safe_export(self.runtime.config),
+            "runtime": _safe_export(self.runtime.config, config=self.runtime.config.redaction, unsafe=self.runtime.config.unsafe_export),
             "workflow": _workflow_summary(self.workflow),
+            "redaction_applied": not getattr(self.runtime.config, "unsafe_export", False),
+            "resource_state": _resource_state(self.runtime),
         }
         if self._assembly_blueprint is not None:
             base["facade"] = self._assembly_blueprint.get("facade")
@@ -230,12 +229,14 @@ class Agent:
 
     def export_blueprint(self) -> dict[str, Any]:
         if self._assembly_blueprint is not None:
-            return _safe_export(self._assembly_blueprint)
+            return _safe_export(self._assembly_blueprint, config=self.runtime.config.redaction, unsafe=self.runtime.config.unsafe_export)
         return {
             "facade": "core",
             "kind": "multi_agent" if self.runtime.supervisor is not None else "single_agent",
             "runtime": _runtime_summary(self.runtime),
             "workflow": _workflow_summary(self.workflow),
+            "redaction_applied": not getattr(self.runtime.config, "unsafe_export", False),
+            "resource_state": _resource_state(self.runtime),
         }
 
     def inspect(self) -> dict[str, Any]:
@@ -245,6 +246,12 @@ class Agent:
 
     def export_core_assembly(self) -> dict[str, Any]:
         return _core_assembly(self.runtime, self.workflow, self._assembly_blueprint)
+
+    async def aclose(self) -> None:
+        await self.runtime.aclose()
+
+    def close(self) -> None:
+        self.runtime.close()
 
     def describe(self) -> str:
         blueprint = self.export_blueprint()

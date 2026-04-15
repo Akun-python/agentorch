@@ -1,6 +1,5 @@
-experiment,reference_variant,baseline_variant,consistent_models,total_models,consistency_ratio,avg_primary_gap
-rq1_long_horizon_tasks,full_framework,single_agent_basic,3,4,0.75,0.1993
-rq2_elephant_attention,full_framework,multi_agent_no_elephant,3,3,1.0,0.3333
-rq3_seagull_memory,full_framework,multi_agent_no_seagull,3,3,1.0,0.44
-rq4_budget_robustness,full_framework,multi_agent_no_long_horizon,3,3,1.0,0.1367
-rq5_observability,full_framework,multi_agent_plain_logs,3,3,1.0,1.0
+experiment,baseline,consistency,avg_gap
+RQ1 Long-Horizon Tasks,Single Agent Basic,3/4,0.18
+RQ2 Elephant Attention,Multi-Agent No Elephant,1/3,0.11
+RQ3 Seagull Memory,Multi-Agent No Seagull,1/3,-0.00
+RQ4 Budget Robustness,Multi-Agent No Long Horizon,3/3,0.12

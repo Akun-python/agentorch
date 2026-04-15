@@ -52,8 +52,21 @@ class MemoryManager:
         self.config = config or MemoryConfig()
         bootstrap_memory_defaults()
         self.state_store = state_store or create_memory_backend("in_memory_state_store")
-        self.checkpoint_store = checkpoint_store or create_memory_backend("sqlite_checkpoint_store", path=self.config.checkpoint_path)
-        self.record_store = record_store or create_memory_backend("sqlite_record_store", path=self.config.record_path)
+        self.checkpoint_store = checkpoint_store or create_memory_backend(
+            "sqlite_checkpoint_store",
+            path=self.config.checkpoint_path,
+            redaction=self.config.redaction,
+        )
+        self.record_store = record_store or create_memory_backend(
+            "sqlite_record_store",
+            path=self.config.record_path,
+            redaction=self.config.redaction,
+            summary_only_content=self.config.summary_only_persistence,
+            max_content_chars=self.config.max_record_content_chars,
+            max_metadata_chars=self.config.max_record_metadata_chars,
+            truncate_thread_messages=self.config.truncate_thread_messages_before_persist,
+            persist_full_prompt_text=self.config.persist_full_prompt_text,
+        )
         self.governance = governance or create_memory_governance("mgcm_governance")
         self.collective_record_type = CollectiveMemoryRecord
         self.session_state = session_state or MemorySessionState()
@@ -239,6 +252,9 @@ class MemoryManager:
             limit=limit or self.config.thread_history_recall_limit,
             order_desc=True,
         )
+
+    async def aclose(self) -> None:
+        return None
 
     async def search_collective_memory(
         self,

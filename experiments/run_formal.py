@@ -22,7 +22,7 @@ def main() -> None:
     parser.add_argument("--experiment", choices=KNOWN_EXPERIMENTS, default=None)
     parser.add_argument("--models", default=",".join(REAL_FORMAL_MODELS))
     parser.add_argument("--variants", default="full_framework")
-    parser.add_argument("--seeds", default="7,11,19")
+    parser.add_argument("--seeds", default="7,11,19,23,29")
     parser.add_argument("--task-limit", type=int, default=None)
     parser.add_argument("--budget", type=int, default=12000)
     parser.add_argument("--output-dir", type=Path, default=Path("experiments/results_formal"))

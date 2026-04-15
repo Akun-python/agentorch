@@ -5,11 +5,14 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from agentorch.security import RedactionConfig, sanitize_for_export
+
 
 class SQLiteCheckpointStore:
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, *, redaction: RedactionConfig | dict[str, object] | None = None) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.redaction = RedactionConfig.from_any(redaction)
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
@@ -32,10 +35,11 @@ class SQLiteCheckpointStore:
             )
 
     async def save(self, thread_id: str, checkpoint_id: str, payload: dict[str, Any]) -> None:
+        safe_payload = sanitize_for_export(payload, config=self.redaction)
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO checkpoints(thread_id, checkpoint_id, payload) VALUES (?, ?, ?)",
-                (thread_id, checkpoint_id, json.dumps(payload, ensure_ascii=False)),
+                (thread_id, checkpoint_id, json.dumps(safe_payload, ensure_ascii=False)),
             )
 
     async def load(self, thread_id: str, checkpoint_id: str) -> dict[str, Any] | None:

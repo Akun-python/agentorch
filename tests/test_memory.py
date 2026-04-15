@@ -181,3 +181,31 @@ async def _test_thread_messages_are_persisted_and_reloaded_from_record_store(tmp
     matches = await second.search_thread_history(thread_id="thread-persist", query="approval required", limit=2)
     assert matches
     assert matches[0]["metadata"]["role"] == "user"
+
+
+def test_persisted_thread_messages_are_truncated_safely_when_content_is_large(tmp_path: Path):
+    asyncio.run(_test_persisted_thread_messages_are_truncated_safely_when_content_is_large(tmp_path))
+
+
+async def _test_persisted_thread_messages_are_truncated_safely_when_content_is_large(tmp_path: Path):
+    config = MemoryConfig(
+        checkpoint_path=tmp_path / "checkpoints.db",
+        record_path=tmp_path / "records.db",
+        max_record_content_chars=240,
+        max_record_metadata_chars=220,
+        truncate_thread_messages_before_persist=True,
+        persist_full_prompt_text=False,
+    )
+    memory = MemoryManager(config=config)
+    huge_message = "constraint:" + (" alpha" * 5000)
+    await memory.append_message("thread-large", Message(role="assistant", content=huge_message, metadata={"notes": huge_message}))
+
+    stored = await memory.record_store.search(thread_id="thread-large", tags=["conversation"])
+    assert len(stored) == 1
+    assert len(stored[0]["content"]) <= 254
+    assert stored[0]["metadata"]["_storage"]["truncated"] is True
+    assert stored[0]["metadata"]["_storage"]["original_length"] == len(huge_message)
+
+    restored = await memory.load_persisted_thread_messages("thread-large")
+    assert len(restored) == 1
+    assert restored[0].content.endswith("...[truncated]")

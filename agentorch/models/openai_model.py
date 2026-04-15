@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import datetime as dt
+import inspect
 import json
 import mimetypes
 import random
@@ -148,15 +149,23 @@ class OpenAIModel(BaseModelAdapter):
                 if choice.delta and choice.delta.tool_calls:
                     for tool_call in choice.delta.tool_calls:
                         arguments = {}
+                        tool_name = (tool_call.function.name if tool_call.function else "") or ""
                         if tool_call.function and tool_call.function.arguments:
                             try:
-                                arguments = json.loads(tool_call.function.arguments)
+                                parsed_arguments = json.loads(tool_call.function.arguments)
+                                arguments = parsed_arguments if isinstance(parsed_arguments, dict) else {"raw": parsed_arguments}
                             except json.JSONDecodeError:
                                 arguments = {"raw": tool_call.function.arguments}
+                        if not tool_name:
+                            # Some OpenAI-compatible gateways stream partial tool-call chunks
+                            # where the function name is omitted until a later delta.
+                            # Skip those incomplete fragments here; Runtime._model_round()
+                            # will merge later chunks that carry the actual name.
+                            continue
                         tool_calls.append(
                             ToolCall(
                                 id=tool_call.id or "",
-                                name=(tool_call.function.name if tool_call.function else "") or "",
+                                name=tool_name,
                                 arguments=arguments,
                             )
                         )
@@ -225,7 +234,8 @@ class OpenAIModel(BaseModelAdapter):
             arguments = {}
             if tool_call.function and tool_call.function.arguments:
                 try:
-                    arguments = json.loads(tool_call.function.arguments)
+                    parsed_arguments = json.loads(tool_call.function.arguments)
+                    arguments = parsed_arguments if isinstance(parsed_arguments, dict) else {"raw": parsed_arguments}
                 except json.JSONDecodeError:
                     arguments = {"raw": tool_call.function.arguments}
             tool_calls.append(ToolCall(id=tool_call.id, name=tool_call.function.name, arguments=arguments))
@@ -328,3 +338,10 @@ class OpenAIModel(BaseModelAdapter):
                 return None
             now = dt.datetime.now(target.tzinfo or dt.timezone.utc)
             return max((target - now).total_seconds(), 0.0)
+
+    async def aclose(self) -> None:
+        close_fn = getattr(self._client, "close", None) or getattr(self._client, "aclose", None)
+        if callable(close_fn):
+            outcome = close_fn()
+            if inspect.isawaitable(outcome):
+                await outcome

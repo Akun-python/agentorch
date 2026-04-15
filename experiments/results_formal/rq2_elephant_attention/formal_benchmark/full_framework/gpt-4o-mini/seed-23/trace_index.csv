@@ -1,0 +1,2 @@
+task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
+rq2-hotpot-formal-001,hotpotqa,HotpotQA,gpt-4o-mini,23,e00ec50b-9de0-4447-a61e-cc343c545136,rq2_elephant_attention-rq2-hotpot-formal-001-rep-0,experiments\results_formal\rq2_elephant_attention\formal_benchmark\full_framework\gpt-4o-mini\seed-23\observability.db,completed

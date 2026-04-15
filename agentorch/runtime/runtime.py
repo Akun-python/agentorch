@@ -4,6 +4,8 @@ import contextlib
 import json
 import uuid
 import asyncio
+import inspect
+import sqlite3
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -19,7 +21,7 @@ from agentorch.agents import (
     TaskPacket,
     TaskStatus,
 )
-from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
+from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig, validate_supported_python
 from agentorch.core import (
     CompactionDecision,
     ContextEnvelope,
@@ -61,6 +63,7 @@ from agentorch.models import BaseModelAdapter, OpenAIModel, create_model_adapter
 from agentorch.observability import ConsoleEventSink, EventBus, ObservabilityManager, SQLiteEventStore, Tracer, UsageTracker
 from agentorch.prompts import PromptBuilder
 from agentorch.reasoning import BasePolicy, BaseReasoningFramework, LegacyPolicyAdapter, ReactPolicy, ReasoningSessionContext, ReasoningStrategyConfig
+from agentorch.security import shape_payload
 from agentorch.runtime.context_compaction import (
     apply_budget_aware_compaction,
     apply_static_context_filters,
@@ -227,13 +230,14 @@ class Runtime:
         tracer: Tracer | None = None,
         human_feedback: HumanFeedbackManager | None = None,
     ) -> None:
+        validate_supported_python()
         self.model = model
         self.tools = tools or ToolRegistry()
         self.skills = skills or SkillRegistry()
         self.memory = memory or MemoryManager()
         self.retriever = retriever or (knowledge_base.get_retriever() if knowledge_base is not None else None)
         self.knowledge_base = knowledge_base
-        self.sandbox = sandbox or SandboxManager()
+        self.sandbox = sandbox
         self.agent_registry = agent_registry or AgentRegistry()
         self.supervisor = supervisor
         self.coordinator = coordinator or Coordinator.default()
@@ -249,6 +253,37 @@ class Runtime:
             self.human_feedback.bind_runtime(self)
         self.reasoning_framework = self._normalize_reasoning(self.policy)
         self._register_builtin_knowledge_tools()
+        self._closed = False
+        self._background_managed = False
+
+    @staticmethod
+    def _error_category(exc: Exception) -> str:
+        message = str(exc).lower()
+        exc_type = type(exc).__name__
+        if "environment_error:" in message:
+            return "environment_error"
+        if isinstance(exc, (sqlite3.Error, OverflowError)):
+            return "runtime_persistence_error"
+        if exc_type in {"APIConnectionError", "APITimeoutError", "RateLimitError"}:
+            return "provider_connection_error"
+        if "connection error" in message or "timed out" in message or "rate limit" in message:
+            return "provider_connection_error"
+        return "runtime_error"
+
+    @staticmethod
+    def _error_context(exc: Exception, envelope: ContextEnvelope, *, stage: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        context_budget = envelope.metadata.get("context_budget_report", {}) if isinstance(envelope.metadata, dict) else {}
+        payload = {
+            **envelope.model_dump(),
+            "error": str(exc),
+            "error_category": Runtime._error_category(exc),
+            "error_stage": stage,
+            "prompt_char_estimate": context_budget.get("estimated_total_chars"),
+            "context_compaction_applied": context_budget.get("compaction_applied"),
+        }
+        if extra:
+            payload.update(extra)
+        return payload
 
     def _configure_observability(self) -> None:
         observability_config = ObservabilityConfig.from_any(self.config.observability)
@@ -256,11 +291,22 @@ class Runtime:
             return
         if observability_config.store_backend != "sqlite":
             raise ValueError(f"Unsupported observability store backend '{observability_config.store_backend}'.")
-        store = SQLiteEventStore(observability_config.sqlite_path, capture_todos=observability_config.capture_todos)
+        store = SQLiteEventStore(
+            observability_config.sqlite_path,
+            capture_todos=observability_config.capture_todos,
+            redaction=observability_config.redaction,
+            payload_budget=observability_config.trace_payload_budget,
+        )
         self.observability = ObservabilityManager(store)
         self.tracer.add_sink(self.observability)
         if observability_config.console_mode != "silent":
-            self.tracer.add_sink(ConsoleEventSink(mode=observability_config.console_mode))
+            self.tracer.add_sink(
+                ConsoleEventSink(
+                    mode=observability_config.console_mode,
+                    redaction=observability_config.redaction,
+                    payload_budget=observability_config.trace_payload_budget,
+                )
+            )
 
     def _attach_observability_metadata(self, result: RunResult) -> RunResult:
         if not self.observability.enabled:
@@ -632,13 +678,30 @@ class Runtime:
                     metadata=metadata,
                     stream_writer=writer,
                 )
+                final_payload = {
+                    "status": result.status,
+                    "finish_reason": result.finish_reason,
+                    "error_category": None,
+                    "context_budget_report": result.reasoning_metadata.get("context_budget_report"),
+                    "output_text": result.output_text,
+                    "usage": result.usage.model_dump(),
+                }
+                self.tracer.emit(
+                    "final_result",
+                    {
+                        "request_id": result.request_id,
+                        "run_id": result.run_id,
+                        "thread_id": result.thread_id,
+                        **final_payload,
+                    },
+                )
                 await writer(
                     RunStreamEvent(
                         event_type="final_result",
                         request_id=result.request_id,
                         run_id=result.run_id,
                         thread_id=result.thread_id,
-                        payload={"status": result.status, "finish_reason": result.finish_reason},
+                        payload=final_payload,
                         result=result,
                     )
                 )
@@ -842,6 +905,19 @@ class Runtime:
                 if key in envelope.metadata:
                     reasoning_metadata[key] = envelope.metadata[key]
             await self._emit_event("run_completed", {**envelope.model_dump(), "status": "completed"}, stream_writer=stream_writer)
+            if stream_writer is None:
+                self.tracer.emit(
+                    "final_result",
+                    {
+                        **envelope.model_dump(),
+                        "status": "completed",
+                        "finish_reason": "completed",
+                        "error_category": None,
+                        "context_budget_report": reasoning_metadata.get("context_budget_report"),
+                        "output_text": final_text,
+                        "usage": usage_tracker.summary().model_dump(),
+                    },
+                )
             return self._attach_observability_metadata(
                 RunResult(
                 request_id=envelope.request_id,
@@ -865,7 +941,7 @@ class Runtime:
         except Exception as exc:
             await self._emit_event(
                 "run_failed",
-                {**envelope.model_dump(), "error": str(exc)},
+                self._error_context(exc, envelope, stage="run_impl"),
                 stream_writer=stream_writer,
             )
             raise
@@ -877,6 +953,8 @@ class Runtime:
         tool = self.tools.get(name)
         try:
             if tool.spec.needs_sandbox:
+                if self.sandbox is None:
+                    raise ToolError("This tool requires a configured sandbox, but no sandbox is attached.", tool_name=name)
                 sandbox_result = await self.sandbox.execute(
                     "python",
                     arguments.get("code", ""),
@@ -887,7 +965,10 @@ class Runtime:
                 return ToolResult(tool_name=name, data=sandbox_result.model_dump(), success=sandbox_result.exit_code == 0)
             return await self.tools.execute(name, arguments)
         except ToolError as exc:
-            self.tracer.emit("run_failed", {**envelope.model_dump(), "error": str(exc), "tool_name": name})
+            self.tracer.emit(
+                "run_failed",
+                self._error_context(exc, envelope, stage="tool_execution", extra={"tool_name": name}),
+            )
             from agentorch.tools.base import ToolResult
 
             return ToolResult(tool_name=name, data={}, success=False, error=str(exc))
@@ -1363,6 +1444,7 @@ class Runtime:
                 "is_error": not result.success,
                 "output": self._summarize_tool_output(result.data),
                 "error": result.error,
+                "error_category": "runtime_error" if (not result.success and result.error) else None,
             },
             stream_writer=context.stream_writer,
         )
@@ -1393,6 +1475,9 @@ class Runtime:
         }
 
     def _summarize_tool_output(self, value: Any, *, depth: int = 0) -> Any:
+        budget = self.config.tool_output_budget
+        if depth == 0 and isinstance(value, dict):
+            return shape_payload(value, budget=budget, redaction=self.config.redaction)
         if depth >= 2:
             if isinstance(value, dict):
                 return {"type": "dict", "size": len(value)}
@@ -1421,7 +1506,40 @@ class Runtime:
             serialized = json.dumps(summarized, ensure_ascii=False)
         except Exception:
             serialized = trim_message_content(str(type(output)), max_chars=200)
-        return trim_message_content(serialized, max_chars=max_chars), len(serialized) > max_chars
+        effective_max_chars = min(max_chars, self.config.tool_output_budget.max_string_chars)
+        return trim_message_content(serialized, max_chars=effective_max_chars), len(serialized) > effective_max_chars
+
+    async def aclose(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        for resource in (
+            self.tools,
+            self.model,
+            self.retriever,
+            self.knowledge_base,
+            self.observability,
+            self.tracer,
+            self.memory,
+        ):
+            close_async = getattr(resource, "aclose", None)
+            if callable(close_async):
+                outcome = close_async()
+                if inspect.isawaitable(outcome):
+                    await outcome
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self.aclose())
+            return
+        raise RuntimeError(
+            "Runtime.close() cannot be used inside a running event loop. "
+            "Use 'await Runtime.aclose()' in notebooks and async applications."
+        )
 
     async def _run_supervisor(
         self,

@@ -22,6 +22,12 @@ The formal runners now default to real external model names routed through your 
 - `deepseek-chat`
 - `qwen-plus`
 
+The target submission-strength protocol now uses five seeds by default:
+
+- `7,11,19,23,29`
+
+Important: the repository's currently collected formal evidence is still smaller than this target protocol for several RQs. The report generator therefore describes the existing runs as the currently collected `official_subset` slice rather than implying full benchmark coverage.
+
 If your gateway uses different aliases, override them from CLI, for example:
 
 - `py -3.13 experiments/run_formal.py --models "gpt-4o,deepseek-v3,qwen-max"`
@@ -44,3 +50,4 @@ If your gateway uses different aliases, override them from CLI, for example:
 - Live web tasks require `BRAVE_SEARCH_API_KEY` or `BRAVE_API_KEY`.
 - For smoke tests and local development you can use `--model mock:tool`.
 - Use `py -3.13` on this machine because the default `python` executable points to Python 3.8 and does not match the current project environment.
+- When running pytest locally, prefer `$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.13 -m pytest -q` to avoid unrelated global pytest plugins interfering with this repo.

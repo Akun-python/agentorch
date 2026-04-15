@@ -60,8 +60,18 @@ def create_search_text_tool(workspace_root: str | Path, *, name: str = "search_t
                         }
                     )
                     if len(results) >= input.max_results:
-                        return {"matches": results, "files_scanned": files_scanned}
-        return {"matches": results, "files_scanned": files_scanned}
+                        return {
+                            "matches": results,
+                            "files_scanned": files_scanned,
+                            "summary": f"Found {len(results)} matches after scanning {files_scanned} file(s).",
+                            "truncated": True,
+                        }
+        return {
+            "matches": results,
+            "files_scanned": files_scanned,
+            "summary": f"Found {len(results)} matches after scanning {files_scanned} file(s).",
+            "truncated": False,
+        }
 
     return FunctionTool(
         name=name,

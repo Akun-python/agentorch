@@ -1,11 +1,6 @@
-variant,model_name,n,quality_mean,multi_turn_consistency_mean,cross_round_constraint_retention_mean,delegation_continuity_mean,conversation_recovery_rate_mean
-full_framework,deepseek-chat,2,0.0,0.0,0.0,0.0,0.0
-full_framework,gpt-4o,2,0.7296,0.8296,0.8271,0.8296,0.7796
-full_framework,gpt-4o-mini,2,0.684,0.784,0.7815,0.784,0.734
-full_framework,qwen-plus,2,0.6612,0.7612,0.7587,0.7612,0.7112
-multi_agent_no_elephant,gpt-4o,2,0.5647,0.6347,0.6322,0.6347,0.6147
-multi_agent_no_elephant,gpt-4o-mini,2,0.5294,0.5994,0.5969,0.5994,0.5794
-single_agent_basic,deepseek-chat,2,0.0,0.0,0.0,0.0,0.0
-single_agent_basic,gpt-4o,2,0.3328,0.2928,0.2903,0.2928,0.3828
-single_agent_basic,gpt-4o-mini,2,0.312,0.272,0.2695,0.272,0.362
-single_agent_basic,qwen-plus,2,0.3016,0.2616,0.2591,0.2616,0.3516
+benchmark,variant,primary_metric,samples,seeds,runs
+AgentOrch Failure Suite,Full Framework,"1.00 [1.00, 1.00]",2,1,2
+AgentOrch Failure Suite,Multi-Agent Plain Logs,"1.00 [1.00, 1.00]",2,1,2
+AgentOrch MultiTurn Suite,Full Framework,"0.73 [0.73, 0.73]",2,1,2
+AgentOrch MultiTurn Suite,Multi-Agent No Elephant,"0.56 [0.56, 0.56]",2,1,2
+AgentOrch MultiTurn Suite,Single Agent Basic,"0.33 [0.33, 0.33]",2,1,2

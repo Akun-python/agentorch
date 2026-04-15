@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any
 from pathlib import Path
 
@@ -78,6 +79,20 @@ class ToolRegistry:
         except ValidationError as exc:
             raise ToolError(f"Invalid tool arguments for '{name}': {exc}", tool_name=name) from exc
         return await tool.run(input_data)
+
+    async def aclose(self) -> None:
+        for tool in self._tools.values():
+            close_async = getattr(tool, "aclose", None)
+            if callable(close_async):
+                outcome = close_async()
+                if inspect.isawaitable(outcome):
+                    await outcome
+
+    def close(self) -> None:
+        for tool in self._tools.values():
+            close_sync = getattr(tool, "close", None)
+            if callable(close_sync):
+                close_sync()
 
     def __contains__(self, name: str) -> bool:
         return name in self._tools

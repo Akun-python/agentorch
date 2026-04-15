@@ -9,6 +9,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+cas-sc*
 
 # Keep local-only project materials out of the remote repository.
 pyproject.toml

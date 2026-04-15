@@ -104,6 +104,7 @@ async def _test_runtime_stream_emits_model_delta_and_final_result():
     assert event_types[-1] == "final_result"
     assert events[-1].result is not None
     assert events[-1].result.output_text == "Hello streaming world"
+    assert events[-1].payload["output_text"] == "Hello streaming world"
 
 
 def test_runtime_stream_emits_tool_events():

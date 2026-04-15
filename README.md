@@ -74,7 +74,7 @@ pip install -e .
 Recommended Python version:
 
 ```text
-Python 3.11+
+Python 3.10+
 ```
 
 ## Environment Setup
@@ -420,8 +420,10 @@ Interactive notebook:
 Run the full test suite with:
 
 ```bash
-py -3.13 -m pytest -q
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.13 -m pytest -q
 ```
+
+On this machine, prefer `py -3.13` or `py -3.14`. The default `python` executable may still resolve to Python 3.8, which is below the supported `Python 3.10+` floor.
 
 ## Design Notes
 

@@ -67,7 +67,7 @@ pip install -e .
 推荐 Python 版本：
 
 ```text
-Python 3.11+
+Python 3.10+
 ```
 
 ## 环境变量
@@ -422,7 +422,7 @@ agentorch/
 运行完整测试：
 
 ```bash
-py -3.13 -m pytest -q
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.13 -m pytest -q
 ```
 
 ## 设计说明

@@ -149,3 +149,6 @@ class OpenAICompatibleHTTPModel(OpenAIModel):
             min_request_interval=resolved.min_request_interval,
             temperature=resolved.temperature,
         )
+
+    async def aclose(self) -> None:
+        await self._http_client.aclose()

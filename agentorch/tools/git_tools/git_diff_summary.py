@@ -49,6 +49,7 @@ def create_git_diff_summary_tool(workspace_root: str | Path, *, name: str = "git
             "target_ref": input.target_ref,
             "lines": lines,
             "summary": summary_line,
+            "detail_summary": f"Git diff summary for {target.relative_to(root).as_posix() if target != root else '.'} returned {len(lines)} line(s).",
         }
 
     return FunctionTool(

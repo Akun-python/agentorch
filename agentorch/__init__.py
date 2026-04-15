@@ -45,6 +45,7 @@ from .feedback import (
     InMemoryHumanInbox,
     PendingHumanFeedback,
 )
+from .config import PayloadBudgetConfig, RedactionConfig, initialize_environment, validate_supported_python
 from .facade import create_agent, create_multi_agent
 from .memory import (
     AgentLocalMemoryMechanism,
@@ -176,7 +177,7 @@ from .reasoning import (
 from .prompts import ChatPromptTemplate, FewShotExample, FewShotPromptCard, MessagesPlaceholderCard, PromptBuilder, PromptTemplate, TextPromptCard
 from .presets import DeepResearchAgent, DeepResearchAgentConfig, build_deep_research_system_prompt
 from .runtime import Agent, Runtime
-from .sandbox import SandboxManager
+from .sandbox import ExecutionRequest, ExecutionResult, SandboxManager, SandboxPolicy
 from .core import CompactionDecision, ContextSegment, RunStreamEvent, SalienceReport, SegmentScore
 from .skills import SkillDescriptor, SkillLoader, SkillRegistry, SkillRoute, SkillRoutingConfig
 from .strategies import (
@@ -271,6 +272,8 @@ __all__ = [
     "EpisodicCapsule",
     "EpisodicSaliencePromotionPolicy",
     "DocumentSection",
+    "ExecutionRequest",
+    "ExecutionResult",
     "EvaluationResult",
     "FeedbackDecision",
     "FeedbackHandle",
@@ -318,6 +321,7 @@ __all__ = [
     "OpenAICompatibleHTTPModel",
     "OpenAIModel",
     "OutputParser",
+    "PayloadBudgetConfig",
     "ParseError",
     "ParsedRunResult",
     "PlanExecuteReasoning",
@@ -328,6 +332,7 @@ __all__ = [
     "PromptTemplate",
     "RagStrategyConfig",
     "RandomSearchEvolutionAlgorithm",
+    "RedactionConfig",
     "ReactReasoning",
     "ReasoningConfig",
     "ReasoningRegistration",
@@ -342,6 +347,7 @@ __all__ = [
     "SalienceReport",
     "Runtime",
     "SandboxManager",
+    "SandboxPolicy",
     "SearchSpace",
     "SegmentScore",
     "SkillLoader",
@@ -407,6 +413,8 @@ __all__ = [
     "HumanFeedbackEvent",
     "HumanFeedbackManager",
     "HumanResponse",
+    "initialize_environment",
+    "validate_supported_python",
     "list_chunking_strategies",
     "list_document_adapters",
     "list_embedding_providers",

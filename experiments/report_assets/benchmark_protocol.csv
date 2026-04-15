@@ -1,11 +1,10 @@
-experiment,benchmark_id,benchmark_name,category,usage_in_paper
-rq1_long_horizon_tasks,gaia,GAIA,tool_augmented_long_horizon,RQ1 primary tool-using benchmark anchor
-rq1_long_horizon_tasks,hotpotqa,HotpotQA,multi_hop_reasoning,RQ1 and RQ2 evidence-chain benchmark anchor
-rq1_long_horizon_tasks,musique,MuSiQue,compositional_multi_hop_reasoning,RQ1 and RQ2 distractor-heavy reasoning anchor
-rq2_elephant_attention,hotpotqa,HotpotQA,multi_hop_reasoning,RQ1 and RQ2 evidence-chain benchmark anchor
-rq2_elephant_attention,musique,MuSiQue,compositional_multi_hop_reasoning,RQ1 and RQ2 distractor-heavy reasoning anchor
-rq3_seagull_memory,locomo,LoCoMo,long_term_conversational_memory,RQ3 long-term conversational memory anchor
-rq3_seagull_memory,longmemeval,LongMemEval,cross_session_memory,RQ3 cross-run memory reuse anchor
-rq4_budget_robustness,longbench,LongBench,long_context_evaluation,RQ4 prompt-budget robustness anchor
-rq4_budget_robustness,infinitebench,InfiniteBench,extreme_context_evaluation,RQ4 stress-test anchor
-rq5_observability,agentorch_failure_suite,AgentOrch Failure Suite,observability_diagnostics,RQ5 diagnostic evaluation protocol
+experiment,benchmark,split,category,samples,models,seeds,runs
+RQ1 Long-Horizon Tasks,GAIA,official_subset,tool-augmented long horizon,2,4,3,28
+RQ1 Long-Horizon Tasks,HotpotQA,official_subset,multi-hop reasoning,2,4,3,28
+RQ1 Long-Horizon Tasks,MuSiQue,official_subset,compositional multi-hop reasoning,2,4,3,28
+RQ2 Elephant Attention,HotpotQA,distractor_subset,multi-hop reasoning,2,3,5,55
+RQ2 Elephant Attention,MuSiQue,distractor_subset,compositional multi-hop reasoning,2,2,4,42
+RQ3 Seagull Memory,LoCoMo,official_subset,long-term conversational memory,2,3,5,60
+RQ3 Seagull Memory,LongMemEval,official_subset,cross-session memory,4,3,5,102
+RQ4 Budget Robustness,InfiniteBench,official_subset,long-context evaluation,2,2,4,42
+RQ4 Budget Robustness,LongBench,official_subset,budgeted long-context evaluation,2,3,5,60

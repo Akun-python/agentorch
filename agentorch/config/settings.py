@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 from agentorch.knowledge import RagStrategyConfig, RetrievalMode
 from agentorch.prompts import ChatPromptTemplate
 from agentorch.reasoning.base import ReasoningStrategyConfig
+from agentorch.security import PayloadBudgetConfig, RedactionConfig
 from agentorch.skills import SkillRoutingConfig
 from agentorch.strategies import (
     BaseContextStrategy,
@@ -24,19 +26,49 @@ from agentorch.strategies import (
 )
 
 
-def _load_local_env() -> None:
-    env_path = Path.cwd() / ".env"
-    if not env_path.exists():
+def _load_local_env(env_path: str | Path | None = None, *, overwrite: bool = False) -> None:
+    path = Path(env_path or (Path.cwd() / ".env"))
+    if not path.exists():
         return
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip("'\"")
-        if key and key not in os.environ:
+        if key and (overwrite or key not in os.environ):
             os.environ[key] = value
+
+
+def initialize_environment(env_path: str | Path | None = None, *, overwrite: bool = False) -> None:
+    _load_local_env(env_path=env_path, overwrite=overwrite)
+
+
+def validate_supported_python(
+    version_info: tuple[int, int] | None = None,
+    *,
+    minimum: tuple[int, int] = (3, 10),
+) -> None:
+    resolved = version_info or (sys.version_info.major, sys.version_info.minor)
+    if resolved >= minimum:
+        return
+    current = f"{resolved[0]}.{resolved[1]}"
+    required = f"{minimum[0]}.{minimum[1]}"
+    raise RuntimeError(
+        "environment_error: agentorch requires Python "
+        f"{required}+ but detected Python {current}. "
+        "Use `py -3.13` or `py -3.14`, and run tests with "
+        "`$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.13 -m pytest -q`."
+    )
+
+
+def _should_auto_load_env() -> bool:
+    return os.getenv("AGENTORCH_AUTO_LOAD_ENV", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+if _should_auto_load_env():
+    _load_local_env()
 
 
 def _normalize_openai_base_url(value: str | None) -> str | None:
@@ -68,9 +100,6 @@ def _get_vision_model() -> str | None:
 
 def _get_brave_api_key() -> str | None:
     return os.getenv("BRAVE_SEARCH_API_KEY") or os.getenv("BRAVE_API_KEY")
-
-
-_load_local_env()
 
 
 class ModelConfig(BaseModel):
@@ -123,6 +152,12 @@ class MemoryConfig(BaseModel):
     validate_composition: bool = True
     allow_partial_mechanisms: bool = False
     required_operations: list[str] = Field(default_factory=list)
+    redaction: RedactionConfig = Field(default_factory=RedactionConfig)
+    summary_only_persistence: bool = False
+    max_record_content_chars: int = 8000
+    max_record_metadata_chars: int = 4000
+    truncate_thread_messages_before_persist: bool = True
+    persist_full_prompt_text: bool = False
     mechanisms: list[MemoryMechanismConfig] = Field(
         default_factory=lambda: [
             MemoryMechanismConfig(kind="session_memory"),
@@ -139,9 +174,10 @@ class MemoryConfig(BaseModel):
 class SandboxConfig(BaseModel):
     enabled: bool = True
     default_timeout: float = 30.0
-    allowed_paths: list[Path] = Field(default_factory=lambda: [Path.cwd()])
+    allowed_paths: list[Path] = Field(default_factory=list)
     command_allowlist: list[str] = Field(default_factory=list)
     command_blocklist: list[str] = Field(default_factory=list)
+    allow_shell: bool = False
 
 
 class ObservabilityConfig(BaseModel):
@@ -150,6 +186,8 @@ class ObservabilityConfig(BaseModel):
     sqlite_path: Path = Path(".agentorch/observability.db")
     console_mode: Literal["silent", "important_only", "all"] = "silent"
     capture_todos: bool = True
+    redaction: RedactionConfig = Field(default_factory=RedactionConfig)
+    trace_payload_budget: PayloadBudgetConfig = Field(default_factory=PayloadBudgetConfig)
 
     @classmethod
     def from_any(cls, value: "ObservabilityConfig | dict[str, object] | None") -> "ObservabilityConfig":
@@ -193,6 +231,9 @@ class RuntimeConfig(BaseModel):
     max_delegation_depth: int = 2
     enable_parallel_tasks: bool = False
     observability: ObservabilityConfig | None = None
+    unsafe_export: bool = False
+    tool_output_budget: PayloadBudgetConfig = Field(default_factory=lambda: PayloadBudgetConfig(max_total_chars=8000, max_string_chars=2000))
+    redaction: RedactionConfig = Field(default_factory=RedactionConfig)
 
     @model_validator(mode="before")
     @classmethod
@@ -226,6 +267,10 @@ class RuntimeConfig(BaseModel):
                 normalized["memory_governance_strategy"] = MemoryGovernanceStrategyConfig.from_any(normalized["memory_governance_strategy"])
         if "observability" in normalized and normalized["observability"] is not None:
             normalized["observability"] = ObservabilityConfig.from_any(normalized["observability"])
+        if "redaction" in normalized and normalized["redaction"] is not None:
+            normalized["redaction"] = RedactionConfig.from_any(normalized["redaction"])
+        if "tool_output_budget" in normalized and normalized["tool_output_budget"] is not None:
+            normalized["tool_output_budget"] = PayloadBudgetConfig.from_any(normalized["tool_output_budget"])
         return normalized
 
     @classmethod

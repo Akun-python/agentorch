@@ -15,7 +15,7 @@ from experiments.formal.protocol import FORMAL_PROTOCOL, load_protocol_tasks
 def main() -> None:
     output_dir = Path("experiments/results_formal")
     models = list(REAL_FORMAL_MODELS)
-    seeds = [7, 11, 19]
+    seeds = [7, 11, 19, 23, 29]
     budget_grid = [2500, 4000, 6000, 9000, 12000]
 
     for experiment_name, protocol in FORMAL_PROTOCOL.items():

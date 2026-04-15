@@ -67,6 +67,11 @@ class FailingModel(BaseModelAdapter):
         raise RuntimeError("boom")
 
 
+class ProviderConnectionFailingModel(BaseModelAdapter):
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        raise RuntimeError("Connection error.")
+
+
 class LookupInput(BaseModel):
     query: str
 
@@ -151,10 +156,12 @@ async def _test_stream_events_and_sqlite_persistence_stay_aligned(tmp_path):
 
     stream_types = [event.event_type for event in events]
     persisted_types = [event["event_type"] for event in persisted]
-    for event_type in {"run_started", "reasoning_started", "reasoning_completed", "run_completed"}:
+    for event_type in {"run_started", "reasoning_started", "reasoning_completed", "run_completed", "final_result"}:
         assert event_type in stream_types
         assert event_type in persisted_types
     assert stream_types.count("model_delta") == persisted_types.count("model_delta")
+    persisted_final = next(event for event in persisted if event["event_type"] == "final_result")
+    assert persisted_final["output_text"] == "Hello observability"
 
     todos = runtime.observability.get_run_todos(final_event.run_id)
     assert todos is not None
@@ -210,6 +217,29 @@ async def _test_failed_run_marks_root_and_open_todos_failed(tmp_path):
     todos = runtime.observability.get_latest_thread_todos("failed-thread")
     assert todos is not None
     assert todos["status"] == "failed"
+
+
+def test_run_failed_event_records_provider_connection_category(tmp_path):
+    asyncio.run(_test_run_failed_event_records_provider_connection_category(tmp_path))
+
+
+async def _test_run_failed_event_records_provider_connection_category(tmp_path):
+    runtime = Runtime(model=ProviderConnectionFailingModel(), config=_observability_config(tmp_path))
+    agent = Agent(runtime=runtime)
+
+    try:
+        await agent.run("fail", thread_id="provider-failed-thread")
+    except RuntimeError as exc:
+        assert str(exc) == "Connection error."
+    else:  # pragma: no cover
+        raise AssertionError("Expected runtime error")
+
+    runs = runtime.observability.get_thread_runs("provider-failed-thread")
+    assert len(runs) == 1
+    events = runtime.observability.get_run_events(runs[0]["run_id"])
+    failed_event = next(event for event in events if event["event_type"] == "run_failed")
+    assert failed_event["error_category"] == "provider_connection_error"
+    assert failed_event["error_stage"] == "run_impl"
 
 
 def test_disabled_observability_remains_noop():
