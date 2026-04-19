@@ -10,34 +10,8 @@ from agentorch.core import RunResult, RunStreamEvent
 from agentorch.parsing import OutputParser, ParsedRunResult, TextParser
 from agentorch.workflow import Workflow
 
+from ._export_support import _safe_export, _workflow_summary
 from .runtime import Runtime
-from agentorch.security import RedactionConfig, sanitize_for_export
-
-
-def _safe_export(value: Any, *, config: RedactionConfig | dict[str, object] | None = None, unsafe: bool = False) -> Any:
-    return sanitize_for_export(value, config=config, unsafe=unsafe)
-
-
-def _workflow_summary(workflow: Workflow | None) -> dict[str, Any] | None:
-    if workflow is None:
-        return None
-    return {
-        "entry_node": workflow.entry_node,
-        "max_steps": workflow.max_steps,
-        "nodes": [
-            {"id": node.id, "kind": node.kind, "config": _safe_export(node.config)}
-            for node in workflow.nodes
-        ],
-        "edges": [
-            {
-                "source": edge.source,
-                "target": edge.target,
-                "kind": edge.kind,
-                "condition": edge.condition,
-            }
-            for edge in workflow.edges
-        ],
-    }
 
 
 def _tool_names(runtime: Runtime) -> list[str]:

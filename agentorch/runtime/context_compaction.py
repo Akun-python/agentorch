@@ -3,10 +3,39 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Protocol
 
 from agentorch.core import CompactionDecision, ContextSegment, Message, PromptContext, SalienceReport, SegmentScore
-from agentorch.strategies import ContextPolicy, StatePolicy
+
+
+class ContextPolicyLike(Protocol):
+    max_conversation_messages: int
+    tool_result_policy: str
+    tool_result_max_chars: int
+    include_memory_summary: bool
+    include_retrieval_summary: bool
+    include_retrieval_evidence: bool
+    retrieval_evidence_max_items: int
+    include_retrieval_citations: bool
+    citation_max_items: int
+    include_retrieval_report: bool
+    include_retrieval_plan: bool
+    include_tool_descriptions: bool
+    include_skill_instructions: bool
+    include_task_packet: bool
+    include_delegation_context: bool
+    include_collective_memory: bool
+    collective_memory_max_items: int
+    stage_attention_profiles: dict[str, dict[str, float]]
+    segment_char_budget: int
+    prompt_char_budget: int
+    salience_mode: str
+    salience_rerank_top_k: int
+    segment_min_keep: int
+
+
+class StatePolicyLike(Protocol):
+    max_prompt_messages: int
 
 
 def trim_message_content(content: str, *, max_chars: int) -> str:
@@ -74,8 +103,8 @@ def estimate_prompt_context_budget(prompt_context: PromptContext, *, truncated_s
 def apply_static_context_filters(
     prompt_context: PromptContext,
     *,
-    context_policy: ContextPolicy,
-    state_policy: StatePolicy,
+    context_policy: ContextPolicyLike,
+    state_policy: StatePolicyLike,
 ) -> tuple[PromptContext, list[str]]:
     conversation = list(prompt_context.conversation)[-min(context_policy.max_conversation_messages, state_policy.max_prompt_messages) :]
     truncated_sections: list[str] = []
@@ -194,7 +223,7 @@ def build_handoff_capsule(task_packet: dict[str, Any] | None, handoff: dict[str,
     }
 
 
-def resolve_attention_profile(context_policy: ContextPolicy, *, stage: str, agent_role: str | None) -> dict[str, float]:
+def resolve_attention_profile(context_policy: ContextPolicyLike, *, stage: str, agent_role: str | None) -> dict[str, float]:
     defaults = {"retrieval_evidence": 1.15, "citation": 0.65, "retrieval_report": 0.7, "skill": 0.95, "collective_memory": 0.9, "delegation_context": 0.92, "conversation": 0.86, "tool_observation": 0.88, "task_packet": 1.0}
     if stage.startswith("execute"):
         stage_profile = {"tool_observation": 1.2, "retrieval_evidence": 1.1, "delegation_context": 1.0, "skill": 0.82}
@@ -280,7 +309,7 @@ def select_segment_representation(segment: ContextSegment, *, compact: bool) -> 
 async def apply_budget_aware_compaction(
     prompt_context: PromptContext,
     *,
-    context_policy: ContextPolicy,
+    context_policy: ContextPolicyLike,
     stage: str,
     selected_skill_routes: list[dict[str, Any]],
     rerank_callback: Callable[[list[ContextSegment], int], Awaitable[dict[str, tuple[float, str]]]],

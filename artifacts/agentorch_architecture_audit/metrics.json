@@ -1,8 +1,8 @@
 {
-  "generated_at_utc": "2026-04-19T10:14:29.123381+00:00",
+  "generated_at_utc": "2026-04-19T10:22:07.486479+00:00",
   "repo_root": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式",
   "package_root": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\agentorch",
-  "git_commit": "829dff0",
+  "git_commit": "ae53a1c",
   "root_public_api": {
     "__all__": 258,
     "line_count": 508,
@@ -10,12 +10,12 @@
   },
   "line_counts": {
     "__init__.py": 508,
-    "facade.py": 826,
-    "_facade_support.py": 296,
+    "facade.py": 827,
+    "_facade_support.py": 297,
     "runtime/runtime.py": 2179,
-    "runtime/agent.py": 280,
+    "runtime/agent.py": 254,
     "runtime/context_kernel.py": 413,
-    "runtime/context_compaction.py": 410,
+    "runtime/context_compaction.py": 439,
     "strategies.py": 739,
     "config/settings.py": 653,
     "models/__init__.py": 35,
@@ -96,7 +96,7 @@
     },
     {
       "module": "strategies",
-      "count": 11,
+      "count": 10,
       "values": [
         "__init__",
         "_facade_support",
@@ -106,7 +106,6 @@
         "config.settings",
         "facade",
         "presets",
-        "runtime.context_compaction",
         "runtime.context_kernel",
         "runtime.runtime"
       ]
@@ -120,7 +119,7 @@
         "memory.backends.sqlite_checkpoint_store",
         "memory.backends.sqlite_record_store",
         "observability.telemetry",
-        "runtime.agent",
+        "runtime._export_support",
         "runtime.runtime",
         "tests.test_security_and_lifecycle"
       ]
@@ -269,13 +268,13 @@
       ]
     },
     {
-      "module": "runtime.agent",
+      "module": "runtime._export_support",
       "count": 4,
       "values": [
         "_facade_support",
         "evolution.session",
         "facade",
-        "runtime.__init__"
+        "runtime.agent"
       ]
     },
     {
@@ -480,6 +479,17 @@
       ]
     },
     {
+      "module": "facade",
+      "count": 5,
+      "values": [
+        "_facade_support",
+        "evolution.helpers",
+        "runtime._export_support",
+        "runtime.agent",
+        "strategies"
+      ]
+    },
+    {
       "module": "memory.manager",
       "count": 5,
       "values": [
@@ -497,6 +507,16 @@
         "bootstrap",
         "facade",
         "presets",
+        "strategies"
+      ]
+    },
+    {
+      "module": "_facade_support",
+      "count": 4,
+      "values": [
+        "presets",
+        "runtime._export_support",
+        "runtime.agent",
         "strategies"
       ]
     },
@@ -519,39 +539,9 @@
         "models.bootstrap",
         "reasoning.bootstrap"
       ]
-    },
-    {
-      "module": "evolution.bootstrap",
-      "count": 4,
-      "values": [
-        "evolution.algorithms.beam_search",
-        "evolution.algorithms.hill_climb",
-        "evolution.algorithms.random_search",
-        "evolution.registry"
-      ]
-    },
-    {
-      "module": "facade",
-      "count": 4,
-      "values": [
-        "_facade_support",
-        "evolution.helpers",
-        "runtime.agent",
-        "strategies"
-      ]
     }
   ],
-  "cycles": [
-    [
-      "evolution.session",
-      "runtime.agent",
-      "runtime.runtime"
-    ],
-    [
-      "runtime.context_compaction",
-      "strategies"
-    ]
-  ],
+  "cycles": [],
   "import_time_registration": {
     "models_init_top_level_calls": []
   },

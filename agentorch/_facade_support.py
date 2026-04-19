@@ -13,7 +13,8 @@ from agentorch.config import ModelConfig, RuntimeConfig
 from agentorch.knowledge import RagStrategyConfig
 from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
-from agentorch.runtime.agent import _runtime_summary, _safe_export, _workflow_summary
+from agentorch.runtime._export_support import _safe_export, _workflow_summary
+from agentorch.runtime.agent import _runtime_summary
 from agentorch.sandbox import SandboxManager
 from agentorch.strategies import ContextPolicy, CoordinationPolicy, MemoryPolicy, StatePolicy
 from agentorch.tools import BaseTool, ToolRegistry

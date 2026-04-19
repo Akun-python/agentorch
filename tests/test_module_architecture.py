@@ -6,6 +6,7 @@ import textwrap
 from pathlib import Path
 
 import agentorch
+from experiments.architecture_audit.collect_agentorch_architecture_metrics import collect_metrics
 from agentorch.evolution import bootstrap_evolution_defaults, list_evolution_algorithms
 from agentorch.memory import bootstrap_memory_defaults, list_memory_backends, list_memory_governance
 from agentorch.models import list_model_providers
@@ -56,6 +57,14 @@ def test_architecture_files_exist_in_expected_locations():
     ]
     for path in expected_paths:
         assert path.exists(), f"Expected architecture file missing: {path}"
+
+
+def test_static_import_graph_removes_recent_architecture_cycles():
+    repo_root = Path(__file__).resolve().parents[1]
+    cycles = {tuple(component) for component in collect_metrics(repo_root)["cycles"]}
+
+    assert ("runtime.context_compaction", "strategies") not in cycles
+    assert ("evolution.session", "runtime.agent", "runtime.runtime") not in cycles
 
 
 def test_import_agentorch_has_no_registry_side_effects_in_fresh_interpreter():

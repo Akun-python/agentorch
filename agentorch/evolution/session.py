@@ -5,8 +5,7 @@ from typing import Any, Callable, Generic, TypeVar
 
 from pydantic import BaseModel
 
-from agentorch.runtime import Agent
-from agentorch.runtime.agent import _safe_export, _workflow_summary
+from agentorch.runtime._export_support import _safe_export, _workflow_summary
 from agentorch.workflow import Workflow
 
 from .manager import EvolutionManager
@@ -17,8 +16,9 @@ CandidateSummarizer = Callable[[CandidateT], Any]
 
 
 def summarize_evolution_candidate(candidate: Any) -> Any:
-    if isinstance(candidate, Agent):
-        return candidate.export_blueprint()
+    export_blueprint = getattr(candidate, "export_blueprint", None)
+    if callable(export_blueprint):
+        return export_blueprint()
     if isinstance(candidate, Workflow):
         return _workflow_summary(candidate)
     if isinstance(candidate, BaseModel):

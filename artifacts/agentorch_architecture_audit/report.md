@@ -4,7 +4,7 @@
 - Commit: `07f5d01`
 - Static evidence: [`metrics.json`](./metrics.json)
 - Verification baseline: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 C:\Users\24260\.conda\envs\data_analysis_py311\python.exe -m pytest -q` -> `261 passed, 2 skipped`
-- Status note: this narrative captures the pre-refactor audit baseline; the current `refactor/agentorch-architecture-rebuild-20260419` branch has already removed root import-time bootstrap side effects, cleared the new bootstrap-registry lazy-default cycles from the static import graph, and re-verified `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 C:\Users\24260\.conda\envs\data_analysis_py311\python.exe -m pytest -q` at `263 passed, 2 skipped`.
+- Status note: this narrative captures the pre-refactor audit baseline; the current `refactor/agentorch-architecture-rebuild-20260419` branch has already removed root import-time bootstrap side effects, cleared the bootstrap-registry lazy-default cycles plus the former `runtime.context_compaction <-> strategies` and `evolution.session <-> runtime.*` static cycles, and re-verified `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 C:\Users\24260\.conda\envs\data_analysis_py311\python.exe -m pytest -q` at `264 passed, 2 skipped`.
 
 ## Executive Conclusion
 
