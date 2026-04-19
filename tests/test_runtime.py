@@ -9,7 +9,7 @@ from agentorch.models.base import BaseModelAdapter
 from agentorch.memory import MemoryManager
 from agentorch.prompts import ChatPromptTemplate, MessagesPlaceholderCard, TextPromptCard
 from agentorch.runtime import Agent, Runtime
-from agentorch.runtime.context_compaction import compact_task_packet
+from agentorch.runtime.context_compaction import build_handoff_capsule, compact_task_packet
 from agentorch.config import MemoryConfig, RuntimeConfig
 from agentorch.strategies import ContextPolicy, CoordinationPolicy, MemoryPolicy, StatePolicy
 from agentorch.tools import ToolRegistry, tool
@@ -611,15 +611,61 @@ def test_compact_task_packet_preserves_delegated_input_payload():
             "context": {
                 "workflow_node": "delegate",
                 "variables": {"retrieved": {"report": "verbose"}},
-                "cooperation_report": {"topology": "solo"},
+                "coordination_report": {"topology": "solo"},
             },
         }
     )
     assert compacted is not None
     assert compacted["input"]["retrieval_input"]["evidence"][0]["content"] == "owner approval required before release"
     assert compacted["metadata"] == {"thread_id": "thread-1", "delegation_depth": 2}
+    assert compacted["context"]["coordination_report"] == {"topology": "solo"}
     assert "expected_output" not in compacted
     assert "artifact_refs" not in compacted
+
+
+def test_compact_task_packet_normalizes_legacy_context_aliases():
+    compacted = compact_task_packet(
+        {
+            "task_id": "task-legacy",
+            "goal": "review inherited context",
+            "context": {
+                "shared_memory_context": "legacy shared memory",
+                "shared_memory_evidence": [{"id": 3, "kind": "route", "content": "legacy route"}],
+                "shared_memory_citations": [{"record_id": 3, "kind": "route"}],
+                "cooperation_report": {"topology": "legacy"},
+            },
+        }
+    )
+    assert compacted is not None
+    assert compacted["context"]["collective_memory_context"] == "legacy shared memory"
+    assert compacted["context"]["collective_memory_evidence"][0]["content"] == "legacy route"
+    assert compacted["context"]["collective_memory_citations"] == [{"record_id": 3, "kind": "route"}]
+    assert compacted["context"]["coordination_report"] == {"topology": "legacy"}
+
+
+def test_build_handoff_capsule_preserves_coordination_summary():
+    capsule = build_handoff_capsule(
+        {
+            "goal": "validate checkpoint route",
+            "knowledge_scope": ["planning"],
+            "context": {
+                "collective_memory_evidence": [{"id": 5, "kind": "route", "content": "follow the riverbed"}],
+                "coordination_report": {
+                    "route_mode": "guided",
+                    "handoff_mode": "summary_plus_artifacts",
+                    "workspace_mode": "artifacts_first",
+                },
+            },
+        },
+        {
+            "from_agent": "supervisor",
+            "to_agent": "planner",
+            "reason": "keyword_match",
+        },
+    )
+    assert capsule["collective_memory"][0]["content"] == "follow the riverbed"
+    assert capsule["coordination_report"]["route_mode"] == "guided"
+    assert capsule["coordination_report"]["handoff_mode"] == "summary_plus_artifacts"
 
 
 class RerankAwareModel(BaseModelAdapter):

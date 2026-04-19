@@ -247,6 +247,7 @@ async def _test_supervisor_passes_compacted_handoff_capsule_to_specialist():
     await agent.run("plan the project", thread_id="capsule-thread")
     assert "Task Packet" in capturing_model.last_system_prompt
     assert "goal" in capturing_model.last_system_prompt
+    assert "coordination_report" in capturing_model.last_system_prompt
     assert "artifact_refs" not in capturing_model.last_system_prompt
     assert "expected_output" not in capturing_model.last_system_prompt
 

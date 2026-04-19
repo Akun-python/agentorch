@@ -183,10 +183,45 @@ def _serialize(content: Any) -> str:
     return json.dumps(content, ensure_ascii=False, sort_keys=True)
 
 
+def _resolve_collective_memory_context(context: dict[str, Any]) -> str | None:
+    return context.get("collective_memory_context") or context.get("shared_memory_context")
+
+
+def _resolve_collective_memory_evidence(context: dict[str, Any]) -> list[dict[str, Any]]:
+    evidence = context.get("collective_memory_evidence")
+    if evidence is None:
+        evidence = context.get("shared_memory_evidence")
+    return list(evidence or [])
+
+
+def _resolve_collective_memory_citations(context: dict[str, Any]) -> list[dict[str, Any]]:
+    citations = context.get("collective_memory_citations")
+    if citations is None:
+        citations = context.get("shared_memory_citations")
+    return list(citations or [])
+
+
+def _resolve_coordination_report(context: dict[str, Any]) -> dict[str, Any] | None:
+    report = context.get("coordination_report")
+    if report is None:
+        report = context.get("cooperation_report")
+    return report
+
+
 def compact_task_packet(task_packet: dict[str, Any] | None) -> dict[str, Any] | None:
     if not task_packet:
         return None
     context = task_packet.get("context") or {}
+    compacted_context: dict[str, Any] = {
+        "collective_memory_context": _resolve_collective_memory_context(context),
+        "collective_memory_evidence": _resolve_collective_memory_evidence(context)[:2],
+    }
+    collective_memory_citations = _resolve_collective_memory_citations(context)[:2]
+    if collective_memory_citations:
+        compacted_context["collective_memory_citations"] = collective_memory_citations
+    coordination_report = _resolve_coordination_report(context)
+    if coordination_report is not None:
+        compacted_context["coordination_report"] = coordination_report
     return {
         "task_id": task_packet.get("task_id"),
         "goal": task_packet.get("goal"),
@@ -201,11 +236,7 @@ def compact_task_packet(task_packet: dict[str, Any] | None) -> dict[str, Any] | 
             for key, value in (task_packet.get("metadata") or {}).items()
             if key in {"thread_id", "delegation_depth"}
         },
-        "context": {
-            "collective_memory_context": context.get("collective_memory_context"),
-            "collective_memory_evidence": list(context.get("collective_memory_evidence") or [])[:2],
-            "cooperation_report": context.get("cooperation_report"),
-        },
+        "context": compacted_context,
     }
 
 
@@ -213,14 +244,18 @@ def build_handoff_capsule(task_packet: dict[str, Any] | None, handoff: dict[str,
     task_packet = task_packet or {}
     handoff = handoff or {}
     context = task_packet.get("context") or {}
-    return {
+    capsule = {
         "goal": task_packet.get("goal"),
         "scope": task_packet.get("knowledge_scope") or [],
         "from_agent": handoff.get("from_agent"),
         "to_agent": handoff.get("to_agent"),
         "reason": handoff.get("reason"),
-        "collective_memory": list(context.get("collective_memory_evidence") or [])[:2],
+        "collective_memory": _resolve_collective_memory_evidence(context)[:2],
     }
+    coordination_report = _resolve_coordination_report(context)
+    if coordination_report is not None:
+        capsule["coordination_report"] = coordination_report
+    return capsule
 
 
 def resolve_attention_profile(context_policy: ContextPolicyLike, *, stage: str, agent_role: str | None) -> dict[str, float]:
