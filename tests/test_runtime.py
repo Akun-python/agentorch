@@ -459,6 +459,42 @@ async def _test_runtime_reports_resolved_policies_and_context_budget():
     assert result.reasoning_metadata["context_budget_report"]["conversation_messages"] >= 1
 
 
+def test_supervisor_collective_memory_recall_uses_memory_policy_top_k():
+    asyncio.run(_test_supervisor_collective_memory_recall_uses_memory_policy_top_k())
+
+
+async def _test_supervisor_collective_memory_recall_uses_memory_policy_top_k():
+    memory = MemoryManager()
+    for index in range(6):
+        await memory.promote_collective_memory(
+            thread_id="elephant-thread",
+            kind="route",
+            content=f"dry riverbed checkpoint route {index}",
+            tags=["route"],
+            source_agents=[f"elder-{index}"],
+            confidence=0.9,
+            scope="planning",
+        )
+
+    runtime = Runtime(
+        model=FakeModel(),
+        memory=memory,
+        config=RuntimeConfig(
+            default_knowledge_scope=["planning"],
+            max_retrieved_chunks=2,
+            memory_policy=MemoryPolicy.long_horizon(thresholds_and_weights={"recall_top_k": 4}),
+        ),
+    )
+    payload, records = await runtime.context_kernel.prepare_supervisor_task_context(
+        user_input="dry riverbed checkpoint route",
+        thread_id="elephant-thread",
+        coordination_policy=runtime._resolve_coordination_policy(),
+        memory_policy=runtime._resolve_memory_policy(),
+    )
+    assert len(records) == 4
+    assert len(payload["collective_memory_evidence"]) == 4
+
+
 def test_runtime_accepts_custom_context_policy():
     config = RuntimeConfig.agent(
         context_policy=ContextPolicy(char_budget=7777, selection_mode="rule"),

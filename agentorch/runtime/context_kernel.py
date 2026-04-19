@@ -215,10 +215,15 @@ class ContextKernel:
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         shared_records: list[dict[str, Any]] = []
         if memory_policy.recall_mode != "off":
+            recall_config = self.memory_evaluator.resolved_runtime_config(memory_policy)
+            recall_limit = max(
+                1,
+                int(recall_config.get("recall_top_k", self.runtime.config.max_retrieved_chunks) or self.runtime.config.max_retrieved_chunks),
+            )
             shared_records = await self.runtime.memory.search_collective_memory(
                 query=user_input,
                 thread_id=thread_id,
-                limit=self.runtime.config.max_retrieved_chunks,
+                limit=recall_limit,
             )
         payload = self.runtime._collective_memory_payload(shared_records)
         payload["coordination"] = self.route_planner.build_supervisor_context(
