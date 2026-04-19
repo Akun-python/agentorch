@@ -51,3 +51,4 @@ If your gateway uses different aliases, override them from CLI, for example:
 - For smoke tests and local development you can use `--model mock:tool`.
 - Use `py -3.13` on this machine because the default `python` executable points to Python 3.8 and does not match the current project environment.
 - When running pytest locally, prefer `$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; py -3.13 -m pytest -q` to avoid unrelated global pytest plugins interfering with this repo.
+- `py -3.13 experiments/generate_report.py` now refreshes both the main paper tables and the dedicated elephant-context comparison assets under `experiments/report_assets/`, including `paper_tables.tex` and `elephant_context_tables.tex`.

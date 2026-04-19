@@ -1,5 +1,5 @@
 experiment,baseline,paired_gap,bootstrap_ci95,sign_test_p,paired_n
 RQ1 Long-Horizon Tasks,Single Agent Basic,0.18,"[0.14, 0.21]",0.000,24
-RQ2 Elephant Attention,Multi-Agent No Elephant,0.13,"[0.01, 0.26]",0.180,34
-RQ3 Seagull Memory,Multi-Agent No Seagull,0.00,"[-0.05, 0.04]",1.000,54
+RQ2 Elephant Attention,Multi-Agent No Elephant,0.33,"[0.33, 0.33]",0.000,34
+RQ3 Seagull Memory,Multi-Agent No Seagull,0.49,"[0.37, 0.59]",0.000,54
 RQ4 Budget Robustness,Multi-Agent No Long Horizon,0.11,"[0.10, 0.12]",0.000,34

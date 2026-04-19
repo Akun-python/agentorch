@@ -87,6 +87,21 @@ REFERENCE_VARIANTS = {
     "rq4_budget_robustness": ["full_framework", "multi_agent_no_compression", "multi_agent_no_long_horizon"],
     "rq5_observability": ["full_framework", "multi_agent_plain_logs"],
 }
+PRIMARY_METRIC_BY_EXPERIMENT = {
+    "rq1_long_horizon_tasks": "quality_score",
+    "rq2_elephant_attention": "context_precision",
+    "rq3_seagull_memory": "memory_reuse_hit_rate",
+    "rq4_budget_robustness": "quality_score",
+    "rq5_observability": "diagnostic_accuracy",
+}
+ELEPHANT_VARIANTS = ("full_framework", "multi_agent_no_elephant", "single_agent_long_context")
+ELEPHANT_BASELINES = ("multi_agent_no_elephant", "single_agent_long_context")
+ELEPHANT_METRICS = (
+    ("context_precision", "Context precision"),
+    ("context_recall", "Context recall"),
+    ("key_evidence_retention_rate", "Key evidence retention"),
+    ("prompt_redundancy_ratio", "Prompt redundancy"),
+)
 
 PALETTE = ["#34dba1", "#34dbcb", "#34c2db", "#3498db", "#346edb", "#3445db", "#4d34db"]
 FIGURE_BG = "none"
@@ -158,6 +173,17 @@ def _rgba(color: str, alpha: float) -> tuple[float, float, float, float]:
 
 def _primary_value(cell: object) -> float:
     return float(str(cell).split()[0])
+
+
+def _extract_primary_metric(row: dict) -> tuple[str, float]:
+    experiment_name = str(row.get("experiment_name", ""))
+    metric_name = PRIMARY_METRIC_BY_EXPERIMENT.get(experiment_name, "quality_score")
+    if metric_name == "quality_score":
+        value = row.get("quality_score", 0.0)
+    else:
+        metadata = row.get("metadata", {}) or {}
+        value = metadata.get(metric_name, row.get(metric_name, 0.0))
+    return metric_name, float(value or 0.0)
 
 
 def _primary_value_and_ci(cell: object) -> tuple[float, float, float]:
@@ -246,7 +272,9 @@ def load_records() -> list[dict]:
                 row["benchmark_id"] = benchmark_id
                 row["benchmark_name"] = row.get("benchmark_name") or BENCHMARK_LABELS.get(benchmark_id, benchmark_id or "Unknown")
                 row["benchmark_split"] = row.get("benchmark_split") or row.get("metadata", {}).get("benchmark", {}).get("benchmark_split")
-                row["primary_metric"] = float(row.get("quality_score", 0.0))
+                metric_name, metric_value = _extract_primary_metric(row)
+                row["primary_metric_name"] = metric_name
+                row["primary_metric"] = metric_value
                 row["success_value"] = 1.0 if row.get("success") else 0.0
                 row["budget"] = int(row.get("metadata", {}).get("prompt_budget", 12000) or 12000)
                 row["sample_id"] = row.get("benchmark_sample_id") or row.get("task_id")
@@ -291,6 +319,42 @@ def aggregate_run_level(rows: list[dict]) -> dict[str, object]:
         "success_ci": bootstrap_ci95(success_values),
         "tokens_mean": safe_mean(token_values),
     }
+
+
+def main_result_rows(records: list[dict]) -> list[dict[str, object]]:
+    grouped: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
+    for row in records:
+        grouped[(row["experiment_name"], row["variant_name"], row["model_name"])].append(row)
+    rows: list[dict[str, object]] = []
+    for (experiment_name, variant_name, model_name), items in sorted(grouped.items()):
+        metric_values = [float(item["primary_metric"]) for item in items]
+        success_values = [float(item["success_value"]) for item in items]
+        token_values = [float(item.get("token_usage", 0.0)) for item in items]
+        success_low, success_high = bootstrap_ci95(success_values)
+        primary_low, primary_high = bootstrap_ci95(metric_values)
+        token_low, token_high = bootstrap_ci95(token_values)
+        rows.append(
+            {
+                "experiment": experiment_name,
+                "variant": variant_name,
+                "model_name": model_name,
+                "primary_metric": items[0]["primary_metric_name"],
+                "n": len(items),
+                "success_mean": round(safe_mean(success_values), 4),
+                "success_std": round(safe_std(success_values), 4),
+                "success_ci95_low": round(success_low, 4),
+                "success_ci95_high": round(success_high, 4),
+                "primary_mean": round(safe_mean(metric_values), 4),
+                "primary_std": round(safe_std(metric_values), 4),
+                "primary_ci95_low": round(primary_low, 4),
+                "primary_ci95_high": round(primary_high, 4),
+                "token_mean": round(safe_mean(token_values), 4),
+                "token_std": round(safe_std(token_values), 4),
+                "token_ci95_low": round(token_low, 4),
+                "token_ci95_high": round(token_high, 4),
+            }
+        )
+    return rows
 
 
 def coverage_rows(records: list[dict], benchmark_scope: set[str]) -> list[dict[str, object]]:
@@ -442,6 +506,79 @@ def supplementary_rows(records: list[dict]) -> tuple[list[dict[str, object]], li
                 }
             )
     return coverage, results
+
+
+def _metric_series(rows: list[dict], metric_name: str) -> list[float]:
+    values: list[float] = []
+    for row in rows:
+        if metric_name == "primary_metric":
+            values.append(float(row.get("primary_metric", 0.0) or 0.0))
+            continue
+        metadata = row.get("metadata", {}) or {}
+        values.append(float(metadata.get(metric_name, 0.0) or 0.0))
+    return values
+
+
+def elephant_metric_rows(records: list[dict]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for variant_name in ELEPHANT_VARIANTS:
+        items = group_records(records, experiment="rq2_elephant_attention", variant=variant_name, benchmark_ids={"hotpotqa", "musique"})
+        if not items:
+            continue
+        row: dict[str, object] = {
+            "variant": VARIANT_LABELS.get(variant_name, variant_name),
+            "samples": len({item["sample_id"] for item in items}),
+            "models": len({item["model_name"] for item in items}),
+            "seeds": len({item["seed"] for item in items}),
+            "runs": len(items),
+        }
+        for metric_name, metric_label in ELEPHANT_METRICS:
+            values = _metric_series(items, metric_name)
+            ci_low, ci_high = bootstrap_ci95(values)
+            slug = metric_label.lower().replace(" ", "_")
+            row[slug] = f"{safe_mean(values):.2f} [{ci_low:.2f}, {ci_high:.2f}]"
+        rows.append(row)
+    return rows
+
+
+def elephant_paired_rows(records: list[dict]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    full_items = group_records(records, experiment="rq2_elephant_attention", variant="full_framework", benchmark_ids={"hotpotqa", "musique"})
+    full_map = {
+        (item["model_name"], item["seed"], item["sample_id"], item["benchmark_id"], item["budget"]): item
+        for item in full_items
+    }
+    for baseline_name in ELEPHANT_BASELINES:
+        baseline_items = group_records(records, experiment="rq2_elephant_attention", variant=baseline_name, benchmark_ids={"hotpotqa", "musique"})
+        if not baseline_items:
+            continue
+        primary_deltas: list[float] = []
+        metric_deltas: dict[str, list[float]] = {metric_name: [] for metric_name, _ in ELEPHANT_METRICS[1:]}
+        for item in baseline_items:
+            key = (item["model_name"], item["seed"], item["sample_id"], item["benchmark_id"], item["budget"])
+            full_row = full_map.get(key)
+            if full_row is None:
+                continue
+            primary_deltas.append(float(full_row["primary_metric"]) - float(item["primary_metric"]))
+            full_meta = full_row.get("metadata", {}) or {}
+            item_meta = item.get("metadata", {}) or {}
+            for metric_name, _ in ELEPHANT_METRICS[1:]:
+                metric_deltas[metric_name].append(float(full_meta.get(metric_name, 0.0) or 0.0) - float(item_meta.get(metric_name, 0.0) or 0.0))
+        if not primary_deltas:
+            continue
+        ci_low, ci_high = bootstrap_ci95(primary_deltas)
+        row: dict[str, object] = {
+            "baseline": VARIANT_LABELS.get(baseline_name, baseline_name),
+            "context_precision_gap": f"{safe_mean(primary_deltas):.2f}",
+            "precision_bootstrap_ci95": f"[{ci_low:.2f}, {ci_high:.2f}]",
+            "sign_test_p": f"{sign_test_p_value(primary_deltas):.3f}",
+            "paired_n": len(primary_deltas),
+        }
+        for metric_name, metric_label in ELEPHANT_METRICS[1:]:
+            slug = metric_label.lower().replace(" ", "_")
+            row[f"{slug}_gap"] = f"{safe_mean(metric_deltas[metric_name]):.2f}"
+        rows.append(row)
+    return rows
 
 
 def make_main_plot(records: list[dict]) -> None:
@@ -916,7 +1053,8 @@ def make_gap_consistency_plot(gaps: list[dict[str, object]], consistency: list[d
     _save_figure(fig, "formal_gap_consistency.png")
 
 
-def latex_table(headers: list[str], rows: list[list[object]], *, table_env: str = "table*", caption: str, alignment: str) -> str:
+def latex_table(headers: list[str], rows: list[list[object]], *, table_env: str = "table*", caption: str, alignment: str,
+                resize_to_linewidth: bool = False) -> str:
     def esc(value: object) -> str:
         text = str(value)
         text = text.replace("_", r"\_")
@@ -924,18 +1062,24 @@ def latex_table(headers: list[str], rows: list[list[object]], *, table_env: str 
         return text
 
     body = "\n".join(" & ".join(esc(cell) for cell in row) + r" \\" for row in rows)
+    tabular_open = f"\\begin{{tabular}}{{{alignment}}}\n"
+    tabular_close = "\\end{tabular}\n"
+    if resize_to_linewidth:
+        tabular_open = "\\resizebox{\\linewidth}{!}{%\n" + tabular_open
+        tabular_close = tabular_close.rstrip() + "}\n"
     return (
         f"\\begin{{{table_env}}}[t]\n"
-        "\\centering\n"
-        f"\\caption{{{caption}}}\n"
-        f"\\begin{{tabular}}{{{alignment}}}\n"
-        "\\toprule\n"
+        + "\\centering\n"
+        + f"\\caption{{{caption}}}\n"
+        + tabular_open
+        + "\\toprule\n"
         + " & ".join(esc(header) for header in headers)
         + r" \\"
         + "\n\\midrule\n"
         + body
-        + "\n\\bottomrule\n\\end{tabular}\n"
-        f"\\end{{{table_env}}}\n"
+        + "\n\\bottomrule\n"
+        + tabular_close
+        + f"\\end{{{table_env}}}\n"
     )
 
 
@@ -1005,6 +1149,62 @@ def write_paper_tables(public_coverage: list[dict[str, object]], reference: list
     (ASSETS_DIR / "paper_tables.tex").write_text("% Auto-generated by experiments/generate_report.py\n" + "\n".join(tables), encoding="utf-8")
 
 
+def write_elephant_tables(elephant_rows: list[dict[str, object]], elephant_gaps: list[dict[str, object]]) -> None:
+    tables: list[str] = []
+    if elephant_rows:
+        tables.append(
+            latex_table(
+                ["Variant", "Precision", "Recall", "Retention", "Redundancy", "Models", "Seeds", "Runs"],
+                [
+                    [
+                        row["variant"],
+                        row["context_precision"],
+                        row["context_recall"],
+                        row["key_evidence_retention"],
+                        row["prompt_redundancy"],
+                        row["models"],
+                        row["seeds"],
+                        row["runs"],
+                    ]
+                    for row in elephant_rows
+                ],
+                table_env="table*",
+                caption="RQ2 elephant-context comparison on the currently collected real-model slice. Values report mean metric values with bootstrap 95\\% confidence intervals.",
+                alignment="llcccccc",
+                resize_to_linewidth=True,
+            )
+        )
+    if elephant_gaps:
+        tables.append(
+            latex_table(
+                ["Baseline", "$\\Delta$Precision", "95\\% CI", "$\\Delta$Recall", "$\\Delta$Retention", "$\\Delta$Redundancy", "Sign $p$", "Paired $n$"],
+                [
+                    [
+                        row["baseline"],
+                        row["context_precision_gap"],
+                        row["precision_bootstrap_ci95"],
+                        row["context_recall_gap"],
+                        row["key_evidence_retention_gap"],
+                        row["prompt_redundancy_gap"],
+                        row["sign_test_p"],
+                        row["paired_n"],
+                    ]
+                    for row in elephant_gaps
+                ],
+                table_env="table*",
+                caption="Paired RQ2 elephant-context gains against both required baselines. Positive deltas favor the full elephant-context policy.",
+                alignment="lccccccc",
+                resize_to_linewidth=True,
+            )
+        )
+    output = "% Auto-generated by experiments/generate_report.py\n"
+    if tables:
+        output += "\n".join(tables)
+    else:
+        output += "% No elephant-context rows were available.\n"
+    (ASSETS_DIR / "elephant_context_tables.tex").write_text(output, encoding="utf-8")
+
+
 def main() -> None:
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)
     records = load_records()
@@ -1015,13 +1215,49 @@ def main() -> None:
     gaps = paired_gap_rows(records)
     consistency = consistency_rows(records)
     supp_coverage, supp_results = supplementary_rows(records)
+    elephant_rows = elephant_metric_rows(records)
+    elephant_gaps = elephant_paired_rows(records)
+    main_rows = main_result_rows(records)
 
     _csv_write(ASSETS_DIR / "benchmark_protocol.csv", public_coverage, ["experiment", "benchmark", "split", "category", "samples", "models", "seeds", "runs"])
+    _csv_write(
+        ASSETS_DIR / "formal_main_results.csv",
+        main_rows,
+        [
+            "experiment",
+            "variant",
+            "model_name",
+            "primary_metric",
+            "n",
+            "success_mean",
+            "success_std",
+            "success_ci95_low",
+            "success_ci95_high",
+            "primary_mean",
+            "primary_std",
+            "primary_ci95_low",
+            "primary_ci95_high",
+            "token_mean",
+            "token_std",
+            "token_ci95_low",
+            "token_ci95_high",
+        ],
+    )
     _csv_write(ASSETS_DIR / "formal_reference_results.csv", reference, ["experiment", "variant", "primary_metric", "success", "samples", "seeds", "runs", "tokens"])
     _csv_write(ASSETS_DIR / "formal_cheap_model_results.csv", cheap, ["experiment", "variant", "primary_metric", "success", "models", "seeds", "runs"])
     _csv_write(ASSETS_DIR / "formal_ablation_results.csv", gaps, ["experiment", "baseline", "paired_gap", "bootstrap_ci95", "sign_test_p", "paired_n"])
     _csv_write(ASSETS_DIR / "formal_cross_model_consistency.csv", consistency, ["experiment", "baseline", "consistency", "avg_gap"])
     _csv_write(ASSETS_DIR / "formal_multiturn_results.csv", supp_results, ["benchmark", "variant", "primary_metric", "samples", "seeds", "runs"])
+    _csv_write(
+        ASSETS_DIR / "elephant_context_results.csv",
+        elephant_rows,
+        ["variant", "context_precision", "context_recall", "key_evidence_retention", "prompt_redundancy", "samples", "models", "seeds", "runs"],
+    )
+    _csv_write(
+        ASSETS_DIR / "elephant_context_paired_gaps.csv",
+        elephant_gaps,
+        ["baseline", "context_precision_gap", "precision_bootstrap_ci95", "context_recall_gap", "key_evidence_retention_gap", "prompt_redundancy_gap", "sign_test_p", "paired_n"],
+    )
 
     make_main_plot(records)
     make_coverage_plot(public_coverage)
@@ -1035,6 +1271,7 @@ def main() -> None:
     make_multiturn_plot(records)
 
     write_paper_tables(public_coverage, reference, cheap, gaps, consistency, supp_coverage, supp_results)
+    write_elephant_tables(elephant_rows, elephant_gaps)
 
 
 if __name__ == "__main__":

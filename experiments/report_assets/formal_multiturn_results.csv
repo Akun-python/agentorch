@@ -1,6 +1,6 @@
 benchmark,variant,primary_metric,samples,seeds,runs
 AgentOrch Failure Suite,Full Framework,"1.00 [1.00, 1.00]",2,1,2
-AgentOrch Failure Suite,Multi-Agent Plain Logs,"1.00 [1.00, 1.00]",2,1,2
+AgentOrch Failure Suite,Multi-Agent Plain Logs,"0.00 [0.00, 0.00]",2,1,2
 AgentOrch MultiTurn Suite,Full Framework,"0.73 [0.73, 0.73]",2,1,2
 AgentOrch MultiTurn Suite,Multi-Agent No Elephant,"0.56 [0.56, 0.56]",2,1,2
 AgentOrch MultiTurn Suite,Single Agent Basic,"0.33 [0.33, 0.33]",2,1,2

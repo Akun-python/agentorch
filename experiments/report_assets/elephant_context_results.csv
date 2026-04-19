@@ -1,0 +1,4 @@
+variant,context_precision,context_recall,key_evidence_retention,prompt_redundancy,samples,models,seeds,runs
+Full Framework,"1.00 [1.00, 1.00]","1.00 [1.00, 1.00]","1.00 [1.00, 1.00]","0.50 [0.50, 0.50]",4,3,5,35
+Multi-Agent No Elephant,"0.67 [0.67, 0.67]","1.00 [1.00, 1.00]","1.00 [1.00, 1.00]","0.25 [0.25, 0.25]",4,3,5,34
+Single Agent Long Context,"0.50 [0.50, 0.50]","0.50 [0.50, 0.50]","0.50 [0.50, 0.50]","0.50 [0.50, 0.50]",4,2,4,28

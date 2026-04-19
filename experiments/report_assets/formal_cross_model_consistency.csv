@@ -1,5 +1,5 @@
 experiment,baseline,consistency,avg_gap
 RQ1 Long-Horizon Tasks,Single Agent Basic,3/4,0.18
-RQ2 Elephant Attention,Multi-Agent No Elephant,1/3,0.11
-RQ3 Seagull Memory,Multi-Agent No Seagull,1/3,-0.00
+RQ2 Elephant Attention,Multi-Agent No Elephant,3/3,0.33
+RQ3 Seagull Memory,Multi-Agent No Seagull,3/3,0.47
 RQ4 Budget Robustness,Multi-Agent No Long Horizon,3/3,0.12

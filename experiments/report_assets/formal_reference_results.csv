@@ -2,14 +2,14 @@ experiment,variant,primary_metric,success,samples,seeds,runs,tokens
 RQ1 Long-Horizon Tasks,Full Framework,"0.65 [0.64, 0.67]",1.00,6,3,18,2097.1
 RQ1 Long-Horizon Tasks,Single Agent Basic,"0.45 [0.42, 0.47]",0.00,6,1,6,648.8
 RQ1 Long-Horizon Tasks,Multi-Agent No Elephant,"0.61 [0.60, 0.63]",1.00,6,1,6,1960.0
-RQ2 Elephant Attention,Full Framework,"0.97 [0.92, 1.00]",1.00,4,5,18,819.4
-RQ2 Elephant Attention,Multi-Agent No Elephant,"0.97 [0.92, 1.00]",1.00,4,5,18,844.2
-RQ2 Elephant Attention,Single Agent Long Context,"1.00 [1.00, 1.00]",1.00,4,4,16,219.7
-RQ3 Seagull Memory,Full Framework,"0.93 [0.86, 0.98]",1.00,6,5,28,1132.5
-RQ3 Seagull Memory,Multi-Agent Naive Memory,"0.96 [0.91, 1.00]",1.00,6,5,28,1125.9
-RQ3 Seagull Memory,Multi-Agent No Seagull,"0.89 [0.80, 0.96]",1.00,6,5,28,1136.2
+RQ2 Elephant Attention,Full Framework,"1.00 [1.00, 1.00]",1.00,4,5,18,819.4
+RQ2 Elephant Attention,Multi-Agent No Elephant,"0.67 [0.67, 0.67]",1.00,4,5,18,844.2
+RQ2 Elephant Attention,Single Agent Long Context,"0.50 [0.50, 0.50]",1.00,4,4,16,219.7
+RQ3 Seagull Memory,Full Framework,"0.55 [0.40, 0.71]",1.00,6,5,28,1132.5
+RQ3 Seagull Memory,Multi-Agent Naive Memory,"0.26 [0.18, 0.33]",1.00,6,5,28,1125.9
+RQ3 Seagull Memory,Multi-Agent No Seagull,"0.06 [0.02, 0.13]",1.00,6,5,28,1136.2
 RQ4 Budget Robustness,Full Framework,"0.84 [0.76, 0.88]",0.94,4,5,18,2183.5
 RQ4 Budget Robustness,Multi-Agent No Compression,"0.65 [0.59, 0.69]",0.89,4,5,18,2024.9
 RQ4 Budget Robustness,Multi-Agent No Long Horizon,"0.73 [0.64, 0.78]",0.89,4,5,18,1949.1
 RQ5 Observability,Full Framework,"1.00 [1.00, 1.00]",1.00,2,1,2,2110.0
-RQ5 Observability,Multi-Agent Plain Logs,"1.00 [1.00, 1.00]",1.00,2,1,2,2608.5
+RQ5 Observability,Multi-Agent Plain Logs,"0.00 [0.00, 0.00]",1.00,2,1,2,2608.5
