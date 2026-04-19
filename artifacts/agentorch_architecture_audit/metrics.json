@@ -1,8 +1,8 @@
 {
-  "generated_at_utc": "2026-04-19T10:11:12.080178+00:00",
+  "generated_at_utc": "2026-04-19T10:14:29.123381+00:00",
   "repo_root": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式",
   "package_root": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\agentorch",
-  "git_commit": "121ab40",
+  "git_commit": "829dff0",
   "root_public_api": {
     "__all__": 258,
     "line_count": 508,
