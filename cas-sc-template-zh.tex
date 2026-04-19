@@ -45,29 +45,55 @@
 
 \section{相关工作}
 
+本文所讨论的问题并不属于单一研究方向，而是位于五条技术与理论谱系的交叉点：自主智能体闭环执行、多智能体协作组织、长上下文建模与实际利用、长期记忆架构，以及系统级评测与可观测性。现有工作通常沿其中某一条主线推进，因此能够为本文提供重要构件，却难以直接回答本文的核心问题，即在有限提示预算下，系统应如何统一治理跨角色上下文、跨运行记忆与长轨迹连续性。基于这一判断，本文从以下几个维度回顾相关研究，并据此界定本研究的理论位置。
+
 \subsection{大语言模型自主智能体}
 
-大语言模型自主智能体通常被建模为在推理、行动与环境反馈之间交替循环的系统，而非一次性文本生成器。综述工作强调了规划、记忆、动作模块与自我反思等组件的重要性 \citep{wang2024survey}。ReAct 展示了将推理轨迹与面向工具的行动显式耦合的价值 \citep{yao2023react}，而 Reflexion 则引入了基于执行反馈的语言式自我改进 \citep{shinn2023reflexion}。这些工作奠定了基础，因为它们说明了系统性能依赖于结构化执行闭环。然而，它们主要聚焦于单智能体行为，并未完整说明在长时程多智能体场景下，跨角色上下文选择、跨运行长期记忆图谱与预算感知可观测性应如何被统一治理。
+大语言模型自主智能体通常被建模为在推理、行动与环境反馈之间交替循环的系统，而非一次性文本生成器。综述工作已经较系统地总结了规划、工具调用、外部状态、记忆与自我反思在自主执行中的作用 \citep{wang2024survey}。其中，ReAct 展示了将显式推理轨迹与工具行动耦合的价值，使模型能够在“思考--行动--观察”的闭环中逐步推进任务 \citep{yao2023react}；Reflexion 则进一步把执行反馈转化为语言式自我改进信号，说明失败经验可以被重新注入后续决策过程 \citep{shinn2023reflexion}。这一路线的重要意义在于，它把 LLM 从静态生成器转化为面向任务闭环的执行体。
+
+然而，单智能体闭环研究主要回答的是“一个智能体如何更好地行动与反思”，而非“多个智能体在长时间跨度中如何共享有限上下文”。在这些工作中，记忆往往表现为局部 scratchpad、反思日志或任务历史，它们通常服务于单个执行主体的行为改进，而未显式区分运行内共享上下文治理、跨运行长期记忆沉淀以及面向提示预算的压缩选择。因此，这一方向为本文提供了闭环执行的基本范式，却不足以直接解释长时程多智能体系统中的上下文协同问题。
 
 \subsection{基于大语言模型的多智能体系统}
 
-作为经典基础背景，Wooldridge 对多智能体系统中的协作、协调与组织结构给出了非 LLM 时代的系统框架 \citep{wooldridge2009}。在 LLM 语境下，正式综述已经把研究重点推进到基于角色画像、通信模式、环境接口和能力获取机制的系统设计 \citep{guo2024llmmas,li2024masworkflow}。代表性系统方面，CAMEL 通过角色扮演机制展示了多智能体协作与数据生成的可行性 \citep{li2023camel}；AutoGen 将可对话智能体与群聊编排抽象为通用框架，是少数仍值得保留的高影响预印本代表 \citep{wu2023autogen}；MetaGPT 和 ChatDev 分别将 SOP、结构化消息与软件开发流水线纳入协作骨架，推动了软件工程场景中的多智能体系统化设计 \citep{hong2024metagpt,qian2024chatdev}。进一步地，MASTER 以 LLM specialized MCTS 组织招募与通信，MegaAgent 探索了无预定义 SOP 的大规模自治协作，Scaling Large Language Model-based Multi-Agent Collaboration 研究了多智能体协作的规模扩展规律，而 Cross-Team Orchestration 则把多团队并行探索与阶段性交叉协作正式化 \citep{gan2025master,wang2025megaagent,qian2025macnet,du2025crossteam}。这些工作极大丰富了协作范式，但研究重点仍多落在流程设计、角色编排或团队扩展上，对跨智能体上下文传播、记忆提升与事件化证据治理的讨论仍然不足。
+作为经典基础背景，Wooldridge 对多智能体系统中的协作、协调、组织结构与通信协议给出了非 LLM 时代的系统框架 \citep{wooldridge2009}。在 LLM 语境下，正式综述则把研究重点推进到基于角色画像、通信模式、环境接口和能力获取机制的系统设计 \citep{guo2024llmmas,li2024masworkflow}。这说明多智能体问题并非简单地“多放几个模型”，而是涉及组织、路由与知识流动的系统性问题。
+
+代表性系统方面，CAMEL 通过角色扮演机制展示了多智能体协作与数据生成的可行性 \citep{li2023camel}；AutoGen 将可对话智能体与群聊编排抽象为通用框架，是少数仍值得保留的高影响预印本代表 \citep{wu2023autogen}；MetaGPT 和 ChatDev 分别将 SOP、结构化消息与软件开发流水线纳入协作骨架，推动了软件工程场景中的多智能体系统化设计 \citep{hong2024metagpt,qian2024chatdev}。进一步地，MASTER 以 specialized MCTS 组织招募与通信，MegaAgent 探索了无预定义 SOP 的大规模自治协作，Scaling Large Language Model-based Multi-Agent Collaboration 研究了多智能体协作的规模扩展规律，而 Cross-Team Orchestration 则把多团队并行探索与阶段性交叉协作正式化 \citep{gan2025master,wang2025megaagent,qian2025macnet,du2025crossteam}。这些工作极大丰富了协作范式，但其优化目标仍多集中在任务分解、角色编排或团队扩展上。相比之下，本文更关心的是另一层问题：当这些角色与团队已经存在之后，系统究竟该如何决定哪些上下文应在角色之间传播、哪些经验应被提升为共享知识，以及如何在有限预算下保持协作连续性。
+
+\subsection{长上下文利用局限与位置偏置}
+
+扩展上下文长度已成为重要研究方向，因为许多真实任务超出了朴素提示累积所能稳定处理的范围。围绕旋转位置编码变体等长上下文技术的研究，提升了模型在更大窗口下的表示鲁棒性 \citep{li2024sbarope}。然而，后续研究表明，拥有更长的窗口并不意味着模型能够稳定利用更长的上下文。Lost in the Middle 揭示了长上下文模型对位置信息的使用存在明显偏置：关键信息位于上下文中段时，模型性能往往显著下降 \citep{liu2024lostmiddle}。这说明“可容纳更多 token”与“可正确利用更多证据”是两个不同层面的能力。
+
+这一发现对本文具有直接启发意义。长时程多智能体系统所面临的困难，并不只是上下文长度不够，而是候选上下文异质、位置分布不利、历史噪声累积和角色间信息竞争同时存在。换言之，长上下文能力更多是底层条件，而不是高层治理策略。本文因此将长时程推理理解为一个运行时治理问题，而不仅仅是模型容量或位置编码问题。
+
+\subsection{上下文压缩与预算感知提示构造}
+
+与单纯扩窗口并行发展的另一条技术路线，是在既定预算下主动压缩上下文。Selective Context 通过识别并删除冗余内容来降低长输入的推理成本，说明并非所有原始上下文都应无差别进入提示 \citep{li2023selectivecontext}。LLMLingua 则进一步把提示压缩系统化为预算控制、迭代压缩与分布对齐问题，在保持语义完整性的同时显著降低推理开销 \citep{jiang2023llmlingua}。这些工作共同表明，提示构造应被理解为一种受约束的选择问题，而不是简单的截断或顺序堆积。
+
+尽管如此，现有压缩方法大多仍把输入视为连续文本，主要优化的是 token 级冗余，而较少显式处理多智能体系统中的异质片段类型，例如委派数据包、工具观测、共享笔记、长期记忆返回子图与策略控制片段。更重要的是，它们通常服务于单次推理调用，而非服务于一条长时程、跨角色、跨步骤的治理流水线。本文在吸收预算感知思想的基础上，进一步把上下文压缩提升为多智能体运行时中的类型化选择与协作治理问题。
+
+\subsection{长期记忆架构与记忆分层}
+
+检索增强生成表明，访问外部知识能够显著改善知识密集型任务 \citep{lewis2020rag}。在此基础上，越来越多的工作开始把记忆作为独立于参数权重之外的外部系统来设计。Generative Agents 将记忆、反思与计划显式结合，展示了记忆架构对群体行为与长期连续性的决定性作用 \citep{park2023generative}。MemoryBank 进一步引入带有遗忘曲线的长期记忆更新机制，强调长期交互中“保留什么、忘记什么”本身就是系统设计问题 \citep{zhong2023memorybank}。MemGPT 则借鉴操作系统中的分层存储思想，把上下文窗口、外部存储和控制流管理组织为类似虚拟内存的层级系统 \citep{packer2023memgpt}。这些研究清楚表明，长时程智能体并不能仅依赖单个上下文窗口工作，而需要外部分层记忆体系来维持连续行为。
+
+但现有长期记忆研究仍存在两个局限。其一，它们多数面向单智能体对话、陪伴系统或文档分析，重点在于“如何让单个主体记住更多”；其二，即便引入了记忆分层，也往往没有把运行内共享上下文治理与跨运行长期记忆治理严格分开。本文正是在这一点上作进一步划分：运行内上下文的显著性排序与保留由象群机制负责，而跨运行长期记忆的提升、表示与返回由克拉克星鸦机制负责，两者通过治理接口衔接，而非混为单一“记忆模块”。
+
+\subsection{图结构检索与关系化记忆}
+
+当记忆不再只是平面文本片段，而是包含事件、实体、范围与证据之间的结构性联系时，图结构检索便成为一个自然方向。GraphRAG 通过把原始文本索引为实体图与社区摘要，展示了图化表示能够支持超越朴素 chunk-level RAG 的全局问答与主题级总结 \citep{edge2024graphrag}。这一方向的重要意义在于，它说明关系结构不仅是存储形式，也会改变后续检索的粒度、范围与答案组织方式。
+
+不过，现有 GraphRAG 及相关工作主要针对的是面向语料库问答或查询聚焦摘要的知识检索问题，其图中节点多对应实体、文档或社区摘要，而非长时程智能体运行中经治理后的经验胶囊。相比之下，本文关心的是另一类图：它不是对外部静态语料的实体化索引，而是对系统自身跨运行经验的关系化组织。由此，本文图谱层不仅承担检索，还承担陈旧抑制、冲突隔离、修正替代和安全返回等治理相关职责。
 
 \subsection{评测、社会交互与系统比较}
 
-系统级评测正在从静态任务分数转向交互行为、社会智能与鲁棒性。AgentBench 将评测对象从单步回答扩展到多环境交互，强调长程决策与行动能力 \citep{liu2024agentbench}。ChatEval 则通过多智能体辩论式评审模拟多人裁决过程，推动了 LLM-as-a-judge 从单评委到多评委机制的演进 \citep{chan2024chateval}。在社会交互场景中，SOTOPIA 构造了开放式社会情境来评估语言智能体的社会目标完成能力 \citep{zhou2024sotopia}，而 SOTOPIA-$\pi$ 进一步把交互式学习引入社会智能训练，并揭示了基于 LLM 的评审信号可能高估针对性训练模型的问题 \citep{wang2024sotopiapi}。最新的 PEAR 则把 planner--executor 架构的效用与脆弱性放到统一基准中考察，突出说明了多智能体系统不仅要比较最终任务结果，还要评估记忆配置、攻击面与鲁棒性权衡 \citep{dong2026pear}。这些工作说明，系统比较已经从“谁的分数更高”转向“谁在更真实的交互条件下更可靠、更安全、更可解释”。
+系统级评测正在从静态任务分数转向交互行为、社会智能与鲁棒性。AgentBench 将评测对象从单步回答扩展到多环境交互，强调长程决策与行动能力 \citep{liu2024agentbench}。ChatEval 通过多智能体辩论式评审模拟多人裁决过程，推动了 LLM-as-a-judge 从单评委到多评委机制的演进 \citep{chan2024chateval}。在社会交互场景中，SOTOPIA 构造了开放式社会情境来评估语言智能体的社会目标完成能力 \citep{zhou2024sotopia}，而 SOTOPIA-$\pi$ 进一步把交互式学习引入社会智能训练，并揭示了基于 LLM 的评审信号可能高估针对性训练模型的问题 \citep{wang2024sotopiapi}。最新的 PEAR 则把 planner--executor 架构的效用与脆弱性放到统一基准中考察，突出说明了多智能体系统不仅要比较最终任务结果，还要评估记忆配置、攻击面与鲁棒性权衡 \citep{dong2026pear}。
 
-\subsection{长上下文与长时程推理}
-
-扩展上下文长度已成为重要研究方向，因为许多真实任务超出了朴素提示累积所能稳定处理的范围。围绕旋转位置编码变体等长上下文技术的研究，提升了模型在更大窗口下的表示鲁棒性 \citep{li2024sbarope}。然而，长时程执行并不能仅仅化约为上下文长度。即使一个系统拥有较长的上下文窗口，它仍可能失败，因为它无法保持过程连续性、无法区分高价值与低价值历史，或无法随时间维持一致的压缩状态。因此，我们将长时程推理视为一个运行时治理问题，而不仅仅是模型容量问题。也正是在这一点上，单纯“扩窗口”的技术路线与面向多智能体协作的上下文治理路线发生了分化。
-
-\subsection{检索、记忆与上下文管理}
-
-检索增强生成表明，访问外部知识能够显著改善知识密集型任务 \citep{lewis2020rag}。更广泛地说，智能体系统越来越依赖检索、情景记忆、工作空间产物与摘要机制来应对规模问题。Generative Agents 将记忆、反思与计划显式结合，展示了记忆架构对群体行为与长期连续性的决定性作用 \citep{park2023generative}。SOTOPIA-$\pi$ 说明交互式学习能够提升社会情境中的策略表现，但也暴露出评测信号与训练目标耦合的偏差 \citep{wang2024sotopiapi}。PEAR 则进一步表明，在 planner--executor 架构中，记忆放在规划者一侧比放在执行者一侧更关键，而且性能提升往往伴随鲁棒性权衡 \citep{dong2026pear}。然而，朴素累积通常会增加噪声，而简单检索也无法回答更难的问题：哪些内容应被持久化、哪些应被提升、以及哪些内容应在未来返回。我们的框架通过在同一方法流水线中联合建模运行中的显著性、治理化提升、图谱化长期存储以及预算约束压缩，与现有方法形成区别。
+这些评测工作带来的理论变化是，研究目标已不再只是“谁的分数更高”，而是“谁在更真实的交互条件下更可靠、更安全、更可解释”。这与本文强调的事件中心可观测性和治理证据链高度一致。也就是说，本文并不把观测性视为纯工程附属物，而是将其视为评估长时程协作、记忆提升与失败分析所必需的方法学基础设施。
 
 \subsection{本文工作的定位}
 
-与已有研究相比，本文方法有三点关键区分。第一，它将运行内显著性治理与跨运行长期记忆图谱分离，并分别形式化为大象注意力与克拉克星鸦长时记忆图谱机制。第二，它将长时程连续性与上下文压缩视为在提示预算下耦合的优化问题，而不是若干启发式工具。第三，它将事件中心可观测性从工程层面的辅助监控提升为方法论基础设施，因为结构化轨迹能够支持进度投影、记忆治理与失败分析。换言之，本文并不是再发明一个通用的多智能体编排框架，而是提出一个治理导向的统一框架，补足现有系统在消息筛选、长期记忆图谱、长时程连续性和事件化证据上的共性空缺。
+综合以上文献可以看到，现有研究已经分别触及本文问题的若干关键侧面，但仍缺少一个治理导向的统一视角。第一，单智能体与多智能体研究已经说明闭环执行和角色协作的重要性，但尚未把“跨角色上下文保留”提升为独立机制问题。第二，长上下文与压缩研究已经说明窗口扩展与预算控制的重要性，但尚未充分处理多智能体场景中的异质上下文竞争。第三，长期记忆与图检索研究已经说明外部记忆和关系化表示的价值，但尚未明确区分治理层与表示层，也未充分讨论长期记忆返回对当前运行的污染控制问题。第四，系统级评测虽然越来越强调交互性、鲁棒性与行为证据，但观测性仍常被放在工程实现层，而非方法论核心位置。
+
+与已有研究相比，本文方法因此有四点关键区分。其一，它将运行内显著性治理与跨运行长期记忆图谱分离，并分别形式化为大象注意力与克拉克星鸦长时记忆图谱机制。其二，它将长时程连续性与上下文压缩视为提示预算下耦合的优化问题，而不是若干彼此独立的启发式工具。其三，它将长期记忆图谱理解为“经治理后的经验胶囊图”，而不是一般意义上的图化知识库或语料索引。其四，它将事件中心可观测性从工程层面的辅助监控提升为方法论基础设施，因为结构化轨迹不仅用于调试，也用于进度投影、记忆治理与失败分析。换言之，本文并不是再发明一个通用的多智能体编排框架，而是试图补足现有系统在上下文治理、长期记忆组织、预算约束压缩与事件化证据上的共性空缺。
 
 \section{问题表述}
 
@@ -420,6 +446,9 @@ Chan, C.-M., Chen, W., Su, Y., Yu, J., Xue, W., Zhang, S., et al., 2024. ChatEva
 \bibitem[Dong et~al.(2026)]{dong2026pear}
 Dong, Z., Li, Y., Zhang, J., Li, Y., Ye, X., Sui, P., et al., 2026. PEAR: Plan, execute, assess, and refine: A robust planner-executor-agent benchmark. In: Findings of the Association for Computational Linguistics: EACL 2026, 3458--3477. \url{https://aclanthology.org/2026.findings-eacl.237/}.
 
+\bibitem[Edge et~al.(2024)]{edge2024graphrag}
+Edge, D., Trinh, H., Cheng, N., Bradley, J., Chao, A., Mody, A., Truitt, S., Metropolitansky, D., Ness, R. O., Larson, J., 2024. From Local to Global: A Graph RAG Approach to Query-Focused Summarization. arXiv preprint arXiv:2404.16130. \url{https://doi.org/10.48550/arXiv.2404.16130}.
+
 \bibitem[Du et~al.(2025)]{du2025crossteam}
 Du, Z., Qian, C., Liu, W., Xie, Z., Wang, Y., Dang, Y., et al., 2025. Multi-Agent Collaboration via Cross-Team Orchestration. In: Findings of the Association for Computational Linguistics: ACL 2025, 10566--10584. \url{https://aclanthology.org/2025.findings-acl.541/}.
 
@@ -432,8 +461,14 @@ Guo, T., Chen, X., Wang, Y., Chang, R., Pei, S., Chawla, N. V., et al., 2024. La
 \bibitem[Hong et~al.(2024)]{hong2024metagpt}
 Hong, S., Zhuge, M., Chen, J., Zheng, X., Cheng, Y., Zhang, C., et al., 2024. MetaGPT: Meta-programming for a multi-agent collaborative framework. In: International Conference on Learning Representations. \url{https://openreview.net/forum?id=VtmBAGCN7o}.
 
-\bibitem[Li et~al.(2023)]{li2023camel}
+\bibitem[Jiang et~al.(2023)]{jiang2023llmlingua}
+Jiang, H., Wu, Q., Lin, C.-Y., Yang, Y., Qiu, L., 2023. LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models. In: Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing, 13358--13376. \url{https://aclanthology.org/2023.emnlp-main.825/}.
+
+\bibitem[Li et~al.(2023a)]{li2023camel}
 Li, G., Hammoud, H. A. A. K., Itani, H., Khizbullin, D., Ghanem, B., 2023. CAMEL: Communicative agents for ``mind'' exploration of large scale language model society. In: Advances in Neural Information Processing Systems 36. \url{https://proceedings.neurips.cc/paper_files/paper/2023/hash/a3621ee907def47c1b952ade25c67698-Abstract-Conference.html}.
+
+\bibitem[Li et~al.(2023b)]{li2023selectivecontext}
+Li, Y., Dong, B., Lin, C., Guerin, F., 2023. Compressing Context to Enhance Inference Efficiency of Large Language Models. In: Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing, 6342--6353. \url{https://aclanthology.org/2023.emnlp-main.391/}.
 
 \bibitem[Li et~al.(2024a)]{li2024sbarope}
 Li, R., Xu, J., Cao, Z., Zheng, H.-T., Kim, H.-G., 2024. Extending context window in large language models with segmented base adjustment for rotary position embeddings. Applied Sciences 14, 3076. \url{https://doi.org/10.3390/app14073076}.
@@ -441,11 +476,17 @@ Li, R., Xu, J., Cao, Z., Zheng, H.-T., Kim, H.-G., 2024. Extending context windo
 \bibitem[Li et~al.(2024b)]{li2024masworkflow}
 Li, X., Wang, S., Zeng, S., Wu, Y., Yang, Y., 2024. A survey on LLM-based multi-agent systems: Workflow, infrastructure, and challenges. Vicinagearth 1, 100007. \url{https://doi.org/10.1007/s44336-024-00009-2}.
 
-\bibitem[Liu et~al.(2024)]{liu2024agentbench}
+\bibitem[Liu et~al.(2024a)]{liu2024agentbench}
 Liu, X., Yu, H., Zhang, H., Xu, Y., Lei, X., Lai, H., et al., 2024. AgentBench: Evaluating LLMs as agents. In: International Conference on Learning Representations. \url{https://openreview.net/forum?id=zAdUB0aCTQ}.
+
+\bibitem[Liu et~al.(2024b)]{liu2024lostmiddle}
+Liu, N. F., Lin, K., Hewitt, J., Paranjape, A., Bevilacqua, M., Petroni, F., Liang, P., 2024. Lost in the Middle: How Language Models Use Long Contexts. arXiv preprint arXiv:2307.03172. \url{https://doi.org/10.48550/arXiv.2307.03172}.
 
 \bibitem[Lewis et~al.(2020)]{lewis2020rag}
 Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Kuttler, H., Lewis, M., Yih, W.-t., Rocktaschel, T., Riedel, S., Kiela, D., 2020. Retrieval-augmented generation for knowledge-intensive NLP tasks. Advances in Neural Information Processing Systems 33, 9459--9474.
+
+\bibitem[Packer et~al.(2023)]{packer2023memgpt}
+Packer, C., Wooders, S., Lin, K., Fang, V., Patil, S. G., Stoica, I., Gonzalez, J. E., 2023. MemGPT: Towards LLMs as Operating Systems. arXiv preprint arXiv:2310.08560. \url{https://doi.org/10.48550/arXiv.2310.08560}.
 
 \bibitem[Park et~al.(2023)]{park2023generative}
 Park, J. S., O'Brien, J. C., Cai, C. J., Morris, M. R., Liang, P., Bernstein, M. S., 2023. Generative agents: Interactive simulacra of human behavior. In: Proceedings of the 36th Annual ACM Symposium on User Interface Software and Technology, 1--22. \url{https://doi.org/10.1145/3586183.3606763}.
@@ -476,6 +517,9 @@ Wu, Q., Bansal, G., Zhang, J., Wu, Y., Li, B., Zhu, E., et al., 2023. AutoGen: E
 
 \bibitem[Yao et~al.(2023)]{yao2023react}
 Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., Cao, Y., 2023. ReAct: Synergizing reasoning and acting in language models. In: International Conference on Learning Representations. \url{https://openreview.net/forum?id=WE_vluYUL-X}.
+
+\bibitem[Zhong et~al.(2023)]{zhong2023memorybank}
+Zhong, W., Guo, L., Gao, Q., Ye, H., Wang, Y., 2023. MemoryBank: Enhancing Large Language Models with Long-Term Memory. arXiv preprint arXiv:2305.10250. \url{https://doi.org/10.48550/arXiv.2305.10250}.
 
 \bibitem[Zhou et~al.(2024)]{zhou2024sotopia}
 Zhou, X., Zhu, H., Mathur, L., Zhang, R., Yu, H., Qi, Z., et al., 2024. SOTOPIA: Interactive evaluation for social intelligence in language agents. In: International Conference on Learning Representations. \url{https://openreview.net/forum?id=mM7VurbA4r}.
