@@ -138,3 +138,42 @@ def test_compose_helpers_accept_plain_dict_designs() -> None:
     assert "before_supervisor_plan" in extension.events
     assert "before_handoff" in extension.events
     team.close()
+
+
+def test_design_helper_methods_cover_overlay_runtime_config_and_team_payload_paths() -> None:
+    base = agentorch.AgentDesign.named("base-agent", model=DummyModel(reply="base"))
+    overlay = base.overlay(
+        {
+            "description": "overlay description",
+            "tool_bundles": {"include_filesystem": True},
+        }
+    ).with_runtime_config({"max_steps": 5}, enable_parallel_tasks=True)
+
+    kwargs = overlay.as_create_kwargs()
+    assert kwargs["description"] == "overlay description"
+    assert kwargs["tool_bundles"]["include_filesystem"] is True
+    assert kwargs["runtime_config"].max_steps == 5
+    assert kwargs["runtime_config"].enable_parallel_tasks is True
+
+    external_agent = agentorch.create_agent(model=DummyModel(reply="external"), name="external-worker")
+    role_payload = agentorch.RoleDesign.from_any(
+        {
+            "name": "existing-role",
+            "agent": external_agent,
+            "tags": ["existing"],
+            "supports_parallel_tasks": True,
+        }
+    ).as_role_payload()
+
+    team_design = agentorch.TeamDesign(name="mixed-team").with_role_defaults(
+        {"profile": "workflow", "tool_bundles": {"include_filesystem": True}}
+    ).add_agent(external_agent)
+
+    team_kwargs = team_design.as_create_kwargs()
+
+    assert role_payload["agent"] is external_agent
+    assert role_payload["tags"] == ["existing"]
+    assert team_kwargs["agents"] == [external_agent]
+    assert team_kwargs["name"] == "mixed-team"
+
+    external_agent.close()
