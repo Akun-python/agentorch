@@ -18,6 +18,7 @@ from .agents import (
     TaskPacket,
 )
 from .bootstrap import bootstrap_defaults
+from .design import AgentDesign, RoleDesign, TeamDesign, compose_agent, compose_team
 from .extensions import ExtensionManager, HandoffHookContext, RunHookContext, RuntimeExtension, SupervisorPlanHookContext
 from .evolution import (
     BeamSearchEvolutionAlgorithm,
@@ -261,6 +262,7 @@ from .workflow import Context, Workflow, WorkflowBuilder
 
 __all__ = [
     "Agent",
+    "AgentDesign",
     "AdaptiveTaskPlanner",
     "AgentCapability",
     "AgentRegistry",
@@ -508,6 +510,8 @@ __all__ = [
     "runtime_config_from_genome",
     "summarize_evolution_candidate",
     "build_deep_research_system_prompt",
+    "compose_agent",
+    "compose_team",
     "create_agent",
     "create_agent_evolution",
     "create_multi_agent",
@@ -525,5 +529,7 @@ __all__ = [
     "MemoryEvaluator",
     "MemoryPolicy",
     "RoutePlanner",
+    "RoleDesign",
     "StatePolicy",
+    "TeamDesign",
 ]
