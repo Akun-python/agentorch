@@ -123,6 +123,7 @@ class Runtime:
         tracer: Tracer | None = None,
         human_feedback: HumanFeedbackManager | None = None,
         extensions: ExtensionManager | list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
+        managed_agents: list[Any] | tuple[Any, ...] | None = None,
     ) -> "Runtime":
         runtime_config = RuntimeConfig.from_any(config)
         selected_model = model or create_model_adapter(model_config)
@@ -182,6 +183,7 @@ class Runtime:
             tracer=tracer,
             human_feedback=human_feedback,
             extensions=extensions,
+            managed_agents=managed_agents,
         )
 
     @staticmethod
@@ -228,6 +230,7 @@ class Runtime:
         tracer: Tracer | None = None,
         human_feedback: HumanFeedbackManager | None = None,
         extensions: ExtensionManager | list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
+        managed_agents: list[Any] | tuple[Any, ...] | None = None,
     ) -> None:
         validate_supported_python()
         self.model = model
@@ -251,6 +254,7 @@ class Runtime:
         if self.human_feedback is not None:
             self.human_feedback.bind_runtime(self)
         self.extensions = ExtensionManager.from_any(extensions)
+        self._managed_agents = list(managed_agents or [])
         self.reasoning_framework = self._normalize_reasoning(self.policy)
         self.context_kernel = ContextKernel(
             runtime=self,
@@ -261,6 +265,17 @@ class Runtime:
         self._register_builtin_knowledge_tools()
         self._closed = False
         self._background_managed = False
+
+    async def _aclose_resource(self, resource: Any) -> None:
+        close_async = getattr(resource, "aclose", None)
+        if callable(close_async):
+            outcome = close_async()
+            if inspect.isawaitable(outcome):
+                await outcome
+            return
+        close = getattr(resource, "close", None)
+        if callable(close):
+            close()
 
     @staticmethod
     def _error_category(exc: Exception) -> str:
@@ -1391,6 +1406,8 @@ class Runtime:
         if self._closed:
             return
         self._closed = True
+        for managed_agent in self._managed_agents:
+            await self._aclose_resource(managed_agent)
         for resource in (
             self.tools,
             self.model,
@@ -1402,11 +1419,7 @@ class Runtime:
             self.sandbox,
             self.extensions,
         ):
-            close_async = getattr(resource, "aclose", None)
-            if callable(close_async):
-                outcome = close_async()
-                if inspect.isawaitable(outcome):
-                    await outcome
+            await self._aclose_resource(resource)
 
     def close(self) -> None:
         if self._closed:

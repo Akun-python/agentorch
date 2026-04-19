@@ -178,11 +178,34 @@ def test_top_level_exports_include_new_security_and_env_api() -> None:
     assert hasattr(agentorch, "bootstrap_model_defaults")
 
 
-def test_create_multi_agent_reuses_member_model_by_default() -> None:
+def test_create_multi_agent_keeps_external_member_runtime_open_on_close() -> None:
     member = agentorch.create_agent(model=DummyModel(), name="worker-one")
     system = agentorch.create_multi_agent(agents=[member], name="team-one")
 
     assert system.export_blueprint()["kind"] == "multi_agent"
-    assert system.runtime.model is member.runtime.model
+    assert system.runtime.model is not member.runtime.model
 
     system.close()
+
+    assert member.runtime._closed is False
+    assert member.runtime.model.closed is False
+    member.close()
+
+
+def test_create_multi_agent_closes_inline_managed_member_runtimes() -> None:
+    system = agentorch.create_multi_agent(
+        roles=[
+            {
+                "name": "planner",
+                "model": DummyModel(),
+            }
+        ],
+        name="managed-team",
+    )
+
+    member = system.runtime.agent_registry.get("planner").agent
+
+    system.close()
+
+    assert member.runtime._closed is True
+    assert member.runtime.model.closed is True

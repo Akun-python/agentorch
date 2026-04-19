@@ -19,12 +19,14 @@ from agentorch.agents import (
     SupervisorPolicy,
 )
 from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
+from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
 from agentorch.evolution import EvolutionConfig, EvolutionManager, EvolutionSession, SearchSpace
 from agentorch.evolution.helpers import runtime_config_from_genome, workflow_from_genome
 from agentorch.extensions import RuntimeExtension
 from agentorch.knowledge import KnowledgeBase, RagStrategyConfig
 from agentorch.memory import MemoryManager
 from agentorch.models import (
+    BaseModelAdapter,
     ImageGenerationCapableModelAdapter,
     SpeechCapableModelAdapter,
     VideoAnalysisCapableModelAdapter,
@@ -64,6 +66,24 @@ from agentorch._facade_support import (
 
 _ALLOWED_MULTI_AGENT_TOPOLOGIES = {"supervisor"}
 _BACKGROUND_BRIDGE = BackgroundRuntimeBridge()
+
+
+class _SupervisorRuntimeModelAdapter(BaseModelAdapter):
+    """Internal placeholder model for supervisor-root runtimes.
+
+    The coordinator runtime should not borrow a member model by default. That
+    creates hidden ownership coupling and can close externally managed member
+    resources when the team runtime shuts down.
+    """
+
+    def __init__(self) -> None:
+        self.config = {"provider": "internal", "model": "supervisor-runtime-placeholder"}
+
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        raise RuntimeError(
+            "The root runtime of a multi-agent supervisor system does not support direct model generation "
+            "without an explicit coordinator model."
+        )
 
 
 async def _close_candidate(candidate: Any) -> None:
@@ -458,6 +478,7 @@ def create_multi_agent(
 
     registry = AgentRegistry()
     members: list[dict[str, Any]] = []
+    managed_member_agents: list[Agent] = []
     shared_knowledge_base = shared_knowledge if isinstance(shared_knowledge, KnowledgeBase) else None
     shared_knowledge_payload = shared_knowledge if isinstance(shared_knowledge, dict) else {}
     resolved_coordination = CoordinationPolicy.from_any(coordination_policy) if coordination_policy is not None else CoordinationPolicy()
@@ -503,6 +524,7 @@ def create_multi_agent(
                 payload.setdefault("name", member_name)
                 payload.setdefault("description", member_description)
                 member_agent = create_agent(**payload)
+                managed_member_agents.append(member_agent)
                 member_scope = payload.get("knowledge_scope") or member_agent.runtime.config.default_knowledge_scope
                 member_capabilities = _normalize_capabilities(requested_capabilities, member_agent)
 
@@ -622,9 +644,7 @@ def create_multi_agent(
 
     selected_model, selected_model_config = _coerce_model_inputs(model)
     if selected_model is None and selected_model_config is None and registry.list_specs():
-        first_member_name = registry.list_specs()[0].name
-        first_member = registry.get(first_member_name).agent
-        selected_model = first_member.runtime.model
+        selected_model = _SupervisorRuntimeModelAdapter()
     runtime = _create_runtime_instance(
         model=selected_model,
         model_config=selected_model_config,
@@ -636,6 +656,7 @@ def create_multi_agent(
         config=resolved_runtime_config,
         human_feedback=human_feedback,
         extensions=extensions,
+        managed_agents=managed_member_agents,
     )
     agent = Agent(runtime=runtime, workflow=workflow)
     return agent.bind_blueprint(
