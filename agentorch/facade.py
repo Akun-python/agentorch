@@ -21,6 +21,7 @@ from agentorch.agents import (
 from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
 from agentorch.evolution import EvolutionConfig, EvolutionManager, EvolutionSession, SearchSpace
 from agentorch.evolution.helpers import runtime_config_from_genome, workflow_from_genome
+from agentorch.extensions import RuntimeExtension
 from agentorch.knowledge import KnowledgeBase, RagStrategyConfig
 from agentorch.memory import MemoryManager
 from agentorch.models import (
@@ -123,6 +124,7 @@ def create_agent(
     enable_streaming: bool | None = None,
     human_feedback: Any | None = None,
     observability: ObservabilityConfig | dict[str, Any] | None = None,
+    extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
     skills: SkillRegistry | None = None,
     context_policy: ContextPolicy | dict[str, Any] | None = None,
     state_policy: StatePolicy | dict[str, Any] | None = None,
@@ -150,6 +152,7 @@ def create_agent(
             sandbox,
             human_feedback,
             observability,
+            extensions,
             skills,
             context_policy,
             state_policy,
@@ -375,6 +378,7 @@ def create_agent(
         "sandbox": sandbox,
         "config": resolved_runtime_config,
         "human_feedback": human_feedback,
+        "extensions": extensions,
     }
     agent = _create_agent_instance(workflow=workflow, **runtime_kwargs)
     facade_inputs = {
@@ -398,6 +402,7 @@ def create_agent(
         "enable_streaming": bool(enable_streaming),
         "human_feedback": human_feedback is not None,
         "observability": observability,
+        "extensions": [extension.extension_name for extension in extensions] if extensions else None,
         "runtime_config_supplied": runtime_config_supplied,
     }
     return agent.bind_blueprint(
@@ -439,6 +444,7 @@ def create_multi_agent(
     sandbox: SandboxManager | None = None,
     human_feedback: Any | None = None,
     observability: ObservabilityConfig | dict[str, Any] | None = None,
+    extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
     runtime_config: RuntimeConfig | dict[str, Any] | None = None,
     overrides: dict[str, Any] | None = None,
 ) -> Agent:
@@ -454,6 +460,7 @@ def create_multi_agent(
     members: list[dict[str, Any]] = []
     shared_knowledge_base = shared_knowledge if isinstance(shared_knowledge, KnowledgeBase) else None
     shared_knowledge_payload = shared_knowledge if isinstance(shared_knowledge, dict) else {}
+    resolved_coordination = CoordinationPolicy.from_any(coordination_policy) if coordination_policy is not None else CoordinationPolicy()
 
     for index, item in enumerate(member_inputs, start=1):
         if isinstance(item, Agent):
@@ -463,6 +470,10 @@ def create_multi_agent(
             member_description = item.export_blueprint().get("description") or member_name
             member_capabilities = _normalize_capabilities(None, item)
             member_scope = item.runtime.config.default_knowledge_scope
+            member_tags: list[str] = []
+            member_supports_parallel = False
+            member_max_delegation_depth = 1
+            member_metadata: dict[str, Any] = {}
         else:
             payload = dict(item)
             existing_agent = payload.pop("agent", None)
@@ -471,6 +482,10 @@ def create_multi_agent(
             member_role = role_name or member_name
             member_description = payload.pop("description", None) or f"{member_name} specialist"
             requested_capabilities = payload.pop("capabilities", None)
+            member_tags = list(payload.pop("tags", []) or [])
+            member_supports_parallel = bool(payload.pop("supports_parallel_tasks", False))
+            member_max_delegation_depth = int(payload.pop("max_delegation_depth", 1) or 1)
+            member_metadata = dict(payload.pop("metadata", {}) or {})
             if existing_agent is not None:
                 member_agent = existing_agent
                 member_scope = payload.pop("knowledge_scope", None) or member_agent.runtime.config.default_knowledge_scope
@@ -494,9 +509,13 @@ def create_multi_agent(
         spec = AgentSpec.assistant(
             member_name,
             description=member_description,
+            tags=member_tags,
             capabilities=member_capabilities,
             tools=sorted(getattr(member_agent.runtime.tools, "_tools", {}).keys()),
             knowledge_scopes=list(member_scope or []),
+            supports_parallel_tasks=member_supports_parallel,
+            max_delegation_depth=member_max_delegation_depth,
+            metadata=member_metadata,
         )
         registry.register(spec, member_agent)
         members.append(
@@ -512,7 +531,10 @@ def create_multi_agent(
 
     resolved_supervisor = supervisor or Supervisor(registry=registry, policy=routing_policy)
     resolved_coordinator = Coordinator(
-        execution_policy=ExecutionPolicy(),
+        execution_policy=ExecutionPolicy(
+            allow_parallel=resolved_coordination.route_mode in {"distributed", "hybrid"},
+            max_parallel_tasks=max(1, len(member_inputs)),
+        ),
         budget_manager=BudgetManager(),
         permission_manager=PermissionManager(),
         escalation_policy=EscalationPolicy(),
@@ -594,6 +616,9 @@ def create_multi_agent(
     if overrides:
         resolved_runtime_config = resolved_runtime_config.model_copy(update=overrides)
     resolved_runtime_config = _finalize_runtime_config(resolved_runtime_config)
+    runtime_coordination = CoordinationPolicy.from_any(resolved_runtime_config.coordination_policy)
+    resolved_coordinator.execution_policy.allow_parallel = runtime_coordination.route_mode in {"distributed", "hybrid"}
+    resolved_coordinator.execution_policy.max_parallel_tasks = max(1, len(member_inputs))
 
     selected_model, selected_model_config = _coerce_model_inputs(model)
     if selected_model is None and selected_model_config is None and registry.list_specs():
@@ -610,6 +635,7 @@ def create_multi_agent(
         coordinator=resolved_coordinator,
         config=resolved_runtime_config,
         human_feedback=human_feedback,
+        extensions=extensions,
     )
     agent = Agent(runtime=runtime, workflow=workflow)
     return agent.bind_blueprint(
@@ -637,6 +663,7 @@ def create_multi_agent(
                         "memory_policy": memory_policy,
                         "topology": resolved_topology,
                         "workflow_attached": workflow is not None,
+                        "extensions": [extension.extension_name for extension in extensions] if extensions else None,
                     }
                 )
             ),
@@ -675,6 +702,7 @@ def create_agent_evolution(
     enable_streaming: bool | None = None,
     human_feedback: Any | None = None,
     observability: ObservabilityConfig | dict[str, Any] | None = None,
+    extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
     skills: SkillRegistry | None = None,
     context_policy: ContextPolicy | dict[str, Any] | None = None,
     state_policy: StatePolicy | dict[str, Any] | None = None,
@@ -713,6 +741,7 @@ def create_agent_evolution(
             enable_streaming=enable_streaming,
             human_feedback=human_feedback,
             observability=observability,
+            extensions=extensions,
             skills=skills,
             context_policy=context_policy,
             state_policy=state_policy,
@@ -774,6 +803,7 @@ def create_multi_agent_evolution(
     sandbox: SandboxManager | None = None,
     human_feedback: Any | None = None,
     observability: ObservabilityConfig | dict[str, Any] | None = None,
+    extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
     runtime_config: RuntimeConfig | dict[str, Any] | None = None,
     overrides: dict[str, Any] | None = None,
 ) -> EvolutionSession[Agent]:
@@ -805,6 +835,7 @@ def create_multi_agent_evolution(
             sandbox=sandbox,
             human_feedback=human_feedback,
             observability=observability,
+            extensions=extensions,
             runtime_config=runtime_config_from_genome(genome, base=base_runtime_config),
             overrides=overrides,
         )

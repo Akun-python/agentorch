@@ -36,6 +36,7 @@ from agentorch.core import (
     ToolExecutionResult,
     UsageInfo,
 )
+from agentorch.extensions import ExtensionManager, HandoffHookContext, RunHookContext, RuntimeExtension, SupervisorPlanHookContext
 from agentorch.feedback import HumanFeedbackManager
 from agentorch.knowledge import (
     BaseRetriever,
@@ -121,6 +122,7 @@ class Runtime:
         config: RuntimeConfig | dict[str, Any] | None = None,
         tracer: Tracer | None = None,
         human_feedback: HumanFeedbackManager | None = None,
+        extensions: ExtensionManager | list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
     ) -> "Runtime":
         runtime_config = RuntimeConfig.from_any(config)
         selected_model = model or create_model_adapter(model_config)
@@ -179,6 +181,7 @@ class Runtime:
             config=runtime_config,
             tracer=tracer,
             human_feedback=human_feedback,
+            extensions=extensions,
         )
 
     @staticmethod
@@ -224,6 +227,7 @@ class Runtime:
         config: RuntimeConfig | None = None,
         tracer: Tracer | None = None,
         human_feedback: HumanFeedbackManager | None = None,
+        extensions: ExtensionManager | list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
     ) -> None:
         validate_supported_python()
         self.model = model
@@ -246,6 +250,7 @@ class Runtime:
         self.human_feedback = human_feedback
         if self.human_feedback is not None:
             self.human_feedback.bind_runtime(self)
+        self.extensions = ExtensionManager.from_any(extensions)
         self.reasoning_framework = self._normalize_reasoning(self.policy)
         self.context_kernel = ContextKernel(
             runtime=self,
@@ -645,8 +650,20 @@ class Runtime:
         metadata: dict[str, Any] | None = None,
         stream_writer: Callable[[RunStreamEvent], Awaitable[None]] | None = None,
     ) -> RunResult:
-        metadata = metadata or {}
+        metadata = dict(metadata or {})
+        hook_context = RunHookContext(
+            runtime=self,
+            thread_id=thread_id,
+            user_input=user_input,
+            metadata=metadata,
+            workflow=workflow,
+        )
+        await self.extensions.before_run(hook_context)
+        user_input = hook_context.user_input
+        metadata = hook_context.metadata
+        workflow = hook_context.workflow
         envelope = self._create_context_envelope(thread_id=thread_id, metadata=metadata)
+        hook_context.envelope = envelope
         usage_tracker = UsageTracker()
         tool_results: list[ToolExecutionResult] = []
         await self._emit_event("run_started", envelope.model_dump(), stream_writer=stream_writer)
@@ -670,26 +687,32 @@ class Runtime:
             if self.supervisor is not None and not metadata.get("_delegated"):
                 result = await self._run_supervisor(user_input, envelope, stream_writer=stream_writer)
                 await self._emit_event("run_completed", {**envelope.model_dump(), "status": result.status}, stream_writer=stream_writer)
-                return self._attach_observability_metadata(result)
+                result = self._attach_observability_metadata(result)
+                hook_context.result = result
+                await self.extensions.after_run(hook_context)
+                return hook_context.result or result
 
             if workflow is not None:
                 result = await self._run_workflow(workflow, thread_id=thread_id, user_input=user_input, metadata=metadata)
                 status = result.get("status", "completed")
                 await self._emit_event("run_completed", {**envelope.model_dump(), "status": status}, stream_writer=stream_writer)
-                return self._attach_observability_metadata(
+                run_result = self._attach_observability_metadata(
                     RunResult(
-                    request_id=envelope.request_id,
-                    run_id=envelope.run_id,
-                    thread_id=thread_id,
-                    output_text=json.dumps(result, ensure_ascii=False),
-                    usage=usage_tracker.summary(),
-                    status=status,
-                    feedback_id=result.get("feedback_id"),
-                    await_reason=result.get("await_reason"),
-                    requires_response=bool(result.get("requires_response", False)),
-                    response_schema=result.get("response_schema"),
+                        request_id=envelope.request_id,
+                        run_id=envelope.run_id,
+                        thread_id=thread_id,
+                        output_text=json.dumps(result, ensure_ascii=False),
+                        usage=usage_tracker.summary(),
+                        status=status,
+                        feedback_id=result.get("feedback_id"),
+                        await_reason=result.get("await_reason"),
+                        requires_response=bool(result.get("requires_response", False)),
+                        response_schema=result.get("response_schema"),
                     )
                 )
+                hook_context.result = run_result
+                await self.extensions.after_run(hook_context)
+                return hook_context.result or run_result
 
             conversation = await self.memory.get_context_window(thread_id)
             selected_skill_routes = (
@@ -816,27 +839,32 @@ class Runtime:
                     },
                 )
             await self._emit_event("run_completed", {**envelope.model_dump(), "status": "completed"}, stream_writer=stream_writer)
-            return self._attach_observability_metadata(
+            run_result = self._attach_observability_metadata(
                 RunResult(
-                request_id=envelope.request_id,
-                run_id=envelope.run_id,
-                thread_id=thread_id,
-                output_text=final_text,
-                messages=messages,
-                tool_results=tool_results,
-                usage=usage_tracker.summary(),
-                finish_reason="completed",
-                reasoning={
-                    "final_output": reasoning_result.final_output,
-                    "steps": [step.model_dump() for step in reasoning_result.steps],
-                    "trace_text": reasoning_result.trace_text,
-                },
-                reasoning_trace=reasoning_result.trace_text,
-                reasoning_kind=local_reasoning.config.kind.value,
-                reasoning_metadata=reasoning_metadata,
+                    request_id=envelope.request_id,
+                    run_id=envelope.run_id,
+                    thread_id=thread_id,
+                    output_text=final_text,
+                    messages=messages,
+                    tool_results=tool_results,
+                    usage=usage_tracker.summary(),
+                    finish_reason="completed",
+                    reasoning={
+                        "final_output": reasoning_result.final_output,
+                        "steps": [step.model_dump() for step in reasoning_result.steps],
+                        "trace_text": reasoning_result.trace_text,
+                    },
+                    reasoning_trace=reasoning_result.trace_text,
+                    reasoning_kind=local_reasoning.config.kind.value,
+                    reasoning_metadata=reasoning_metadata,
                 )
             )
+            hook_context.result = run_result
+            await self.extensions.after_run(hook_context)
+            return hook_context.result or run_result
         except Exception as exc:
+            hook_context.error = exc
+            await self.extensions.on_run_error(hook_context)
             await self._emit_event(
                 "run_failed",
                 self._error_context(exc, envelope, stage="run_impl"),
@@ -1372,6 +1400,7 @@ class Runtime:
             self.tracer,
             self.memory,
             self.sandbox,
+            self.extensions,
         ):
             close_async = getattr(resource, "aclose", None)
             if callable(close_async):
@@ -1391,6 +1420,190 @@ class Runtime:
             "Runtime.close() cannot be used inside a running event loop. "
             "Use 'await Runtime.aclose()' in notebooks and async applications."
         )
+
+    def _supervisor_plan_settings(self, plan: Any) -> tuple[str, int]:
+        task_plan = getattr(plan, "task_plan", None)
+        metadata = dict(getattr(task_plan, "metadata", {}) or {})
+        execution_mode = str(metadata.get("execution_mode", "sequential")).lower()
+        max_parallel_tasks = int(metadata.get("max_parallel_tasks") or 1)
+        return execution_mode, max(1, max_parallel_tasks)
+
+    async def _run_supervisor_invocation(
+        self,
+        *,
+        invocation: Any,
+        plan: Any,
+        task: TaskPacket,
+        envelope: ContextEnvelope,
+        collective_payload: dict[str, Any],
+        coordination_policy: CoordinationPolicy,
+        memory_policy: MemoryPolicy,
+        stream_writer: Callable[[RunStreamEvent], Awaitable[None]] | None = None,
+    ) -> AgentResult:
+        registered = self.agent_registry.get(invocation.agent_name)
+        self.coordinator.permission_manager.ensure_knowledge_scope(
+            registered.spec.allowed_knowledge_scopes,
+            invocation.task.knowledge_scope,
+        )
+        if not self.coordinator.permission_manager.can_delegate(
+            current_depth=invocation.delegation_depth - 1,
+            allowed_depth=min(self.config.max_delegation_depth, registered.spec.max_delegation_depth),
+        ):
+            raise RuntimeError(f"Delegation depth exceeded for agent '{registered.spec.name}'.")
+
+        handoff = Handoff(
+            from_agent="supervisor",
+            to_agent=registered.spec.name,
+            task=invocation.task,
+            reason=plan.reason,
+            metadata={"parent_run_id": envelope.run_id},
+        )
+        compacted_task_packet, compacted_handoff = self.context_kernel.build_child_handoff_payload(
+            task_packet=invocation.task.model_dump(),
+            handoff=handoff.model_dump(),
+            coordination_policy=coordination_policy,
+        )
+        child_metadata = {
+            "task_packet": compacted_task_packet,
+            "handoff": compacted_handoff,
+            "_delegated": True,
+            "agent_role": registered.spec.name,
+            "knowledge_scope": invocation.task.knowledge_scope,
+            "parent_task_id": invocation.task.parent_task_id,
+            "coordination_policy": coordination_policy.model_dump(),
+            "memory_policy": memory_policy.model_dump(),
+        }
+        handoff_context = HandoffHookContext(
+            runtime=self,
+            envelope=envelope,
+            invocation=invocation,
+            handoff=handoff,
+            metadata=child_metadata,
+        )
+        await self.extensions.before_handoff(handoff_context)
+        invocation = handoff_context.invocation
+        handoff = handoff_context.handoff
+        child_metadata = handoff_context.metadata
+
+        await self._emit_event(
+            "handoff_created",
+            {
+                **envelope.model_dump(),
+                "agent_name": registered.spec.name,
+                "task_id": invocation.task.task_id,
+                "parent_task_id": invocation.task.parent_task_id,
+                "delegation_depth": invocation.delegation_depth,
+            },
+            stream_writer=stream_writer,
+        )
+        await self._emit_event(
+            "agent_delegated",
+            {
+                **envelope.model_dump(),
+                "agent_name": registered.spec.name,
+                "task_id": invocation.task.task_id,
+                "parent_task_id": invocation.task.parent_task_id,
+                "delegation_depth": invocation.delegation_depth,
+                "knowledge_scope": invocation.task.knowledge_scope,
+            },
+            stream_writer=stream_writer,
+        )
+
+        if stream_writer is None:
+            run_result = await registered.agent.run(
+                invocation.task.goal,
+                thread_id=invocation.task.task_id,
+                metadata=child_metadata,
+                stream=False,
+            )
+        else:
+            run_result = None
+            async for child_event in registered.agent.run(
+                invocation.task.goal,
+                thread_id=invocation.task.task_id,
+                metadata=child_metadata,
+                stream=True,
+            ):
+                forwarded = child_event.model_copy(deep=True)
+                if not forwarded.agent_name:
+                    forwarded.agent_name = registered.spec.name
+                if not forwarded.task_id:
+                    forwarded.task_id = invocation.task.task_id
+                if not forwarded.parent_task_id:
+                    forwarded.parent_task_id = invocation.task.parent_task_id
+                await stream_writer(forwarded)
+                if child_event.event_type == "final_result" and child_event.result is not None:
+                    run_result = child_event.result
+            if run_result is None:  # pragma: no cover
+                raise RuntimeError(f"Delegated agent '{registered.spec.name}' did not produce a final_result event.")
+
+        run_status = (
+            TaskStatus.COMPLETED
+            if run_result.status == "completed"
+            else TaskStatus.WAITING_HUMAN
+            if run_result.status == "waiting_human"
+            else TaskStatus.FAILED
+        )
+        agent_result = AgentResult(
+            agent_name=registered.spec.name,
+            output_text=run_result.output_text,
+            status=run_status,
+            summary=run_result.output_text,
+            structured_output={
+                "reasoning_kind": run_result.reasoning_kind,
+                "reasoning_metadata": run_result.reasoning_metadata,
+                "reasoning_trace": run_result.reasoning_trace,
+                "usage": run_result.usage.model_dump(),
+                "tool_results": [item.model_dump() for item in run_result.tool_results],
+                "messages": [message.model_dump() for message in run_result.messages],
+            },
+            metadata={
+                "task_id": invocation.task.task_id,
+                "parent_task_id": invocation.task.parent_task_id,
+                "handoff": handoff.model_dump(),
+                "coordination_policy": coordination_policy.model_dump(),
+                "coordination_report": collective_payload["coordination_report"],
+                "reasoning_kind": run_result.reasoning_kind,
+                "reasoning_metadata": run_result.reasoning_metadata,
+                "routing_score": invocation.metadata.get("routing_score", 0.0),
+            },
+            budget_used=run_result.usage.model_dump(),
+        )
+        collective_candidate = self._build_collective_candidate(
+            task=task,
+            invocation_task=invocation.task,
+            result=agent_result,
+        )
+        await self.memory.add_shared_note(
+            envelope.thread_id,
+            SharedNote(
+                note_id=f"{invocation.task.task_id}:candidate",
+                task_id=invocation.task.task_id,
+                author_agent=registered.spec.name,
+                content=run_result.output_text,
+                metadata={
+                    "parent_task_id": task.task_id,
+                    "collective_candidate": True,
+                    "memory_kind": "lesson_learned",
+                    "scope": ",".join(invocation.task.knowledge_scope) if invocation.task.knowledge_scope else None,
+                    "collective_memory": collective_candidate,
+                    "coordination_policy": coordination_policy.model_dump(),
+                },
+            ),
+        )
+        await self._emit_event(
+            "handoff_completed",
+            {
+                **envelope.model_dump(),
+                "agent_name": registered.spec.name,
+                "task_id": invocation.task.task_id,
+                "parent_task_id": invocation.task.parent_task_id,
+            },
+            stream_writer=stream_writer,
+        )
+        handoff_context.result = agent_result
+        await self.extensions.after_handoff(handoff_context)
+        return handoff_context.result or agent_result
 
     async def _run_supervisor(
         self,
@@ -1413,13 +1626,22 @@ class Runtime:
             context=collective_payload,
             origin_agent="supervisor",
             knowledge_scope=self.config.default_knowledge_scope,
-                metadata={
-                    "thread_id": envelope.thread_id,
-                    "delegation_depth": 0,
-                    "collective_memory_refs": [item["id"] for item in collective_memory],
-                    "coordination_policy": coordination_policy.model_dump(),
-                },
+            metadata={
+                "thread_id": envelope.thread_id,
+                "delegation_depth": 0,
+                "collective_memory_refs": [item["id"] for item in collective_memory],
+                "coordination_policy": coordination_policy.model_dump(),
+            },
         )
+        plan_context = SupervisorPlanHookContext(
+            runtime=self,
+            task=task,
+            coordination_policy=coordination_policy,
+        )
+        await self.extensions.before_supervisor_plan(plan_context)
+        task = plan_context.task
+        coordination_policy = plan_context.coordination_policy
+
         self.coordinator.validate_task(task)
         await self._emit_event("supervisor_routed", {**envelope.model_dump(), "task_id": task.task_id}, stream_writer=stream_writer)
         await self._emit_event("aggregation_started", {**envelope.model_dump(), "task_id": task.task_id}, stream_writer=stream_writer)
@@ -1429,149 +1651,50 @@ class Runtime:
             registry=self.agent_registry,
             coordination_policy=coordination_policy,
         )
-        delegated_results: list[AgentResult] = []
-        for invocation in plan.invocations:
-            registered = self.agent_registry.get(invocation.agent_name)
-            self.coordinator.permission_manager.ensure_knowledge_scope(
-                registered.spec.allowed_knowledge_scopes,
-                invocation.task.knowledge_scope,
-            )
-            if not self.coordinator.permission_manager.can_delegate(
-                current_depth=invocation.delegation_depth - 1,
-                allowed_depth=min(self.config.max_delegation_depth, registered.spec.max_delegation_depth),
-            ):
-                raise RuntimeError(f"Delegation depth exceeded for agent '{registered.spec.name}'.")
+        plan_context.plan = plan
+        await self.extensions.after_supervisor_plan(plan_context)
+        plan = plan_context.plan or plan
 
-            handoff = Handoff(
-                from_agent="supervisor",
-                to_agent=registered.spec.name,
-                task=invocation.task,
-                reason=plan.reason,
-                metadata={"parent_run_id": envelope.run_id},
-            )
-            await self._emit_event(
-                "handoff_created",
-                {
-                    **envelope.model_dump(),
-                    "agent_name": registered.spec.name,
-                    "task_id": invocation.task.task_id,
-                    "parent_task_id": invocation.task.parent_task_id,
-                    "delegation_depth": invocation.delegation_depth,
-                },
-                stream_writer=stream_writer,
-            )
-            await self._emit_event(
-                "agent_delegated",
-                {
-                    **envelope.model_dump(),
-                    "agent_name": registered.spec.name,
-                    "task_id": invocation.task.task_id,
-                    "parent_task_id": invocation.task.parent_task_id,
-                    "delegation_depth": invocation.delegation_depth,
-                    "knowledge_scope": invocation.task.knowledge_scope,
-                },
-                stream_writer=stream_writer,
-            )
-            compacted_task_packet, compacted_handoff = self.context_kernel.build_child_handoff_payload(
-                task_packet=invocation.task.model_dump(),
-                handoff=handoff.model_dump(),
-                coordination_policy=coordination_policy,
-            )
-            child_metadata = {
-                "task_packet": compacted_task_packet,
-                "handoff": compacted_handoff,
-                "_delegated": True,
-                "agent_role": registered.spec.name,
-                "knowledge_scope": invocation.task.knowledge_scope,
-                "parent_task_id": invocation.task.parent_task_id,
-                "coordination_policy": coordination_policy.model_dump(),
-                "memory_policy": memory_policy.model_dump(),
-            }
-            if stream_writer is None:
-                run_result = await registered.agent.run(
-                    invocation.task.goal,
-                    thread_id=invocation.task.task_id,
-                    metadata=child_metadata,
-                    stream=False,
+        execution_mode, max_parallel_tasks = self._supervisor_plan_settings(plan)
+        delegated_results: list[AgentResult] = []
+        parallel_enabled = (
+            execution_mode == "parallel"
+            and stream_writer is None
+            and self.coordinator.execution_policy.allow_parallel
+            and len(plan.invocations) > 1
+        )
+        if parallel_enabled:
+            limit = min(max_parallel_tasks, max(1, self.coordinator.execution_policy.max_parallel_tasks))
+            semaphore = asyncio.Semaphore(limit)
+
+            async def _worker(invocation: Any) -> AgentResult:
+                async with semaphore:
+                    return await self._run_supervisor_invocation(
+                        invocation=invocation,
+                        plan=plan,
+                        task=task,
+                        envelope=envelope,
+                        collective_payload=collective_payload,
+                        coordination_policy=coordination_policy,
+                        memory_policy=memory_policy,
+                        stream_writer=None,
+                    )
+
+            delegated_results = list(await asyncio.gather(*(_worker(invocation) for invocation in plan.invocations)))
+        else:
+            for invocation in plan.invocations:
+                delegated_results.append(
+                    await self._run_supervisor_invocation(
+                        invocation=invocation,
+                        plan=plan,
+                        task=task,
+                        envelope=envelope,
+                        collective_payload=collective_payload,
+                        coordination_policy=coordination_policy,
+                        memory_policy=memory_policy,
+                        stream_writer=stream_writer,
+                    )
                 )
-            else:
-                run_result = None
-                async for child_event in registered.agent.run(
-                    invocation.task.goal,
-                    thread_id=invocation.task.task_id,
-                    metadata=child_metadata,
-                    stream=True,
-                ):
-                    forwarded = child_event.model_copy(deep=True)
-                    if not forwarded.agent_name:
-                        forwarded.agent_name = registered.spec.name
-                    if not forwarded.task_id:
-                        forwarded.task_id = invocation.task.task_id
-                    if not forwarded.parent_task_id:
-                        forwarded.parent_task_id = invocation.task.parent_task_id
-                    await stream_writer(forwarded)
-                    if child_event.event_type == "final_result" and child_event.result is not None:
-                        run_result = child_event.result
-                if run_result is None:  # pragma: no cover
-                    raise RuntimeError(f"Delegated agent '{registered.spec.name}' did not produce a final_result event.")
-            run_status = TaskStatus.COMPLETED if run_result.status == "completed" else TaskStatus.WAITING_HUMAN if run_result.status == "waiting_human" else TaskStatus.FAILED
-            agent_result = AgentResult(
-                agent_name=registered.spec.name,
-                output_text=run_result.output_text,
-                status=run_status,
-                summary=run_result.output_text,
-                structured_output={
-                    "reasoning_kind": run_result.reasoning_kind,
-                    "reasoning_metadata": run_result.reasoning_metadata,
-                    "reasoning_trace": run_result.reasoning_trace,
-                    "usage": run_result.usage.model_dump(),
-                    "tool_results": [item.model_dump() for item in run_result.tool_results],
-                    "messages": [message.model_dump() for message in run_result.messages],
-                },
-                metadata={
-                    "task_id": invocation.task.task_id,
-                    "parent_task_id": invocation.task.parent_task_id,
-                    "handoff": handoff.model_dump(),
-                    "coordination_policy": coordination_policy.model_dump(),
-                    "coordination_report": collective_payload["coordination_report"],
-                    "reasoning_kind": run_result.reasoning_kind,
-                    "reasoning_metadata": run_result.reasoning_metadata,
-                },
-                budget_used=run_result.usage.model_dump(),
-            )
-            delegated_results.append(agent_result)
-            collective_candidate = self._build_collective_candidate(
-                task=task,
-                invocation_task=invocation.task,
-                result=agent_result,
-            )
-            await self.memory.add_shared_note(
-                envelope.thread_id,
-                SharedNote(
-                    note_id=f"{invocation.task.task_id}:candidate",
-                    task_id=invocation.task.task_id,
-                    author_agent=registered.spec.name,
-                    content=run_result.output_text,
-                    metadata={
-                        "parent_task_id": task.task_id,
-                        "collective_candidate": True,
-                        "memory_kind": "lesson_learned",
-                        "scope": ",".join(invocation.task.knowledge_scope) if invocation.task.knowledge_scope else None,
-                        "collective_memory": collective_candidate,
-                        "coordination_policy": coordination_policy.model_dump(),
-                    },
-                ),
-            )
-            await self._emit_event(
-                "handoff_completed",
-                {
-                    **envelope.model_dump(),
-                    "agent_name": registered.spec.name,
-                    "task_id": invocation.task.task_id,
-                    "parent_task_id": invocation.task.parent_task_id,
-                },
-                stream_writer=stream_writer,
-            )
 
         for result in delegated_results:
             await self._emit_event(
@@ -1603,7 +1726,15 @@ class Runtime:
                 )
 
         aggregated = self.coordinator.aggregate_results(delegated_results)
-        aggregated_reasoning_metadata = self._aggregate_supervisor_reasoning(delegated_results, aggregated.metadata)
+        aggregation_metadata = dict(aggregated.metadata)
+        aggregation_metadata["plan"] = {
+            "reason": plan.reason,
+            "execution_mode": execution_mode,
+            "max_parallel_tasks": max_parallel_tasks,
+            "selected_agents": [invocation.agent_name for invocation in plan.invocations],
+            "task_plan": plan.task_plan.model_dump() if plan.task_plan is not None else None,
+        }
+        aggregated_reasoning_metadata = self._aggregate_supervisor_reasoning(delegated_results, aggregation_metadata)
         aggregated_usage = self._aggregate_supervisor_usage(delegated_results)
         await self.context_kernel.after_supervisor_aggregation(thread_id=envelope.thread_id, task=task)
         await self._emit_event(

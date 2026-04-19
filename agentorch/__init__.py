@@ -4,8 +4,21 @@ This module re-exports the minimal, user-facing entry points used to
 assemble models, runtime components, tools, memory, skills, and workflows.
 """
 
-from .agents import AgentCapability, AgentRegistry, AgentSpec, ArtifactRef, Coordinator, Supervisor, TaskBudget, TaskPacket
+from .agents import (
+    AdaptiveTaskPlanner,
+    AgentCapability,
+    AgentRegistry,
+    AgentSpec,
+    ArtifactRef,
+    CapabilitySupervisorPolicy,
+    Coordinator,
+    KeywordSupervisorPolicy,
+    Supervisor,
+    TaskBudget,
+    TaskPacket,
+)
 from .bootstrap import bootstrap_defaults
+from .extensions import ExtensionManager, HandoffHookContext, RunHookContext, RuntimeExtension, SupervisorPlanHookContext
 from .evolution import (
     BeamSearchEvolutionAlgorithm,
     EvaluationResult,
@@ -248,6 +261,7 @@ from .workflow import Context, Workflow, WorkflowBuilder
 
 __all__ = [
     "Agent",
+    "AdaptiveTaskPlanner",
     "AgentCapability",
     "AgentRegistry",
     "AgentSpec",
@@ -260,6 +274,7 @@ __all__ = [
     "ClassicRagConfig",
     "ClassicRetriever",
     "ChatPromptTemplate",
+    "CapabilitySupervisorPolicy",
     "DeliberativeRetriever",
     "DeliberativeRagConfig",
     "DeepResearchAgent",
@@ -274,6 +289,7 @@ __all__ = [
     "DocumentSection",
     "ExecutionRequest",
     "ExecutionResult",
+    "ExtensionManager",
     "EvaluationResult",
     "FeedbackDecision",
     "FeedbackHandle",
@@ -306,6 +322,7 @@ __all__ = [
     "KnowledgeBase",
     "KnowledgeIngestionManager",
     "KnowledgeScope",
+    "KeywordSupervisorPolicy",
     "MemoryBackend",
     "MemoryBackendRegistration",
     "MemoryBackendRegistry",
@@ -352,8 +369,10 @@ __all__ = [
     "RetrievalReport",
     "ReflexionReasoning",
     "RunStreamEvent",
+    "RunHookContext",
     "SalienceReport",
     "Runtime",
+    "RuntimeExtension",
     "SandboxManager",
     "SandboxPolicy",
     "SearchSpace",
@@ -367,6 +386,7 @@ __all__ = [
     "BaseFeedbackPolicy",
     "BaseHumanInbox",
     "Supervisor",
+    "SupervisorPlanHookContext",
     "TaskBudget",
     "TaskPacket",
     "TextParser",
@@ -424,6 +444,7 @@ __all__ = [
     "format_prompt",
     "HumanFeedbackEvent",
     "HumanFeedbackManager",
+    "HandoffHookContext",
     "HumanResponse",
     "initialize_environment",
     "validate_supported_python",

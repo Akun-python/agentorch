@@ -6,7 +6,15 @@ registered, delegated to, governed, and composed inside workflows.
 
 from .coordinator import AggregationPolicy, BudgetManager, Coordinator, EscalationPolicy, ExecutionPolicy, PermissionManager
 from .registry import AgentRegistry, AgentSpec, RegisteredAgent
-from .supervisor import AgentRouteDecision, DelegationPlan, Supervisor, SupervisorPolicy
+from .supervisor import (
+    AdaptiveTaskPlanner,
+    AgentRouteDecision,
+    CapabilitySupervisorPolicy,
+    DelegationPlan,
+    KeywordSupervisorPolicy,
+    Supervisor,
+    SupervisorPolicy,
+)
 from .types import (
     AgentCapability,
     AgentInvocation,
@@ -39,6 +47,7 @@ __all__ = [
     "AgentResult",
     "AgentRouteDecision",
     "AgentSpec",
+    "AdaptiveTaskPlanner",
     "AggregationResult",
     "ArtifactRef",
     "BudgetManager",
@@ -48,12 +57,14 @@ __all__ = [
     "EscalationPolicy",
     "ExecutionPolicy",
     "Handoff",
+    "KeywordSupervisorPolicy",
     "PermissionManager",
     "RegisteredAgent",
     "ReturnMode",
     "SharedNote",
     "SharedWorkspace",
     "Supervisor",
+    "CapabilitySupervisorPolicy",
     "SupervisorPolicy",
     "TaskArtifact",
     "TaskAssignment",

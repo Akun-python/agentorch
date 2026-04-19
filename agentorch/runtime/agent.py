@@ -52,6 +52,7 @@ def _runtime_summary(runtime: Runtime) -> dict[str, Any]:
         "knowledge_base": runtime.knowledge_base.__class__.__name__ if runtime.knowledge_base is not None else None,
         "memory": runtime.memory.__class__.__name__ if runtime.memory is not None else None,
         "sandbox": runtime.sandbox.__class__.__name__ if runtime.sandbox is not None else None,
+        "extensions": runtime.extensions.names(),
         "has_supervisor": runtime.supervisor is not None,
         "registered_agents": [spec.name for spec in runtime.agent_registry.list_specs()],
         "resolved_policies": _resolved_strategy_summary(runtime),
