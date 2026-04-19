@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from typing import Any, Callable
 
 from .base import BaseReasoningFramework, ReasoningConfig
@@ -58,6 +59,11 @@ class ReasoningRegistry:
         return registration.framework_cls(**kwargs)
 
 
+def _ensure_reasoning_defaults_registered() -> None:
+    bootstrap_module = import_module(f"{__package__}.bootstrap")
+    bootstrap_module.bootstrap_reasoning_defaults()
+
+
 default_reasoning_registry = ReasoningRegistry()
 
 
@@ -72,8 +78,10 @@ def register_reasoning_framework(
 
 
 def get_reasoning_framework_registration(kind: str) -> ReasoningRegistration:
+    _ensure_reasoning_defaults_registered()
     return default_reasoning_registry.get(kind)
 
 
 def list_reasoning_frameworks() -> list[str]:
+    _ensure_reasoning_defaults_registered()
     return default_reasoning_registry.list()

@@ -1,25 +1,12 @@
 {
-  "generated_at_utc": "2026-04-19T06:55:06.190778+00:00",
+  "generated_at_utc": "2026-04-19T10:11:12.080178+00:00",
   "repo_root": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式",
   "package_root": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\agentorch",
-  "git_commit": "07f5d01",
+  "git_commit": "121ab40",
   "root_public_api": {
-    "__all__": 256,
+    "__all__": 258,
     "line_count": 508,
-    "top_level_calls": [
-      {
-        "line": 247,
-        "name": "bootstrap_reasoning_defaults"
-      },
-      {
-        "line": 248,
-        "name": "bootstrap_evolution_defaults"
-      },
-      {
-        "line": 249,
-        "name": "bootstrap_memory_defaults"
-      }
-    ]
+    "top_level_calls": []
   },
   "line_counts": {
     "__init__.py": 508,
@@ -31,7 +18,7 @@
     "runtime/context_compaction.py": 410,
     "strategies.py": 739,
     "config/settings.py": 653,
-    "models/__init__.py": 36,
+    "models/__init__.py": 35,
     "evolution/session.py": 72
   },
   "top_import_fan_in": [
@@ -252,6 +239,26 @@
       ]
     },
     {
+      "module": "evolution.bootstrap",
+      "count": 4,
+      "values": [
+        "bootstrap",
+        "evolution.__init__",
+        "evolution.factory",
+        "evolution.manager"
+      ]
+    },
+    {
+      "module": "memory.bootstrap",
+      "count": 4,
+      "values": [
+        "bootstrap",
+        "memory.__init__",
+        "memory.factory",
+        "memory.manager"
+      ]
+    },
+    {
       "module": "models.speech",
       "count": 4,
       "values": [
@@ -273,24 +280,6 @@
     },
     {
       "module": "evolution.algorithms.beam_search",
-      "count": 3,
-      "values": [
-        "evolution.__init__",
-        "evolution.algorithms.__init__",
-        "evolution.bootstrap"
-      ]
-    },
-    {
-      "module": "evolution.algorithms.hill_climb",
-      "count": 3,
-      "values": [
-        "evolution.__init__",
-        "evolution.algorithms.__init__",
-        "evolution.bootstrap"
-      ]
-    },
-    {
-      "module": "evolution.algorithms.random_search",
       "count": 3,
       "values": [
         "evolution.__init__",
@@ -368,6 +357,20 @@
       ]
     },
     {
+      "module": "models.__init__",
+      "count": 8,
+      "values": [
+        "models.base",
+        "models.bootstrap",
+        "models.embedding",
+        "models.media",
+        "models.openai_compatible_http",
+        "models.openai_model",
+        "models.registry",
+        "models.speech"
+      ]
+    },
+    {
       "module": "knowledge.__init__",
       "count": 7,
       "values": [
@@ -378,19 +381,6 @@
         "knowledge.in_memory",
         "knowledge.indexed",
         "knowledge.registry"
-      ]
-    },
-    {
-      "module": "models.__init__",
-      "count": 7,
-      "values": [
-        "models.base",
-        "models.embedding",
-        "models.media",
-        "models.openai_compatible_http",
-        "models.openai_model",
-        "models.registry",
-        "models.speech"
       ]
     },
     {
@@ -501,6 +491,16 @@
       ]
     },
     {
+      "module": "__init__",
+      "count": 4,
+      "values": [
+        "bootstrap",
+        "facade",
+        "presets",
+        "strategies"
+      ]
+    },
+    {
       "module": "agents.__init__",
       "count": 4,
       "values": [
@@ -508,6 +508,16 @@
         "agents.registry",
         "agents.supervisor",
         "agents.types"
+      ]
+    },
+    {
+      "module": "bootstrap",
+      "count": 4,
+      "values": [
+        "evolution.bootstrap",
+        "memory.bootstrap",
+        "models.bootstrap",
+        "reasoning.bootstrap"
       ]
     },
     {
@@ -529,26 +539,6 @@
         "runtime.agent",
         "strategies"
       ]
-    },
-    {
-      "module": "models.openai_model",
-      "count": 4,
-      "values": [
-        "config.settings",
-        "models.embedding",
-        "models.media",
-        "models.speech"
-      ]
-    },
-    {
-      "module": "tools.git_tools.__init__",
-      "count": 4,
-      "values": [
-        "tools.git_tools.git_diff_summary",
-        "tools.git_tools.git_recent_commits",
-        "tools.git_tools.git_status",
-        "tools.git_tools.register"
-      ]
     }
   ],
   "cycles": [
@@ -563,16 +553,7 @@
     ]
   ],
   "import_time_registration": {
-    "models_init_top_level_calls": [
-      {
-        "line": 20,
-        "name": "register_model_provider"
-      },
-      {
-        "line": 21,
-        "name": "register_model_provider"
-      }
-    ]
+    "models_init_top_level_calls": []
   },
   "pytest_config": {
     "present": true,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from typing import Any, Callable
 
 from .base import EvolutionAlgorithm
@@ -52,6 +53,11 @@ class EvolutionRegistry:
             return registration.algorithm_cls()
 
 
+def _ensure_evolution_defaults_registered() -> None:
+    bootstrap_module = import_module(f"{__package__}.bootstrap")
+    bootstrap_module.bootstrap_evolution_defaults()
+
+
 default_evolution_registry = EvolutionRegistry()
 
 
@@ -65,8 +71,10 @@ def register_evolution_algorithm(
 
 
 def get_evolution_algorithm_registration(kind: str) -> EvolutionRegistration:
+    _ensure_evolution_defaults_registered()
     return default_evolution_registry.get(kind)
 
 
 def list_evolution_algorithms() -> list[str]:
+    _ensure_evolution_defaults_registered()
     return default_evolution_registry.list()

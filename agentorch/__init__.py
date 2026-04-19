@@ -5,6 +5,7 @@ assemble models, runtime components, tools, memory, skills, and workflows.
 """
 
 from .agents import AgentCapability, AgentRegistry, AgentSpec, ArtifactRef, Coordinator, Supervisor, TaskBudget, TaskPacket
+from .bootstrap import bootstrap_defaults
 from .evolution import (
     BeamSearchEvolutionAlgorithm,
     EvaluationResult,
@@ -117,6 +118,7 @@ from .models import (
     SpeechCapableModelAdapter,
     SpeechSynthesisResult,
     VideoAnalysisCapableModelAdapter,
+    bootstrap_model_defaults,
     create_model_adapter,
     list_model_providers,
     register_model_provider,
@@ -244,10 +246,6 @@ from .tools import (
 )
 from .workflow import Context, Workflow, WorkflowBuilder
 
-bootstrap_reasoning_defaults()
-bootstrap_evolution_defaults()
-bootstrap_memory_defaults()
-
 __all__ = [
     "Agent",
     "AgentCapability",
@@ -258,6 +256,7 @@ __all__ = [
     "BaseRetriever",
     "BeamSearchEvolutionAlgorithm",
     "BraveSearchInput",
+    "bootstrap_defaults",
     "ClassicRagConfig",
     "ClassicRetriever",
     "ChatPromptTemplate",
@@ -383,6 +382,7 @@ __all__ = [
     "create_brave_search_tool",
     "bootstrap_evolution_defaults",
     "bootstrap_memory_defaults",
+    "bootstrap_model_defaults",
     "bootstrap_reasoning_defaults",
     "candidate_from_genome",
     "create_chunking_strategy",

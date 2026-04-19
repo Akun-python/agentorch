@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from importlib import import_module
 
 from agentorch.config import ModelConfig
 
@@ -11,15 +12,22 @@ ModelFactory = Callable[[ModelConfig], BaseModelAdapter]
 _MODEL_FACTORIES: dict[str, ModelFactory] = {}
 
 
+def _ensure_model_defaults_registered() -> None:
+    bootstrap_module = import_module(f"{__package__}.bootstrap")
+    bootstrap_module.bootstrap_model_defaults()
+
+
 def register_model_provider(name: str, factory: ModelFactory) -> None:
     _MODEL_FACTORIES[name] = factory
 
 
 def list_model_providers() -> list[str]:
+    _ensure_model_defaults_registered()
     return sorted(_MODEL_FACTORIES)
 
 
 def create_model_adapter(config: ModelConfig | dict[str, object] | str | None = None, **overrides: object) -> BaseModelAdapter:
+    _ensure_model_defaults_registered()
     resolved = ModelConfig.from_any(config, **overrides)
     factory = _MODEL_FACTORIES.get(resolved.provider)
     if factory is None:

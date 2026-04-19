@@ -175,6 +175,7 @@ def test_top_level_exports_include_new_security_and_env_api() -> None:
     assert hasattr(agentorch, "PayloadBudgetConfig")
     assert hasattr(agentorch, "SandboxPolicy")
     assert hasattr(agentorch, "ExecutionRequest")
+    assert hasattr(agentorch, "bootstrap_model_defaults")
 
 
 def test_create_multi_agent_reuses_member_model_by_default() -> None:
