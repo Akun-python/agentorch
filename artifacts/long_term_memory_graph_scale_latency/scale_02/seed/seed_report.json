@@ -1,0 +1,404 @@
+{
+  "prefix": "graph-scale-s02-",
+  "browser_url": "http://127.0.0.1:7574/browser/",
+  "browser_queries_asset": "experiments/long_term_memory_graph/assets/demo_browser_queries.cypher",
+  "stored_capsule_count": 720,
+  "scenario_count": 12,
+  "scale_multiplier": 2,
+  "embedding_salt": "0",
+  "node_count": 720,
+  "edge_count": 3045,
+  "relation_counts": [
+    {
+      "relation_type": "SCOPE_OVERLAP",
+      "relation_count": 697
+    },
+    {
+      "relation_type": "TEMPORAL_NEXT",
+      "relation_count": 696
+    },
+    {
+      "relation_type": "CONFLICTS_WITH",
+      "relation_count": 624
+    },
+    {
+      "relation_type": "REVISES",
+      "relation_count": 624
+    },
+    {
+      "relation_type": "SAME_TASK",
+      "relation_count": 323
+    },
+    {
+      "relation_type": "EVIDENCE_SUPPORTS",
+      "relation_count": 81
+    }
+  ],
+  "scenario_counts": [
+    {
+      "task_family": "graph-scale-s02-api_gateway_patch",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-api_gateway_patch__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-compliance_audit_eu",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-compliance_audit_eu__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-customer_nova_support",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-customer_nova_support__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-customer_titan_support",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-customer_titan_support__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-demand_forecast_analytics",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-demand_forecast_analytics__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-deploy_alpha_prod",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-deploy_alpha_prod__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-deploy_beta_staging",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-deploy_beta_staging__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-elephant_context_runtime",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-elephant_context_runtime__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-nutcracker_memory_research",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-nutcracker_memory_research__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-vendor_orion_procurement",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-vendor_orion_procurement__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-vendor_zephyr_invoice",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-vendor_zephyr_invoice__cohort_02",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-warehouse_robot_ops",
+      "node_count": 30
+    },
+    {
+      "task_family": "graph-scale-s02-warehouse_robot_ops__cohort_02",
+      "node_count": 30
+    }
+  ],
+  "recall_results": [
+    {
+      "scenario": "deploy_alpha_prod",
+      "query": "service alpha deployment alice approval production rollout",
+      "returned_capsules": [
+        "graph-scale-s02-deploy_alpha_prod-caps-026",
+        "graph-scale-s02-deploy_alpha_prod-caps-025",
+        "graph-scale-s02-deploy_alpha_prod-caps-027",
+        "graph-scale-s02-deploy_alpha_prod-caps-021",
+        "graph-scale-s01-deploy_alpha_prod-caps-027",
+        "graph-scale-s02-deploy_alpha_prod__cohort_02-caps-030",
+        "graph-scale-s02-deploy_alpha_prod-caps-022",
+        "graph-scale-s02-deploy_alpha_prod-caps-020",
+        "graph-scale-s02-deploy_alpha_prod-caps-016",
+        "graph-scale-s02-deploy_alpha_prod-caps-015",
+        "graph-scale-s02-deploy_alpha_prod-caps-017",
+        "graph-scale-s02-deploy_alpha_prod-caps-011"
+      ],
+      "returned_titles": [
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment"
+      ],
+      "returned_edge_count": 19,
+      "suppressed_stale_nodes": [
+        "graph-scale-s02-deploy_alpha_prod-caps-006",
+        "graph-scale-s02-deploy_alpha_prod-caps-001"
+      ],
+      "suppressed_conflict_nodes": [
+        "graph-scale-s02-deploy_alpha_prod__cohort_02-caps-025",
+        "graph-scale-s02-deploy_alpha_prod__cohort_02-caps-022"
+      ],
+      "prompt_summary_head": "Subgraph theme: prod, approval, round_3, cohort_01."
+    },
+    {
+      "scenario": "deploy_beta_staging",
+      "query": "service beta staging release evidence validation rollout",
+      "returned_capsules": [
+        "graph-scale-s02-deploy_beta_staging-caps-028",
+        "graph-scale-s02-deploy_beta_staging-caps-021",
+        "graph-scale-s02-deploy_beta_staging-caps-029",
+        "graph-scale-s02-deploy_beta_staging-caps-027",
+        "graph-scale-s02-deploy_beta_staging-caps-022",
+        "graph-scale-s02-deploy_beta_staging-caps-020",
+        "graph-scale-s02-deploy_beta_staging-caps-011",
+        "graph-scale-s02-deploy_beta_staging-caps-017",
+        "graph-scale-s02-deploy_beta_staging-caps-019",
+        "graph-scale-s01-deploy_beta_staging-caps-023",
+        "viz-demo-deploy_beta_staging-caps-023",
+        "graph-scale-s01-deploy_beta_staging-caps-022"
+      ],
+      "returned_titles": [
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release",
+        "Stabilize service beta staging release"
+      ],
+      "returned_edge_count": 4,
+      "suppressed_stale_nodes": [
+        "graph-scale-s02-deploy_beta_staging-caps-008",
+        "graph-scale-s02-deploy_beta_staging-caps-001"
+      ],
+      "suppressed_conflict_nodes": [
+        "graph-scale-s02-deploy_beta_staging-caps-018"
+      ],
+      "prompt_summary_head": "Subgraph theme: staging, cohort_01, release, round_3."
+    },
+    {
+      "scenario": "api_gateway_patch",
+      "query": "api gateway patch waf regression validation security",
+      "returned_capsules": [
+        "graph-scale-s02-api_gateway_patch-caps-027",
+        "graph-scale-s02-api_gateway_patch-caps-025",
+        "graph-scale-s02-api_gateway_patch-caps-020",
+        "graph-scale-s02-api_gateway_patch-caps-022",
+        "graph-scale-s02-api_gateway_patch-caps-011",
+        "graph-scale-s02-api_gateway_patch-caps-017",
+        "graph-scale-s02-api_gateway_patch-caps-015",
+        "graph-scale-s01-api_gateway_patch-caps-026",
+        "viz-demo-api_gateway_patch-caps-026",
+        "viz-demo-deploy_alpha_prod-caps-030",
+        "graph-scale-s01-deploy_alpha_prod-caps-025",
+        "viz-demo-deploy_alpha_prod-caps-025"
+      ],
+      "returned_titles": [
+        "Coordinate API gateway patch validation",
+        "Coordinate API gateway patch validation",
+        "Coordinate API gateway patch validation",
+        "Coordinate API gateway patch validation",
+        "Coordinate API gateway patch validation",
+        "Coordinate API gateway patch validation",
+        "Coordinate API gateway patch validation",
+        "Coordinate API gateway patch validation",
+        "Coordinate API gateway patch validation",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment",
+        "Stabilize service alpha production deployment"
+      ],
+      "returned_edge_count": 0,
+      "suppressed_stale_nodes": [
+        "graph-scale-s02-api_gateway_patch-caps-006",
+        "graph-scale-s02-api_gateway_patch-caps-001"
+      ],
+      "suppressed_conflict_nodes": [
+        "graph-scale-s02-api_gateway_patch-caps-016",
+        "graph-scale-s02-api_gateway_patch-caps-026",
+        "graph-scale-s02-api_gateway_patch-caps-021"
+      ],
+      "prompt_summary_head": "Subgraph theme: prod, cohort_01, security, patch."
+    },
+    {
+      "scenario": "vendor_orion_procurement",
+      "query": "vendor orion procurement certificate plant north sensor order",
+      "returned_capsules": [
+        "graph-scale-s02-vendor_orion_procurement-caps-012",
+        "graph-scale-s02-vendor_orion_procurement-caps-014",
+        "graph-scale-s02-vendor_orion_procurement-caps-024",
+        "graph-scale-s02-vendor_orion_procurement-caps-022",
+        "viz-demo-vendor_orion_procurement-caps-013",
+        "viz-demo-vendor_orion_procurement-caps-012",
+        "viz-demo-vendor_orion_procurement-caps-014",
+        "graph-scale-s01-vendor_orion_procurement-caps-023",
+        "graph-scale-s02-vendor_orion_procurement-caps-026",
+        "graph-scale-s02-vendor_orion_procurement-caps-021",
+        "graph-scale-s02-vendor_orion_procurement-caps-027",
+        "graph-scale-s02-vendor_orion_procurement-caps-025"
+      ],
+      "returned_titles": [
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals",
+        "Track Orion sensor procurement approvals"
+      ],
+      "returned_edge_count": 6,
+      "suppressed_stale_nodes": [
+        "viz-demo-vendor_orion_procurement-caps-005",
+        "viz-demo-vendor_orion_procurement-caps-002",
+        "viz-demo-vendor_orion_procurement-caps-001",
+        "viz-demo-vendor_orion_procurement-caps-010",
+        "viz-demo-vendor_orion_procurement-caps-008",
+        "viz-demo-vendor_orion_procurement-caps-007",
+        "viz-demo-vendor_orion_procurement-caps-009",
+        "viz-demo-vendor_orion_procurement-caps-006",
+        "viz-demo-vendor_orion_procurement-caps-003",
+        "viz-demo-vendor_orion_procurement-caps-004",
+        "graph-scale-s01-vendor_orion_procurement-caps-003",
+        "graph-scale-s01-vendor_orion_procurement-caps-005",
+        "graph-scale-s01-vendor_orion_procurement-caps-010",
+        "graph-scale-s01-vendor_orion_procurement-caps-008",
+        "graph-scale-s01-compliance_audit_eu-caps-006"
+      ],
+      "suppressed_conflict_nodes": [
+        "graph-scale-s02-vendor_orion_procurement-caps-013",
+        "viz-demo-vendor_orion_procurement-caps-018",
+        "viz-demo-vendor_orion_procurement-caps-020",
+        "viz-demo-vendor_orion_procurement-caps-015",
+        "graph-scale-s02-vendor_orion_procurement-caps-023"
+      ],
+      "prompt_summary_head": "Subgraph theme: procurement, vendor, plant, cohort_01."
+    },
+    {
+      "scenario": "vendor_zephyr_invoice",
+      "query": "zephyr invoice reconciliation ledger duplicate charge finance",
+      "returned_capsules": [
+        "graph-scale-s02-vendor_zephyr_invoice-caps-021",
+        "graph-scale-s02-vendor_zephyr_invoice-caps-026",
+        "graph-scale-s02-vendor_zephyr_invoice-caps-022",
+        "graph-scale-s02-vendor_zephyr_invoice-caps-020",
+        "graph-scale-s02-vendor_zephyr_invoice-caps-027",
+        "graph-scale-s02-vendor_zephyr_invoice-caps-025",
+        "graph-scale-s02-vendor_zephyr_invoice-caps-016",
+        "graph-scale-s02-vendor_zephyr_invoice-caps-012",
+        "graph-scale-s01-vendor_zephyr_invoice-caps-027",
+        "graph-scale-s01-vendor_zephyr_invoice-caps-022",
+        "graph-scale-s01-vendor_zephyr_invoice-caps-030",
+        "graph-scale-s01-vendor_zephyr_invoice-caps-024"
+      ],
+      "returned_titles": [
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation",
+        "Resolve Zephyr invoice reconciliation"
+      ],
+      "returned_edge_count": 4,
+      "suppressed_stale_nodes": [
+        "graph-scale-s02-vendor_zephyr_invoice-caps-010",
+        "graph-scale-s02-vendor_zephyr_invoice-caps-006",
+        "graph-scale-s02-vendor_zephyr_invoice-caps-001"
+      ],
+      "suppressed_conflict_nodes": [
+        "graph-scale-s02-vendor_zephyr_invoice-caps-011"
+      ],
+      "prompt_summary_head": "Subgraph theme: cohort_01, finance, invoice, q2_close."
+    },
+    {
+      "scenario": "customer_titan_support",
+      "query": "customer titan p1 escalation sla breach support workaround",
+      "returned_capsules": [
+        "graph-scale-s02-customer_titan_support-caps-021",
+        "graph-scale-s02-customer_titan_support-caps-022",
+        "graph-scale-s02-customer_titan_support-caps-020",
+        "graph-scale-s02-customer_titan_support-caps-023",
+        "graph-scale-s02-customer_titan_support-caps-024",
+        "graph-scale-s02-customer_titan_support-caps-012",
+        "graph-scale-s02-customer_titan_support-caps-013",
+        "graph-scale-s01-customer_titan_support-caps-030",
+        "graph-scale-s01-customer_titan_support-caps-023",
+        "graph-scale-s01-customer_titan_support-caps-029",
+        "graph-scale-s01-customer_titan_support-caps-027",
+        "graph-scale-s01-customer_titan_support-caps-028"
+      ],
+      "returned_titles": [
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity",
+        "Maintain Titan P1 support continuity"
+      ],
+      "returned_edge_count": 4,
+      "suppressed_stale_nodes": [
+        "graph-scale-s02-customer_titan_support-caps-010",
+        "graph-scale-s02-customer_titan_support-caps-001"
+      ],
+      "suppressed_conflict_nodes": [
+        "graph-scale-s02-customer_titan_support-caps-011"
+      ],
+      "prompt_summary_head": "Subgraph theme: cohort_01, support, incident, region_east."
+    }
+  ]
+}

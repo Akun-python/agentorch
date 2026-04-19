@@ -13,6 +13,7 @@ from agentorch.observability import SQLiteEventStore
 from agentorch.runtime import Agent, Runtime
 from agentorch.sandbox import SandboxManager, SandboxPolicy
 from agentorch.security import PayloadBudgetConfig, RedactionConfig
+from agentorch.tools import ToolRegistry, create_python_interpreter_tool
 
 
 class DummyModel(BaseModelAdapter):
@@ -80,6 +81,29 @@ def test_runtime_and_agent_aclose_close_model() -> None:
 
     assert model.closed is True
     assert runtime._closed is True
+
+
+def test_runtime_aclose_closes_persistent_python_sessions(tmp_path: Path) -> None:
+    asyncio.run(_test_runtime_aclose_closes_persistent_python_sessions(tmp_path))
+
+
+async def _test_runtime_aclose_closes_persistent_python_sessions(tmp_path: Path) -> None:
+    sandbox = SandboxManager(
+        policy=SandboxPolicy(
+            allowed_paths=[tmp_path],
+            command_allowlist=["python"],
+            timeout=10.0,
+        )
+    )
+    tools = ToolRegistry.from_tools(create_python_interpreter_tool(sandbox))
+    runtime = Runtime(model=DummyModel(), tools=tools, sandbox=sandbox, config=RuntimeConfig())
+
+    await tools.execute("python_interpreter", {"create_session": True, "workdir": str(tmp_path)})
+    assert len(sandbox.list_sessions()) == 1
+
+    await runtime.aclose()
+
+    assert len(sandbox.list_sessions()) == 0
 
 
 def test_sandbox_blocks_shell_by_default(tmp_path: Path) -> None:

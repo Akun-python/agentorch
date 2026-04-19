@@ -72,19 +72,36 @@ Python 3.10+
 
 ## 环境变量
 
-`agentorch` 会自动读取项目根目录的 `.env` 文件，并兼容两套变量名：
+`agentorch` 现在遵循更标准的 Python 库配置边界：
+
+- 需要完全可控时，直接在代码里显式传入 `model`、`api_key`、`base_url`。
+- 需要部署期注入配置时，使用环境变量。
+- `.env` 加载是显式启用的：要么自己调用 `initialize_environment(...)`，要么在导入 `agentorch` 之前设置 `AGENTORCH_AUTO_LOAD_ENV=1`。
+
+核心环境变量契约：
 
 - `OPENAI_API_KEY` / `OPENAI_BASE_URL`
-- `API_KEY` / `BASE_URL`
+- `OPENAI_VISION_MODEL`
+- `OPENAI_EMBEDDING_API_KEY` / `OPENAI_EMBEDDING_BASE_URL` / `OPENAI_EMBEDDING_MODEL` / `OPENAI_EMBEDDING_DIMENSIONS`
+- `OPENAI_TTS_API_KEY` / `OPENAI_TTS_BASE_URL` / `OPENAI_TTS_MODEL` / `OPENAI_TTS_VOICE` / `OPENAI_TTS_FORMAT` / `OPENAI_TTS_SPEED`
+- `OPENAI_IMAGE_API_KEY` / `OPENAI_IMAGE_BASE_URL` / `OPENAI_IMAGE_EXPLICIT_URL` / `OPENAI_IMAGE_MODEL`
+- `OPENAI_IMAGE_ASPECT_RATIO` / `OPENAI_IMAGE_SIZE` / `OPENAI_IMAGE_TIMEOUT`
+- `OPENAI_IMAGE_FALLBACK_MODELS` / `OPENAI_IMAGE_RETRY_WITHOUT_PROXY` / `OPENAI_IMAGE_DISABLE_ENV_PROXY`
+- `OPENAI_VIDEO_API_KEY` / `OPENAI_VIDEO_BASE_URL` / `OPENAI_VIDEO_MODEL` / `OPENAI_VIDEO_DISABLE_ENV_PROXY`
+
+核心库只保留协议级默认值，例如 `/chat/completions`、`/embeddings`、`/audio/speech`、`mp3` 和 `speed=1.0`。它不会替用户默认选择任何供应商网关、模型或密钥。
 
 推荐配置：
 
 ```env
 OPENAI_API_KEY=sk-xxxx
 OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_TTS_MODEL=your-tts-model
+OPENAI_TTS_VOICE=your-voice
 ```
 
-如果你使用 OpenAI-compatible gateway，像 `.../chat/completions` 这样的完整 URL 会自动被归一化成 `/v1` base URL。
+如果你使用 OpenAI-compatible gateway，像 `.../chat/completions`、`.../embeddings`、`.../audio/speech` 这样的完整 URL 会自动被归一化成对应的 provider base URL。
 
 ## 快速开始
 

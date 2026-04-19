@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -34,7 +34,9 @@ class ToolRegistry:
         include_execution: bool = True,
         include_git: bool = True,
         include_web: bool = False,
+        include_media: bool = False,
         brave_api_key: str | None = None,
+        model: Any | None = None,
     ) -> "ToolRegistry":
         from .bundles import register_default_agent_tools
 
@@ -47,7 +49,9 @@ class ToolRegistry:
             include_execution=include_execution,
             include_git=include_git,
             include_web=include_web,
+            include_media=include_media,
             brave_api_key=brave_api_key,
+            model=model,
         )
         return registry
 

@@ -32,7 +32,28 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
+[project.optional-dependencies]
+neo4j = [
+  "neo4j>=5,<6"
+]
+
 [project.urls]
 Homepage = "https://github.com/Akun-python/agentorch"
 Repository = "https://github.com/Akun-python/agentorch"
 Issues = "https://github.com/Akun-python/agentorch/issues"
+
+[tool.pytest.ini_options]
+norecursedirs = [
+  ".git",
+  ".playwright-cli",
+  ".agentorch_examples",
+  "artifacts",
+  "generated",
+  "tmp",
+  "codexharness/worktrees",
+  "__pycache__",
+]
+testpaths = [
+  "agentorch/tests",
+  "tests",
+]

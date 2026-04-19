@@ -33,9 +33,10 @@ class AgentSpec(BaseModel):
         tools: list[str] | None = None,
         knowledge_scopes: list[str] | None = None,
         default_rag_strategy: Any | None = None,
-        default_context_strategy: Any | None = None,
-        default_long_horizon_strategy: Any | None = None,
-        default_cooperation_strategy: Any | None = None,
+        default_context_policy: Any | None = None,
+        default_state_policy: Any | None = None,
+        default_coordination_policy: Any | None = None,
+        default_memory_policy: Any | None = None,
         preferred_reasoning_kind: str | None = None,
         **kwargs: Any,
     ) -> "AgentSpec":
@@ -48,18 +49,22 @@ class AgentSpec(BaseModel):
             from agentorch.knowledge import RagStrategyConfig
 
             profile = profile.model_copy(update={"default_rag_strategy": RagStrategyConfig.from_any(default_rag_strategy)})
-        if default_context_strategy is not None:
-            from agentorch.strategies import ContextStrategyConfig
+        if default_context_policy is not None:
+            from agentorch.strategies import ContextPolicy
 
-            profile = profile.model_copy(update={"default_context_strategy": ContextStrategyConfig.from_any(default_context_strategy)})
-        if default_long_horizon_strategy is not None:
-            from agentorch.strategies import LongHorizonStrategyConfig
+            profile = profile.model_copy(update={"default_context_policy": ContextPolicy.from_any(default_context_policy)})
+        if default_state_policy is not None:
+            from agentorch.strategies import StatePolicy
 
-            profile = profile.model_copy(update={"default_long_horizon_strategy": LongHorizonStrategyConfig.from_any(default_long_horizon_strategy)})
-        if default_cooperation_strategy is not None:
-            from agentorch.strategies import CooperationStrategyConfig
+            profile = profile.model_copy(update={"default_state_policy": StatePolicy.from_any(default_state_policy)})
+        if default_coordination_policy is not None:
+            from agentorch.strategies import CoordinationPolicy
 
-            profile = profile.model_copy(update={"default_cooperation_strategy": CooperationStrategyConfig.from_any(default_cooperation_strategy)})
+            profile = profile.model_copy(update={"default_coordination_policy": CoordinationPolicy.from_any(default_coordination_policy)})
+        if default_memory_policy is not None:
+            from agentorch.strategies import MemoryPolicy
+
+            profile = profile.model_copy(update={"default_memory_policy": MemoryPolicy.from_any(default_memory_policy)})
         if preferred_reasoning_kind is not None:
             profile = profile.model_copy(update={"preferred_reasoning_kind": preferred_reasoning_kind})
         return cls(

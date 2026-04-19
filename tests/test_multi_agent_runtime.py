@@ -12,7 +12,7 @@ from agentorch.observability import EventBus, TaskGraphSnapshot, Tracer
 from agentorch.runtime import Agent, Runtime
 from agentorch.config import RuntimeConfig
 from agentorch.knowledge import BaseRetriever, DocumentChunk, IndexedKnowledgeBase, RetrievedChunk, RetrievalQuery, RetrievalMode
-from agentorch.strategies import CooperationStrategyConfig
+from agentorch.strategies import ContextPolicy, CoordinationPolicy
 from agentorch.workflow import Edge, Node, Workflow
 
 
@@ -293,11 +293,12 @@ async def _test_runtime_retrieval_report_enters_prompt_and_workflow_outputs_repo
     runtime = Runtime(
         model=SystemPromptEchoModel(),
         knowledge_base=kb,
-        config=RuntimeConfig(
+        config=RuntimeConfig.agent(
             enable_retrieval=True,
             retrieval_mode=RetrievalMode.INLINE,
             retrieval_allowed_file_types=[".md"],
             max_retrieved_chunks=4,
+            context_policy=ContextPolicy.evidence_friendly(),
         ),
     )
     agent = Agent(runtime=runtime)
@@ -359,11 +360,11 @@ def test_supervisor_plan_and_budget_object_shapes():
     assert plan.invocations[0].task.parent_task_id == "t-1"
 
 
-def test_supervisor_propagates_selected_cooperation_strategy_metadata():
-    asyncio.run(_test_supervisor_propagates_selected_cooperation_strategy_metadata())
+def test_supervisor_propagates_selected_coordination_policy_metadata():
+    asyncio.run(_test_supervisor_propagates_selected_coordination_policy_metadata())
 
 
-async def _test_supervisor_propagates_selected_cooperation_strategy_metadata():
+async def _test_supervisor_propagates_selected_coordination_policy_metadata():
     registry = AgentRegistry()
     specialist = Agent(runtime=Runtime(model=EchoModel()))
     registry.register(
@@ -381,15 +382,14 @@ async def _test_supervisor_propagates_selected_cooperation_strategy_metadata():
         agent_registry=registry,
         supervisor=Supervisor(registry=registry),
         config=RuntimeConfig(
-            orchestration_profile="deep_research",
             default_knowledge_scope=["planning"],
-            cooperation_strategy=CooperationStrategyConfig.distributed(),
+            coordination_policy=CoordinationPolicy.distributed(),
         ),
     )
     result = await Agent(runtime=runtime).run("plan the project", thread_id="distributed-cooperation")
     shared_notes = await runtime.memory.get_shared_notes("distributed-cooperation")
     assert "[planner] handled: plan the project" in result.output_text
     assert any(
-        note.metadata.get("cooperation_strategy", {}).get("topology") == "distributed_herd"
+        note.metadata.get("coordination_policy", {}).get("route_mode") == "distributed"
         for note in shared_notes
-    ) or runtime.config.cooperation_strategy.topology == "distributed_herd"
+    ) or runtime.config.coordination_policy.route_mode == "distributed"

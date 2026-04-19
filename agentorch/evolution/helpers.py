@@ -5,7 +5,9 @@ from typing import Any
 from agentorch.config import RuntimeConfig
 from agentorch.knowledge import RagStrategyConfig
 from agentorch.reasoning import ReasoningStrategyConfig
+from agentorch.workflow import Workflow
 
+from .templates import resolve_evolution_workflow_template
 from .types import Genome
 
 
@@ -44,9 +46,23 @@ def rag_strategy_from_genome(genome: Genome) -> RagStrategyConfig:
 
 def runtime_config_from_genome(genome: Genome, *, base: RuntimeConfig | None = None) -> RuntimeConfig:
     config = base.model_copy(deep=True) if base is not None else RuntimeConfig()
+    config.reasoning_strategy = reasoning_strategy_from_genome(genome)
     config.rag_strategy = rag_strategy_from_genome(genome)
     config.enable_retrieval = config.rag_strategy.mode != "off"
     return config
+
+
+def workflow_from_genome(
+    genome: Genome,
+    *,
+    base: Workflow | None = None,
+    templates: dict[str, Workflow | Any] | None = None,
+) -> Workflow | None:
+    workflow = dict(genome.genes.get("workflow", {}))
+    template = workflow.pop("template", None)
+    if template is None:
+        return base.model_copy(deep=True) if base is not None else None
+    return resolve_evolution_workflow_template(template, templates=templates, **workflow)
 
 
 def candidate_from_genome(genome: Genome) -> dict[str, Any]:

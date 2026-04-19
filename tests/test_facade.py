@@ -126,22 +126,28 @@ def test_create_agent_profile_and_runtime_config_precedence():
 
     research_blueprint = agent.export_blueprint()
     coding_blueprint = coding_agent.export_blueprint()
+    research_policies = research_blueprint["runtime"]["resolved_policies"]
+    coding_policies = coding_blueprint["runtime"]["resolved_policies"]
 
     assert research_blueprint["profile"] == "research"
     assert research_blueprint["runtime"]["config"]["system_prompt"] == "Pinned by runtime config."
     assert research_blueprint["resolved_defaults"]["enable_rag"] is True
-    assert research_blueprint["runtime"]["resolved_strategies"]["context"]["kind"] == "compact"
-    assert research_blueprint["runtime"]["resolved_strategies"]["context"]["include_retrieval_evidence"] is True
+    assert research_policies["context"]["selection_mode"] == "hybrid"
+    assert research_policies["context"]["char_budget"] == 22000
+    assert research_policies["context"]["sources"]["retrieval_evidence"]["enabled"] is True
+    assert research_policies["state"]["retention_mode"] == "state_plus_memory"
+    assert research_policies["coordination"]["route_mode"] == "hybrid"
+    assert research_policies["memory"]["recall_mode"] == "hybrid"
     assert coding_blueprint["resolved_defaults"]["tool_bundles"]["include_git"] is True
     assert "replace_in_file" in coding_blueprint["runtime"]["tools"]
-    assert coding_blueprint["runtime"]["config"]["orchestration_profile"] == "coding_agent"
-    assert coding_blueprint["runtime"]["resolved_strategies"]["context"]["kind"] == "compact"
-    assert coding_blueprint["runtime"]["resolved_strategies"]["context"]["tool_result_policy"] == "truncate"
-    assert coding_blueprint["runtime"]["resolved_strategies"]["context"]["tool_result_max_chars"] == 320
-    assert coding_blueprint["runtime"]["resolved_strategies"]["context"]["budget_aware_compaction"] is True
-    assert coding_blueprint["runtime"]["resolved_strategies"]["context"]["max_conversation_messages"] == 4
-    assert coding_blueprint["runtime"]["resolved_strategies"]["long_horizon"]["kind"] == "state_centric"
-    assert coding_blueprint["runtime"]["resolved_strategies"]["memory_governance"]["kind"] == "mgcm"
+    assert coding_blueprint["runtime"]["config"]["context_policy"]["char_budget"] == 12000
+    assert coding_policies["context"]["selection_mode"] == "rule"
+    assert coding_policies["context"]["tool_observation_mode"] == "summary"
+    assert coding_policies["context"]["overflow_action"] == "compress"
+    assert coding_policies["context"]["conversation_window"] == 6
+    assert coding_policies["state"]["retention_mode"] == "window_plus_summary"
+    assert coding_policies["coordination"]["route_mode"] == "guided"
+    assert coding_policies["memory"]["recall_mode"] == "scene"
 
 
 def test_create_multi_agent_accepts_inline_blueprints_and_existing_agents():

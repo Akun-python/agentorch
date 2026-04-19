@@ -53,6 +53,9 @@ class EvolutionManager:
     async def build_candidate(self, genome: Genome) -> Any:
         return await self._resolve(self.builder(genome))
 
+    async def build_best_candidate(self, result: EvolutionResult) -> Any:
+        return await self.build_candidate(result.best_genome)
+
     async def _resolve(self, value: Any) -> Any:
         if inspect.isawaitable(value):
             return await value

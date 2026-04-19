@@ -9,9 +9,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from agentorch import Agent, IndexedKnowledgeBase, SandboxManager, ToolRegistry
 from agentorch.config import RuntimeConfig
-from agentorch.config.settings import initialize_environment
 from agentorch.knowledge import Document, RagStrategyConfig
 from agentorch.sandbox import SandboxPolicy
+from agentorch.strategies import ContextPolicy
 
 
 PROMPT = (
@@ -21,8 +21,6 @@ PROMPT = (
 
 
 async def main() -> None:
-    initialize_environment(PROJECT_ROOT / ".env")
-
     sandbox = SandboxManager(
         policy=SandboxPolicy(
             allowed_paths=[Path.cwd()],
@@ -53,7 +51,7 @@ async def main() -> None:
 
     runtime_config = RuntimeConfig.agent(
         reasoning="react",
-        context_strategy="compact",
+        context_policy=ContextPolicy.lean(),
         rag=RagStrategyConfig.for_deliberative(
             knowledge_scope=["overview"],
             max_steps=1,

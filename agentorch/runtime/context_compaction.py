@@ -6,7 +6,7 @@ import re
 from typing import Any, Awaitable, Callable
 
 from agentorch.core import CompactionDecision, ContextSegment, Message, PromptContext, SalienceReport, SegmentScore
-from agentorch.strategies import ContextStrategyConfig, LongHorizonStrategyConfig
+from agentorch.strategies import ContextPolicy, StatePolicy
 
 
 def trim_message_content(content: str, *, max_chars: int) -> str:
@@ -74,22 +74,22 @@ def estimate_prompt_context_budget(prompt_context: PromptContext, *, truncated_s
 def apply_static_context_filters(
     prompt_context: PromptContext,
     *,
-    context_strategy: ContextStrategyConfig,
-    long_horizon_strategy: LongHorizonStrategyConfig,
+    context_policy: ContextPolicy,
+    state_policy: StatePolicy,
 ) -> tuple[PromptContext, list[str]]:
-    conversation = list(prompt_context.conversation)[-min(context_strategy.max_conversation_messages, long_horizon_strategy.max_prompt_messages) :]
+    conversation = list(prompt_context.conversation)[-min(context_policy.max_conversation_messages, state_policy.max_prompt_messages) :]
     truncated_sections: list[str] = []
     if len(prompt_context.conversation) > len(conversation):
         truncated_sections.append("conversation")
-    if context_strategy.tool_result_policy in {"summary", "truncate"}:
+    if context_policy.tool_result_policy in {"summary", "truncate"}:
         compressed: list[Message] = []
         for message in conversation:
             if message.role == "tool" and message.content:
-                compressed.append(message.model_copy(update={"content": trim_message_content(message.content, max_chars=context_strategy.tool_result_max_chars)}))
+                compressed.append(message.model_copy(update={"content": trim_message_content(message.content, max_chars=context_policy.tool_result_max_chars)}))
             else:
                 compressed.append(message)
         conversation = compressed
-    elif context_strategy.tool_result_policy == "off":
+    elif context_policy.tool_result_policy == "off":
         filtered = [message for message in conversation if message.role != "tool"]
         if len(filtered) != len(conversation):
             truncated_sections.append("tool_results")
@@ -97,35 +97,48 @@ def apply_static_context_filters(
     updated = prompt_context.model_copy(
         update={
             "conversation": conversation,
-            "memory_summary": prompt_context.memory_summary if context_strategy.include_memory_summary else None,
-            "retrieval_context": prompt_context.retrieval_context if context_strategy.include_retrieval_summary else None,
-            "retrieved_evidence": (list(prompt_context.retrieved_evidence[: context_strategy.retrieval_evidence_max_items]) if context_strategy.include_retrieval_evidence else []),
-            "citations": (list(prompt_context.citations[: context_strategy.citation_max_items]) if context_strategy.include_retrieval_citations else []),
-            "retrieval_report": prompt_context.retrieval_report if context_strategy.include_retrieval_report else None,
-            "retrieval_coverage": prompt_context.retrieval_coverage if context_strategy.include_retrieval_report else None,
-            "retrieval_plan": prompt_context.retrieval_plan if context_strategy.include_retrieval_plan else None,
-            "tool_descriptions": prompt_context.tool_descriptions if context_strategy.include_tool_descriptions else [],
-            "skill_instructions": prompt_context.skill_instructions if context_strategy.include_skill_instructions else [],
-            "task_packet": prompt_context.task_packet if context_strategy.include_task_packet else None,
-            "delegation_context": prompt_context.delegation_context if context_strategy.include_delegation_context else {},
+            "memory_summary": prompt_context.memory_summary if context_policy.include_memory_summary else None,
+            "retrieval_context": prompt_context.retrieval_context if context_policy.include_retrieval_summary else None,
+            "retrieved_evidence": (list(prompt_context.retrieved_evidence[: context_policy.retrieval_evidence_max_items]) if context_policy.include_retrieval_evidence else []),
+            "citations": (list(prompt_context.citations[: context_policy.citation_max_items]) if context_policy.include_retrieval_citations else []),
+            "retrieval_report": prompt_context.retrieval_report if context_policy.include_retrieval_report else None,
+            "retrieval_coverage": prompt_context.retrieval_coverage if context_policy.include_retrieval_report else None,
+            "retrieval_plan": prompt_context.retrieval_plan if context_policy.include_retrieval_plan else None,
+            "tool_descriptions": prompt_context.tool_descriptions if context_policy.include_tool_descriptions else [],
+            "skill_instructions": prompt_context.skill_instructions if context_policy.include_skill_instructions else [],
+            "task_packet": prompt_context.task_packet if context_policy.include_task_packet else None,
+            "delegation_context": prompt_context.delegation_context if context_policy.include_delegation_context else {},
+            "collective_memory_context": prompt_context.collective_memory_context if context_policy.include_collective_memory else None,
+            "collective_memory_evidence": (
+                list(prompt_context.collective_memory_evidence[: context_policy.collective_memory_max_items])
+                if context_policy.include_collective_memory
+                else []
+            ),
+            "collective_memory_citations": (
+                list(prompt_context.collective_memory_citations[: context_policy.collective_memory_max_items])
+                if context_policy.include_collective_memory
+                else []
+            ),
         }
     )
-    if prompt_context.retrieved_evidence and not context_strategy.include_retrieval_evidence:
+    if prompt_context.retrieved_evidence and not context_policy.include_retrieval_evidence:
         truncated_sections.append("retrieval_evidence")
     if prompt_context.citations and len(updated.citations) < len(prompt_context.citations):
         truncated_sections.append("citations")
-    if prompt_context.retrieval_report and not context_strategy.include_retrieval_report:
+    if prompt_context.retrieval_report and not context_policy.include_retrieval_report:
         truncated_sections.append("retrieval_report")
-    if prompt_context.retrieval_plan and not context_strategy.include_retrieval_plan:
+    if prompt_context.retrieval_plan and not context_policy.include_retrieval_plan:
         truncated_sections.append("retrieval_plan")
-    if prompt_context.tool_descriptions and not context_strategy.include_tool_descriptions:
+    if prompt_context.tool_descriptions and not context_policy.include_tool_descriptions:
         truncated_sections.append("tool_descriptions")
-    if prompt_context.skill_instructions and not context_strategy.include_skill_instructions:
+    if prompt_context.skill_instructions and not context_policy.include_skill_instructions:
         truncated_sections.append("skill_instructions")
-    if prompt_context.task_packet and not context_strategy.include_task_packet:
+    if prompt_context.task_packet and not context_policy.include_task_packet:
         truncated_sections.append("task_packet")
-    if prompt_context.delegation_context and not context_strategy.include_delegation_context:
+    if prompt_context.delegation_context and not context_policy.include_delegation_context:
         truncated_sections.append("delegation_context")
+    if prompt_context.collective_memory_evidence and not context_policy.include_collective_memory:
+        truncated_sections.append("collective_memory")
     return updated, truncated_sections
 
 
@@ -181,7 +194,7 @@ def build_handoff_capsule(task_packet: dict[str, Any] | None, handoff: dict[str,
     }
 
 
-def resolve_attention_profile(context_strategy: ContextStrategyConfig, *, stage: str, agent_role: str | None) -> dict[str, float]:
+def resolve_attention_profile(context_policy: ContextPolicy, *, stage: str, agent_role: str | None) -> dict[str, float]:
     defaults = {"retrieval_evidence": 1.15, "citation": 0.65, "retrieval_report": 0.7, "skill": 0.95, "collective_memory": 0.9, "delegation_context": 0.92, "conversation": 0.86, "tool_observation": 0.88, "task_packet": 1.0}
     if stage.startswith("execute"):
         stage_profile = {"tool_observation": 1.2, "retrieval_evidence": 1.1, "delegation_context": 1.0, "skill": 0.82}
@@ -196,10 +209,10 @@ def resolve_attention_profile(context_strategy: ContextStrategyConfig, *, stage:
         role_profile = {"retrieval_report": 1.08, "conversation": 0.9}
     elif agent_role == "supervisor":
         role_profile = {"delegation_context": 1.18, "task_packet": 1.12}
-    configured = dict(context_strategy.stage_attention_profiles.get("default", {}))
-    configured.update(context_strategy.stage_attention_profiles.get(stage, {}))
+    configured = dict(context_policy.stage_attention_profiles.get("default", {}))
+    configured.update(context_policy.stage_attention_profiles.get(stage, {}))
     if agent_role:
-        configured.update(context_strategy.stage_attention_profiles.get(f"agent:{agent_role}", {}))
+        configured.update(context_policy.stage_attention_profiles.get(f"agent:{agent_role}", {}))
     resolved = dict(defaults)
     for overlay in (stage_profile, role_profile, configured):
         resolved.update(overlay)
@@ -267,19 +280,19 @@ def select_segment_representation(segment: ContextSegment, *, compact: bool) -> 
 async def apply_budget_aware_compaction(
     prompt_context: PromptContext,
     *,
-    context_strategy: ContextStrategyConfig,
+    context_policy: ContextPolicy,
     stage: str,
     selected_skill_routes: list[dict[str, Any]],
     rerank_callback: Callable[[list[ContextSegment], int], Awaitable[dict[str, tuple[float, str]]]],
 ) -> tuple[PromptContext, dict[str, Any]]:
     before_budget = estimate_prompt_context_budget(prompt_context)
-    char_budget = context_strategy.segment_char_budget or context_strategy.prompt_char_budget
+    char_budget = context_policy.segment_char_budget or context_policy.prompt_char_budget
     if before_budget["estimated_total_chars"] <= char_budget:
         before_budget.update({"estimated_total_chars_before": before_budget["estimated_total_chars"], "estimated_total_chars_after": before_budget["estimated_total_chars"], "selected_segment_count": 0, "dropped_segment_count": 0, "segment_scores": [], "inhibition_events": [], "compression_reason": "within_budget", "compaction_applied": False})
         return prompt_context, before_budget
 
     segments = segment_prompt_context(prompt_context, user_input=prompt_context.user_input, thread_id=prompt_context.prompt_variables.get("thread_id", ""), agent_role=prompt_context.agent_role, stage=stage, selected_skill_routes=selected_skill_routes)
-    attention_profile = resolve_attention_profile(context_strategy, stage=stage, agent_role=prompt_context.agent_role)
+    attention_profile = resolve_attention_profile(context_policy, stage=stage, agent_role=prompt_context.agent_role)
     counts_by_group: dict[str, int] = {}
     for segment in segments:
         counts_by_group[segment.redundancy_group] = counts_by_group.get(segment.redundancy_group, 0) + 1
@@ -289,9 +302,9 @@ async def apply_budget_aware_compaction(
         handoff_priority = 0.2 if segment.segment_type in {"delegation_context", "task_packet"} else 0.0
         rule_score = (segment.task_relevance * 4.0 + segment.reliability * 2.5 + segment.recency * 1.5 + segment.novelty + handoff_priority) * attention_profile.get(segment.segment_type, 1.0)
         scores[segment.segment_id] = SegmentScore(segment_id=segment.segment_id, rule_score=rule_score, redundancy_penalty=redundancy_penalty, salience_score=rule_score - redundancy_penalty, keep_reason="rule_score", score_breakdown={"relevance": segment.task_relevance, "reliability": segment.reliability, "recency": segment.recency, "attention_weight": attention_profile.get(segment.segment_type, 1.0), "handoff_priority": handoff_priority})
-    if context_strategy.salience_mode == "hybrid":
+    if context_policy.salience_mode == "hybrid":
         ranked_candidates = sorted(segments, key=lambda item: (-scores[item.segment_id].salience_score, _segment_type_priority(item.segment_type), item.segment_id))
-        reranked = await rerank_callback(ranked_candidates[: context_strategy.salience_rerank_top_k], context_strategy.salience_rerank_top_k)
+        reranked = await rerank_callback(ranked_candidates[: context_policy.salience_rerank_top_k], context_policy.salience_rerank_top_k)
         for segment_id, (adjustment, reason) in reranked.items():
             score = scores.get(segment_id)
             if score is None:
@@ -305,7 +318,7 @@ async def apply_budget_aware_compaction(
     dropped_segments: list[ContextSegment] = []
     inhibition_events: list[dict[str, Any]] = []
     decisions: list[CompactionDecision] = []
-    min_keep = min(max(1, context_strategy.segment_min_keep), len(ranked_segments))
+    min_keep = min(max(1, context_policy.segment_min_keep), len(ranked_segments))
     selected_group: dict[str, str] = {}
     selected_chars = before_budget["estimated_total_chars"] - (before_budget["conversation_chars"] + before_budget["evidence_chars"] + before_budget["citation_chars"] + before_budget["retrieval_report_chars"] + before_budget["task_packet_chars"] + before_budget["delegation_context_chars"] + before_budget["collective_memory_evidence_chars"] + before_budget["skill_instruction_chars"])
     for segment in ranked_segments:
@@ -392,6 +405,6 @@ async def apply_budget_aware_compaction(
         }
     )
     after_budget = estimate_prompt_context_budget(rebuilt, truncated_sections=sorted(truncated_sections))
-    report = SalienceReport(mode=context_strategy.salience_mode, attention_profile=attention_profile, selected_segments=selected_segments, dropped_segments=dropped_segments, segment_scores=list(scores.values()), decisions=decisions, inhibition_events=inhibition_events, compression_reason="over_budget", estimated_total_chars_before=before_budget["estimated_total_chars"], estimated_total_chars_after=after_budget["estimated_total_chars"])
+    report = SalienceReport(mode=context_policy.salience_mode, attention_profile=attention_profile, selected_segments=selected_segments, dropped_segments=dropped_segments, segment_scores=list(scores.values()), decisions=decisions, inhibition_events=inhibition_events, compression_reason="over_budget", estimated_total_chars_before=before_budget["estimated_total_chars"], estimated_total_chars_after=after_budget["estimated_total_chars"])
     after_budget.update({"estimated_total_chars_before": before_budget["estimated_total_chars"], "estimated_total_chars_after": after_budget["estimated_total_chars"], "selected_segment_count": len(selected_segments), "dropped_segment_count": len(dropped_segments), "segment_scores": [item.model_dump() for item in scores.values()], "inhibition_events": inhibition_events, "compression_reason": "over_budget", "compaction_applied": True, "selected_context_segments": [{"segment_id": item.segment_id, "segment_type": item.segment_type, "char_count": item.char_count} for item in selected_segments], "dropped_context_segments": [{"segment_id": item.segment_id, "segment_type": item.segment_type, "char_count": item.char_count} for item in dropped_segments], "salience_report": report.model_dump(), "attention_profile": attention_profile, "compaction_trace": [item.model_dump() for item in decisions]})
     return rebuilt, after_budget

@@ -23,7 +23,7 @@ from agentorch.core import Message, ModelRequest, ModelResponse, ToolCall, Usage
 from agentorch.knowledge import Document
 from agentorch.models.base import BaseModelAdapter
 from agentorch.sandbox import SandboxManager, SandboxPolicy
-from agentorch.strategies import CooperationStrategyConfig
+from agentorch.strategies import ContextPolicy, CoordinationPolicy
 from agentorch.tools import register_default_agent_tools
 from agentorch.workflow import Edge, Node, Workflow
 
@@ -135,6 +135,11 @@ class DeepResearchEchoModel(BaseModelAdapter):
         )
 
 
+def _tool_visible_context_policy() -> ContextPolicy:
+    base_sources = ContextPolicy.default().sources
+    return ContextPolicy.default(sources={**base_sources, "tool_descriptions": True})
+
+
 def _build_skill_registry(tmp_path: Path) -> SkillRegistry:
     skill_dir = tmp_path / "finance-skill"
     skill_dir.mkdir()
@@ -169,6 +174,7 @@ async def _test_skill_loading_prompt_injection_and_tool_orchestration(tmp_path: 
         tools=tools,
         skills=skills,
         policy=create_reasoning_framework("react"),
+        config=RuntimeConfig.agent(context_policy=_tool_visible_context_policy()),
     )
 
     result = await Agent(runtime=runtime).run("Please help with this finance total.", thread_id="skill-tool-thread")
@@ -192,6 +198,7 @@ async def _test_supervisor_delegation_preserves_skill_and_tool_orchestration(tmp
         tools=specialist_tools,
         skills=_build_skill_registry(tmp_path),
         policy=create_reasoning_framework("react"),
+        config=RuntimeConfig.agent(context_policy=_tool_visible_context_policy()),
     )
     specialist = Agent(runtime=specialist_runtime)
 
@@ -336,12 +343,10 @@ async def _test_deep_research_agent_accepts_web_search_config_and_custom_tools()
     assert "custom_signal" in agent.runtime.tools
 
 
-def test_deep_research_config_exposes_strategy_overrides():
+def test_deep_research_config_exposes_policy_overrides():
     config = DeepResearchAgentConfig(
-        orchestration_profile="deep_research",
-        cooperation_strategy=CooperationStrategyConfig.distributed(),
+        coordination_policy=CoordinationPolicy.distributed(),
     )
     runtime_config = config.runtime_config()
-    assert runtime_config.orchestration_profile == "deep_research"
-    assert runtime_config.cooperation_strategy is not None
-    assert runtime_config.cooperation_strategy.topology == "distributed_herd"
+    assert runtime_config.coordination_policy is not None
+    assert runtime_config.coordination_policy.route_mode == "distributed"

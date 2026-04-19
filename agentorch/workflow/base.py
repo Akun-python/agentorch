@@ -31,14 +31,24 @@ class Node(BaseModel):
         "human_notify",
         "human_input",
         "human_approval",
+        "evolution",
     ]
     config: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
-    def model_node(cls, node_id: str, *, prompt: str | None = None, **config: Any) -> "Node":
+    def model_node(
+        cls,
+        node_id: str,
+        *,
+        prompt: str | None = None,
+        task_context_from_variables: list[str] | None = None,
+        **config: Any,
+    ) -> "Node":
         payload = dict(config)
         if prompt is not None:
             payload["prompt"] = prompt
+        if task_context_from_variables:
+            payload["task_context_from_variables"] = list(task_context_from_variables)
         return cls(id=node_id, kind="model", config=payload)
 
     @classmethod
@@ -112,6 +122,36 @@ class Node(BaseModel):
         if output_key is not None:
             payload["output_key"] = output_key
         return cls(id=node_id, kind="aggregate", config=payload)
+
+    @classmethod
+    def evolution(
+        cls,
+        node_id: str,
+        *,
+        session: Any | None = None,
+        manager: Any | None = None,
+        tasks: list[Any] | None = None,
+        output_key: str | None = None,
+        include_history: bool = False,
+        persist_artifact: bool = True,
+        build_best_candidate: bool = True,
+        **config: Any,
+    ) -> "Node":
+        payload = {
+            **config,
+            "include_history": include_history,
+            "persist_artifact": persist_artifact,
+            "build_best_candidate": build_best_candidate,
+        }
+        if session is not None:
+            payload["session"] = session
+        if manager is not None:
+            payload["manager"] = manager
+        if tasks is not None:
+            payload["tasks"] = list(tasks)
+        if output_key is not None:
+            payload["output_key"] = output_key
+        return cls(id=node_id, kind="evolution", config=payload)
 
 
 class Edge(BaseModel):

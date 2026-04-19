@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from pathlib import Path
 from typing import Any
 
@@ -18,22 +19,29 @@ from agentorch.agents import (
     SupervisorPolicy,
 )
 from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
+from agentorch.evolution import EvolutionConfig, EvolutionManager, EvolutionSession, SearchSpace
+from agentorch.evolution.helpers import runtime_config_from_genome, workflow_from_genome
 from agentorch.knowledge import KnowledgeBase, RagStrategyConfig
 from agentorch.memory import MemoryManager
+from agentorch.models import (
+    ImageGenerationCapableModelAdapter,
+    SpeechCapableModelAdapter,
+    VideoAnalysisCapableModelAdapter,
+    create_model_adapter,
+)
 from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
 from agentorch.runtime.agent import _runtime_summary, _safe_export, _workflow_summary
 from agentorch.sandbox import SandboxManager
 from agentorch.skills import SkillRegistry
 from agentorch.strategies import (
-    BaseContextStrategy,
-    BaseCooperationStrategy,
-    BaseLongHorizonStrategy,
-    BaseMemoryGovernanceStrategy,
-    ContextStrategyConfig,
-    CooperationStrategyConfig,
-    LongHorizonStrategyConfig,
-    MemoryGovernanceStrategyConfig,
+    ContextPolicy,
+    CoordinationPolicy,
+    MemoryEvaluator,
+    MemoryPolicy,
+    RoutePlanner,
+    ContextSelector,
+    StatePolicy,
 )
 from agentorch.tools import BaseTool, ToolRegistry
 from agentorch.workflow import Workflow
@@ -54,6 +62,16 @@ from agentorch._facade_support import (
 
 _ALLOWED_MULTI_AGENT_TOPOLOGIES = {"supervisor"}
 _BACKGROUND_BRIDGE = BackgroundRuntimeBridge()
+
+
+async def _close_candidate(candidate: Any) -> None:
+    if hasattr(candidate, "aclose"):
+        result = candidate.aclose()
+        if inspect.isawaitable(result):
+            await result
+        return
+    if hasattr(candidate, "close"):
+        candidate.close()
 
 
 def _create_agent_instance(*, workflow: Workflow | None = None, **runtime_kwargs: Any) -> Agent:
@@ -100,16 +118,18 @@ def create_agent(
     workflow: Workflow | None = None,
     reasoning: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
     reasoning_framework: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
-    orchestration_profile: str | None = None,
     sandbox: SandboxManager | None = None,
     enable_streaming: bool | None = None,
     human_feedback: Any | None = None,
     observability: ObservabilityConfig | dict[str, Any] | None = None,
     skills: SkillRegistry | None = None,
-    context_strategy: ContextStrategyConfig | BaseContextStrategy | str | dict[str, Any] | None = None,
-    long_horizon_strategy: LongHorizonStrategyConfig | BaseLongHorizonStrategy | str | dict[str, Any] | None = None,
-    cooperation_strategy: CooperationStrategyConfig | BaseCooperationStrategy | str | dict[str, Any] | None = None,
-    memory_governance_strategy: MemoryGovernanceStrategyConfig | BaseMemoryGovernanceStrategy | str | dict[str, Any] | None = None,
+    context_policy: ContextPolicy | dict[str, Any] | None = None,
+    state_policy: StatePolicy | dict[str, Any] | None = None,
+    coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
+    memory_policy: MemoryPolicy | dict[str, Any] | None = None,
+    context_selector: ContextSelector | None = None,
+    route_planner: RoutePlanner | None = None,
+    memory_evaluator: MemoryEvaluator | None = None,
     runtime: Runtime | None = None,
     runtime_config: RuntimeConfig | dict[str, Any] | None = None,
     overrides: dict[str, Any] | None = None,
@@ -126,15 +146,17 @@ def create_agent(
             memory,
             reasoning,
             reasoning_framework,
-            orchestration_profile,
             sandbox,
             human_feedback,
             observability,
             skills,
-            context_strategy,
-            long_horizon_strategy,
-            cooperation_strategy,
-            memory_governance_strategy,
+            context_policy,
+            state_policy,
+            coordination_policy,
+            memory_policy,
+            context_selector,
+            route_planner,
+            memory_evaluator,
             runtime_config,
             overrides,
         ]
@@ -171,9 +193,6 @@ def create_agent(
     if system_prompt is None and "system_prompt" in profile_defaults:
         system_prompt = profile_defaults["system_prompt"]
         resolved_defaults["system_prompt"] = system_prompt
-    if orchestration_profile is None and "orchestration_profile" in profile_defaults:
-        orchestration_profile = profile_defaults["orchestration_profile"]
-        resolved_defaults["orchestration_profile"] = orchestration_profile
     if enable_rag is None and "enable_rag" in profile_defaults:
         enable_rag = bool(profile_defaults["enable_rag"])
         resolved_defaults["enable_rag"] = enable_rag
@@ -183,6 +202,18 @@ def create_agent(
     if reasoning is None and "reasoning" in profile_defaults:
         reasoning = profile_defaults["reasoning"]
         resolved_defaults["reasoning"] = reasoning
+    if context_policy is None and "context_policy" in profile_defaults:
+        context_policy = profile_defaults["context_policy"]
+        resolved_defaults["context_policy"] = _safe_export(context_policy)
+    if state_policy is None and "state_policy" in profile_defaults:
+        state_policy = profile_defaults["state_policy"]
+        resolved_defaults["state_policy"] = _safe_export(state_policy)
+    if coordination_policy is None and "coordination_policy" in profile_defaults:
+        coordination_policy = profile_defaults["coordination_policy"]
+        resolved_defaults["coordination_policy"] = _safe_export(coordination_policy)
+    if memory_policy is None and "memory_policy" in profile_defaults:
+        memory_policy = profile_defaults["memory_policy"]
+        resolved_defaults["memory_policy"] = _safe_export(memory_policy)
 
     if not enable_tools and (tools is not None or tool_bundles):
         raise ValueError("enable_tools=False conflicts with explicit tools or tool_bundles.")
@@ -222,36 +253,50 @@ def create_agent(
         resolved_runtime_config,
         default_runtime_config,
         runtime_config_supplied,
-        "orchestration_profile",
-        orchestration_profile,
+        "context_policy",
+        ContextPolicy.from_any(context_policy) if context_policy is not None else None,
     )
     resolved_runtime_config = _apply_if_unset(
         resolved_runtime_config,
         default_runtime_config,
         runtime_config_supplied,
-        "context_strategy",
-        ContextStrategyConfig.from_any(context_strategy) if context_strategy is not None and not isinstance(context_strategy, BaseContextStrategy) else context_strategy,
+        "state_policy",
+        StatePolicy.from_any(state_policy) if state_policy is not None else None,
     )
     resolved_runtime_config = _apply_if_unset(
         resolved_runtime_config,
         default_runtime_config,
         runtime_config_supplied,
-        "long_horizon_strategy",
-        LongHorizonStrategyConfig.from_any(long_horizon_strategy) if long_horizon_strategy is not None and not isinstance(long_horizon_strategy, BaseLongHorizonStrategy) else long_horizon_strategy,
+        "coordination_policy",
+        CoordinationPolicy.from_any(coordination_policy) if coordination_policy is not None else None,
     )
     resolved_runtime_config = _apply_if_unset(
         resolved_runtime_config,
         default_runtime_config,
         runtime_config_supplied,
-        "cooperation_strategy",
-        CooperationStrategyConfig.from_any(cooperation_strategy) if cooperation_strategy is not None and not isinstance(cooperation_strategy, BaseCooperationStrategy) else cooperation_strategy,
+        "memory_policy",
+        MemoryPolicy.from_any(memory_policy) if memory_policy is not None else None,
     )
     resolved_runtime_config = _apply_if_unset(
         resolved_runtime_config,
         default_runtime_config,
         runtime_config_supplied,
-        "memory_governance_strategy",
-        MemoryGovernanceStrategyConfig.from_any(memory_governance_strategy) if memory_governance_strategy is not None and not isinstance(memory_governance_strategy, BaseMemoryGovernanceStrategy) else memory_governance_strategy,
+        "context_selector",
+        context_selector,
+    )
+    resolved_runtime_config = _apply_if_unset(
+        resolved_runtime_config,
+        default_runtime_config,
+        runtime_config_supplied,
+        "route_planner",
+        route_planner,
+    )
+    resolved_runtime_config = _apply_if_unset(
+        resolved_runtime_config,
+        default_runtime_config,
+        runtime_config_supplied,
+        "memory_evaluator",
+        memory_evaluator,
     )
     resolved_runtime_config = _apply_if_unset(
         resolved_runtime_config,
@@ -286,6 +331,25 @@ def create_agent(
         resolved_runtime_config = resolved_runtime_config.model_copy(update=overrides)
     resolved_runtime_config = _finalize_runtime_config(resolved_runtime_config)
 
+    selected_model, selected_model_config = _coerce_model_inputs(model)
+    include_media_tools = bool(enable_tools) and isinstance(tool_bundles, dict) and bool(tool_bundles.get("include_media"))
+    if include_media_tools:
+        if selected_model is None:
+            selected_model = create_model_adapter(selected_model_config)
+            selected_model_config = None
+        if not any(
+            isinstance(selected_model, capability)
+            for capability in (
+                SpeechCapableModelAdapter,
+                ImageGenerationCapableModelAdapter,
+                VideoAnalysisCapableModelAdapter,
+            )
+        ):
+            raise ValueError(
+                "tool_bundles.include_media requires a model with at least one media capability. "
+                "Use OpenAIModel, OpenAICompatibleHTTPModel, or a custom media-capable adapter."
+            )
+
     selected_tools = ToolRegistry.empty()
     if enable_tools:
         selected_tools.extend(_coerce_tool_registry(tools))
@@ -294,10 +358,10 @@ def create_agent(
                 tool_bundles,
                 workspace_root=selected_workspace_root,
                 sandbox=sandbox,
+                model=selected_model,
             )
         )
 
-    selected_model, selected_model_config = _coerce_model_inputs(model)
     runtime_kwargs = {
         "model": selected_model,
         "model_config": selected_model_config,
@@ -326,7 +390,10 @@ def create_agent(
         "enable_memory": enable_memory,
         "workflow_attached": workflow is not None,
         "reasoning": resolved_reasoning,
-        "orchestration_profile": orchestration_profile,
+        "context_policy": context_policy,
+        "state_policy": state_policy,
+        "coordination_policy": coordination_policy,
+        "memory_policy": memory_policy,
         "enable_streaming": bool(enable_streaming),
         "human_feedback": human_feedback is not None,
         "observability": observability,
@@ -358,7 +425,13 @@ def create_multi_agent(
     shared_knowledge: KnowledgeBase | dict[str, Any] | None = None,
     shared_memory: MemoryManager | None = None,
     reasoning: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
-    cooperation_strategy: CooperationStrategyConfig | BaseCooperationStrategy | str | dict[str, Any] | None = None,
+    context_policy: ContextPolicy | dict[str, Any] | None = None,
+    state_policy: StatePolicy | dict[str, Any] | None = None,
+    coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
+    memory_policy: MemoryPolicy | dict[str, Any] | None = None,
+    context_selector: ContextSelector | None = None,
+    route_planner: RoutePlanner | None = None,
+    memory_evaluator: MemoryEvaluator | None = None,
     aggregation_policy: AggregationPolicy | None = None,
     name: str | None = None,
     description: str | None = None,
@@ -465,8 +538,50 @@ def create_multi_agent(
         resolved_runtime_config,
         default_runtime_config,
         runtime_config is not None,
-        "cooperation_strategy",
-        CooperationStrategyConfig.from_any(cooperation_strategy) if cooperation_strategy is not None and not isinstance(cooperation_strategy, BaseCooperationStrategy) else cooperation_strategy,
+        "context_policy",
+        ContextPolicy.from_any(context_policy) if context_policy is not None else None,
+    )
+    resolved_runtime_config = _apply_if_unset(
+        resolved_runtime_config,
+        default_runtime_config,
+        runtime_config is not None,
+        "state_policy",
+        StatePolicy.from_any(state_policy) if state_policy is not None else None,
+    )
+    resolved_runtime_config = _apply_if_unset(
+        resolved_runtime_config,
+        default_runtime_config,
+        runtime_config is not None,
+        "coordination_policy",
+        CoordinationPolicy.from_any(coordination_policy) if coordination_policy is not None else None,
+    )
+    resolved_runtime_config = _apply_if_unset(
+        resolved_runtime_config,
+        default_runtime_config,
+        runtime_config is not None,
+        "memory_policy",
+        MemoryPolicy.from_any(memory_policy) if memory_policy is not None else None,
+    )
+    resolved_runtime_config = _apply_if_unset(
+        resolved_runtime_config,
+        default_runtime_config,
+        runtime_config is not None,
+        "context_selector",
+        context_selector,
+    )
+    resolved_runtime_config = _apply_if_unset(
+        resolved_runtime_config,
+        default_runtime_config,
+        runtime_config is not None,
+        "route_planner",
+        route_planner,
+    )
+    resolved_runtime_config = _apply_if_unset(
+        resolved_runtime_config,
+        default_runtime_config,
+        runtime_config is not None,
+        "memory_evaluator",
+        memory_evaluator,
     )
     resolved_runtime_config = _apply_if_unset(
         resolved_runtime_config,
@@ -515,7 +630,10 @@ def create_multi_agent(
                         "shared_knowledge": shared_knowledge.__class__.__name__ if isinstance(shared_knowledge, KnowledgeBase) else shared_knowledge,
                         "shared_memory": shared_memory.__class__.__name__ if shared_memory is not None else None,
                         "reasoning": reasoning,
-                        "cooperation_strategy": cooperation_strategy,
+                        "context_policy": context_policy,
+                        "state_policy": state_policy,
+                        "coordination_policy": coordination_policy,
+                        "memory_policy": memory_policy,
                         "topology": resolved_topology,
                         "workflow_attached": workflow is not None,
                     }
@@ -524,3 +642,185 @@ def create_multi_agent(
             "resolved_defaults": {"topology": resolved_topology},
         }
     )
+
+
+def create_agent_evolution(
+    *,
+    search_space: SearchSpace | dict[str, list[Any]],
+    evaluator: Any,
+    tasks: list[Any] | None = None,
+    evolution_config: EvolutionConfig | None = None,
+    workflow_templates: dict[str, Workflow | Any] | None = None,
+    model: Any = None,
+    profile: str = "default",
+    system_prompt: str | None = None,
+    name: str | None = None,
+    description: str | None = None,
+    enable_tools: bool | None = None,
+    tools: ToolRegistry | list[BaseTool] | tuple[BaseTool, ...] | None = None,
+    tool_bundles: bool | dict[str, Any] | None = None,
+    workspace_root: str | Path | None = None,
+    enable_rag: bool | None = None,
+    knowledge_base: KnowledgeBase | None = None,
+    knowledge_paths: list[str | Path] | None = None,
+    rag: RagStrategyConfig | str | dict[str, Any] | None = None,
+    knowledge_scope: list[str] | None = None,
+    enable_memory: bool | None = None,
+    memory: MemoryManager | None = None,
+    workflow: Workflow | None = None,
+    reasoning: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
+    reasoning_framework: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
+    sandbox: SandboxManager | None = None,
+    enable_streaming: bool | None = None,
+    human_feedback: Any | None = None,
+    observability: ObservabilityConfig | dict[str, Any] | None = None,
+    skills: SkillRegistry | None = None,
+    context_policy: ContextPolicy | dict[str, Any] | None = None,
+    state_policy: StatePolicy | dict[str, Any] | None = None,
+    coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
+    memory_policy: MemoryPolicy | dict[str, Any] | None = None,
+    context_selector: ContextSelector | None = None,
+    route_planner: RoutePlanner | None = None,
+    memory_evaluator: MemoryEvaluator | None = None,
+    runtime_config: RuntimeConfig | dict[str, Any] | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> EvolutionSession[Agent]:
+    base_runtime_config = RuntimeConfig.from_any(runtime_config)
+
+    async def build_candidate(genome):
+        return create_agent(
+            model=model,
+            profile=profile,
+            system_prompt=system_prompt,
+            name=name,
+            description=description,
+            enable_tools=enable_tools,
+            tools=tools,
+            tool_bundles=tool_bundles,
+            workspace_root=workspace_root,
+            enable_rag=enable_rag,
+            knowledge_base=knowledge_base,
+            knowledge_paths=knowledge_paths,
+            rag=rag,
+            knowledge_scope=knowledge_scope,
+            enable_memory=enable_memory,
+            memory=memory,
+            workflow=workflow_from_genome(genome, base=workflow, templates=workflow_templates),
+            reasoning=reasoning,
+            reasoning_framework=reasoning_framework,
+            sandbox=sandbox,
+            enable_streaming=enable_streaming,
+            human_feedback=human_feedback,
+            observability=observability,
+            skills=skills,
+            context_policy=context_policy,
+            state_policy=state_policy,
+            coordination_policy=coordination_policy,
+            memory_policy=memory_policy,
+            context_selector=context_selector,
+            route_planner=route_planner,
+            memory_evaluator=memory_evaluator,
+            runtime_config=runtime_config_from_genome(genome, base=base_runtime_config),
+            overrides=overrides,
+        )
+
+    async def evaluate_candidate(genome, candidate, evaluation_tasks):
+        try:
+            value = evaluator(genome, candidate, evaluation_tasks)
+            if inspect.isawaitable(value):
+                return await value
+            return value
+        finally:
+            await _close_candidate(candidate)
+
+    manager = EvolutionManager(
+        builder=build_candidate,
+        evaluator=evaluate_candidate,
+        config=evolution_config,
+        search_space=search_space,
+    )
+    return EvolutionSession(manager=manager, tasks=tasks, candidate_kind="agent")
+
+
+def create_multi_agent_evolution(
+    *,
+    search_space: SearchSpace | dict[str, list[Any]],
+    evaluator: Any,
+    tasks: list[Any] | None = None,
+    evolution_config: EvolutionConfig | None = None,
+    workflow_templates: dict[str, Workflow | Any] | None = None,
+    agents: list[Agent | dict[str, Any]] | None = None,
+    roles: list[dict[str, Any]] | None = None,
+    model: Any = None,
+    system_prompt: str | None = None,
+    workflow: Workflow | None = None,
+    supervisor: Supervisor | None = None,
+    routing_policy: SupervisorPolicy | None = None,
+    topology: str | dict[str, Any] | None = None,
+    shared_knowledge: KnowledgeBase | dict[str, Any] | None = None,
+    shared_memory: MemoryManager | None = None,
+    reasoning: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
+    context_policy: ContextPolicy | dict[str, Any] | None = None,
+    state_policy: StatePolicy | dict[str, Any] | None = None,
+    coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
+    memory_policy: MemoryPolicy | dict[str, Any] | None = None,
+    context_selector: ContextSelector | None = None,
+    route_planner: RoutePlanner | None = None,
+    memory_evaluator: MemoryEvaluator | None = None,
+    aggregation_policy: AggregationPolicy | None = None,
+    name: str | None = None,
+    description: str | None = None,
+    sandbox: SandboxManager | None = None,
+    human_feedback: Any | None = None,
+    observability: ObservabilityConfig | dict[str, Any] | None = None,
+    runtime_config: RuntimeConfig | dict[str, Any] | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> EvolutionSession[Agent]:
+    base_runtime_config = RuntimeConfig.from_any(runtime_config)
+
+    async def build_candidate(genome):
+        return create_multi_agent(
+            agents=agents,
+            roles=roles,
+            model=model,
+            system_prompt=system_prompt,
+            workflow=workflow_from_genome(genome, base=workflow, templates=workflow_templates),
+            supervisor=supervisor,
+            routing_policy=routing_policy,
+            topology=topology,
+            shared_knowledge=shared_knowledge,
+            shared_memory=shared_memory,
+            reasoning=reasoning,
+            context_policy=context_policy,
+            state_policy=state_policy,
+            coordination_policy=coordination_policy,
+            memory_policy=memory_policy,
+            context_selector=context_selector,
+            route_planner=route_planner,
+            memory_evaluator=memory_evaluator,
+            aggregation_policy=aggregation_policy,
+            name=name,
+            description=description,
+            sandbox=sandbox,
+            human_feedback=human_feedback,
+            observability=observability,
+            runtime_config=runtime_config_from_genome(genome, base=base_runtime_config),
+            overrides=overrides,
+        )
+
+    async def evaluate_candidate(genome, candidate, evaluation_tasks):
+        try:
+            value = evaluator(genome, candidate, evaluation_tasks)
+            if inspect.isawaitable(value):
+                return await value
+            return value
+        finally:
+            await _close_candidate(candidate)
+
+    manager = EvolutionManager(
+        builder=build_candidate,
+        evaluator=evaluate_candidate,
+        config=evolution_config,
+        search_space=search_space,
+    )
+    return EvolutionSession(manager=manager, tasks=tasks, candidate_kind="multi_agent")

@@ -12,8 +12,15 @@ from .base import EvolutionAlgorithm
 from .bootstrap import bootstrap_evolution_defaults
 from .context import EvolutionExecutionContext
 from .factory import EvolutionFactory, create_evolution_algorithm
-from .helpers import candidate_from_genome, rag_strategy_from_genome, reasoning_strategy_from_genome, runtime_config_from_genome
+from .helpers import (
+    candidate_from_genome,
+    rag_strategy_from_genome,
+    reasoning_strategy_from_genome,
+    runtime_config_from_genome,
+    workflow_from_genome,
+)
 from .manager import EvolutionManager
+from .session import EvolutionSession, summarize_evolution_candidate
 from .registry import (
     EvolutionRegistration,
     EvolutionRegistry,
@@ -23,6 +30,12 @@ from .registry import (
 )
 from .search_space import SearchSpace
 from .strategies import MutationOperator, TopKSelection
+from .templates import (
+    get_evolution_workflow_template,
+    list_evolution_workflow_templates,
+    register_evolution_workflow_template,
+    resolve_evolution_workflow_template,
+)
 from .types import EvaluationResult, EvolutionConfig, EvolutionResult, GenerationResult, Genome
 
 __all__ = [
@@ -32,6 +45,7 @@ __all__ = [
     "EvolutionExecutionContext",
     "EvolutionFactory",
     "EvolutionManager",
+    "EvolutionSession",
     "EvolutionRegistration",
     "EvolutionRegistry",
     "EvolutionResult",
@@ -51,6 +65,12 @@ __all__ = [
     "list_evolution_algorithms",
     "rag_strategy_from_genome",
     "register_evolution_algorithm",
+    "register_evolution_workflow_template",
     "reasoning_strategy_from_genome",
+    "resolve_evolution_workflow_template",
     "runtime_config_from_genome",
+    "summarize_evolution_candidate",
+    "get_evolution_workflow_template",
+    "list_evolution_workflow_templates",
+    "workflow_from_genome",
 ]

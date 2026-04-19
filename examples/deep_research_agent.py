@@ -28,10 +28,10 @@ from agentorch.runtime.agent import Agent
 from agentorch.sandbox import SandboxManager, SandboxPolicy
 from agentorch.skills import SkillLoader, SkillRegistry
 from agentorch.strategies import (
-    ContextStrategyConfig,
-    CooperationStrategyConfig,
-    LongHorizonStrategyConfig,
-    MemoryGovernanceStrategyConfig,
+    ContextPolicy,
+    CoordinationPolicy,
+    MemoryPolicy,
+    StatePolicy,
 )
 from agentorch import create_agent, create_multi_agent
 from agentorch.tools import ToolError, ToolRegistry, create_python_interpreter_tool
@@ -58,17 +58,17 @@ def _print_child_reasoning_summary(result) -> None:
     print("child_reasoning:")
     for agent_name, payload in child_reasoning.items():
         reasoning_metadata = payload.get("reasoning_metadata", {}) or {}
-        resolved_strategies = reasoning_metadata.get("resolved_strategies")
+        resolved_policies = reasoning_metadata.get("resolved_policies")
         context_budget = reasoning_metadata.get("context_budget_report")
         memory_recall = reasoning_metadata.get("memory_recall_report")
-        memory_governance = reasoning_metadata.get("memory_governance_report")
+        memory_governance = reasoning_metadata.get("memory_policy_report")
         promotion_trace = reasoning_metadata.get("memory_promotion_trace")
 
         print(f"- {agent_name}")
         print(f"  status: {payload.get('status')}")
         print(f"  task_id: {payload.get('task_id')}")
         print(f"  reasoning_kind: {payload.get('reasoning_kind')}")
-        print(f"  resolved_strategies: {resolved_strategies}")
+        print(f"  resolved_policies: {resolved_policies}")
         print(
             "  context_budget_report:",
             _display_subset(
@@ -87,7 +87,7 @@ def _print_child_reasoning_summary(result) -> None:
             _display_subset(memory_recall, ["mechanism", "selected_count", "selected"]),
         )
         print(
-            "  memory_governance_report:",
+            "  memory_policy_report:",
             _display_subset(
                 memory_governance,
                 ["kind", "collective_promotion_policy", "trail_knowledge_enabled", "validation_threshold"],
@@ -101,9 +101,9 @@ def _print_result_summary(result) -> None:
     print(result.output_text)
     print("\nReasoning metadata snapshot:")
     print("reasoning_kind:", result.reasoning_kind)
-    print("resolved_strategies:", result.reasoning_metadata.get("resolved_strategies"))
+    print("resolved_policies:", result.reasoning_metadata.get("resolved_policies"))
     print("context_budget_report:", result.reasoning_metadata.get("context_budget_report"))
-    print("memory_governance_report:", result.reasoning_metadata.get("memory_governance_report"))
+    print("memory_policy_report:", result.reasoning_metadata.get("memory_policy_report"))
     print("memory_recall_report:", result.reasoning_metadata.get("memory_recall_report"))
     print("memory_promotion_trace:", result.reasoning_metadata.get("memory_promotion_trace"))
     print("aggregation:", result.reasoning_metadata.get("aggregation"))
@@ -350,7 +350,6 @@ def build_demo_config(*, workspace_root: Path) -> DeepResearchAgentConfig:
             "if local coverage is weak or clearly incomplete. Be explicit about what evidence was found locally, "
             "what required web confirmation, and what remains uncertain."
         ),
-        orchestration_profile="deep_research",
         knowledge_scope=["research"],
         include_web_search=True,
         include_workspace_tools=True,
@@ -358,34 +357,50 @@ def build_demo_config(*, workspace_root: Path) -> DeepResearchAgentConfig:
         include_git_tools=True,
         workspace_root=workspace_root,
         brave_api_key=os.getenv("BRAVE_SEARCH_API_KEY") or os.getenv("BRAVE_API_KEY"),
-        cooperation_strategy=CooperationStrategyConfig.matriarchal(
-            individual_memory_window=6,
-            handoff_policy="summary_plus_artifacts",
-            shared_workspace_policy="artifacts_first",
+        coordination_policy=CoordinationPolicy(
+            handoff_mode="summary_plus_artifacts",
+            workspace_mode="artifacts_first",
+            route_mode="guided",
+            alert_mode="direct",
         ),
         reasoning_strategy=ReasoningStrategyConfig.plan_execute(
             config={"max_planning_steps": 4, "max_execution_steps": 4}
         ),
-        context_strategy=ContextStrategyConfig.compact(
-            include_retrieval_evidence=True,
-            include_retrieval_citations=True,
-            include_retrieval_report=True,
-            budget_aware_compaction=True,
-            salience_mode="hybrid",
-            segment_char_budget=10000,
+        context_policy=ContextPolicy(
+            sources={
+                "memory_summary": True,
+                "retrieval_summary": True,
+                "retrieval_evidence": {"enabled": True, "max_items": 6},
+                "retrieval_citations": {"enabled": True, "max_items": 8},
+                "retrieval_report": True,
+                "retrieval_plan": False,
+                "tool_descriptions": False,
+                "skill_instructions": True,
+                "task_packet": {"enabled": True, "representation": "capsule"},
+                "delegation_context": {"enabled": True, "representation": "capsule"},
+                "shared_memory": {"enabled": True, "max_items": 6},
+            },
+            char_budget=10000,
+            selection_mode="hybrid",
         ),
-        long_horizon_strategy=LongHorizonStrategyConfig.long_running_safe(
-            history_retention_policy="window_plus_summary",
-            overflow_strategy="compress",
+        state_policy=StatePolicy(
+            retention_mode="state_plus_memory",
+            summary_refresh_every=20,
+            snapshot_every=40,
+            rollup_every=20,
         ),
-        memory_governance_strategy=MemoryGovernanceStrategyConfig.nutcracker(
-            collective_promotion_policy="validated_only",
-            trail_knowledge_enabled=True,
-            recall_top_k=5,
-            allow_cross_thread_recall=True,
-            capsule_promotion_threshold=0.9,
-            semantic_promotion_threshold=1.6,
-            scene_index_fields=["goal", "knowledge_scope", "agent_role", "thread_id"],
+        memory_policy=MemoryPolicy.long_horizon(
+            promotion_mode="validated",
+            validation_mode="threshold",
+            thresholds_and_weights={
+                "recall_top_k": 5,
+                "allow_cross_thread_recall": True,
+                "capsule_promotion_threshold": 0.9,
+                "semantic_promotion_threshold": 1.6,
+                "scene_index_fields": ["goal", "knowledge_scope", "agent_role", "thread_id"],
+                "trail_knowledge_enabled": True,
+                "validation_threshold": 0.65,
+            },
         ),
         rag_strategy=DeepResearchAgentConfig().rag_strategy.model_copy(
             update={"max_steps": 4, "top_k": 6, "knowledge_scope": ["research"]}
@@ -432,10 +447,22 @@ async def build_research_specialist(
     config: DeepResearchAgentConfig,
     memory: MemoryManager,
 ) -> Agent:
-    specialist_context = ContextStrategyConfig.compact(
-        include_retrieval_evidence=True,
-        include_retrieval_citations=False,
-        include_retrieval_report=False,
+    specialist_context = ContextPolicy(
+        sources={
+            "memory_summary": True,
+            "retrieval_summary": True,
+            "retrieval_evidence": {"enabled": True, "max_items": 4},
+            "retrieval_citations": False,
+            "retrieval_report": False,
+            "retrieval_plan": False,
+            "tool_descriptions": False,
+            "skill_instructions": True,
+            "task_packet": {"enabled": True, "representation": "capsule"},
+            "delegation_context": {"enabled": True, "representation": "capsule"},
+            "shared_memory": {"enabled": True, "max_items": 4},
+        },
+        conversation_window=6,
+        char_budget=14000,
     )
     specialist_reasoning = ReasoningStrategyConfig.react(config={"max_steps": 4})
     return create_agent(
@@ -464,11 +491,10 @@ async def build_research_specialist(
             ),
             rag=config.rag_strategy,
             reasoning=specialist_reasoning,
-            orchestration_profile=config.orchestration_profile,
-            context_strategy=specialist_context,
-            long_horizon_strategy=config.long_horizon_strategy,
-            cooperation_strategy=config.cooperation_strategy,
-            memory_governance_strategy=config.memory_governance_strategy,
+            context_policy=specialist_context,
+            state_policy=config.state_policy,
+            coordination_policy=config.coordination_policy,
+            memory_policy=config.memory_policy,
             default_knowledge_scope=config.knowledge_scope,
         ),
     )
@@ -546,7 +572,7 @@ async def main(
             tags=["research", "evidence", "retrieve"],
             capabilities=[AgentCapability.RETRIEVE, AgentCapability.TOOL_USE],
             allowed_knowledge_scopes=["research"],
-            default_cooperation_strategy=config.cooperation_strategy,
+            default_coordination_policy=config.coordination_policy,
         ),
         evidence_scout,
     )
@@ -569,7 +595,7 @@ async def main(
             tags=["research", "synthesis", "compare"],
             capabilities=[AgentCapability.AGGREGATE, AgentCapability.REVIEW],
             allowed_knowledge_scopes=["research"],
-            default_cooperation_strategy=config.cooperation_strategy,
+            default_coordination_policy=config.coordination_policy,
         ),
         synthesis_analyst,
     )
@@ -608,7 +634,10 @@ async def main(
         shared_knowledge=kb,
         system_prompt=config.system_prompt,
         reasoning=config.reasoning_strategy,
-        cooperation_strategy=config.cooperation_strategy,
+        coordination_policy=config.coordination_policy,
+        context_policy=config.context_policy,
+        state_policy=config.state_policy,
+        memory_policy=config.memory_policy,
         runtime_config=config.runtime_config(),
         supervisor=supervisor,
     )
@@ -616,16 +645,15 @@ async def main(
     print("Resolved preset configuration:")
     print(
         {
-            "orchestration_profile": agent.runtime.config.orchestration_profile,
-            "context_strategy": getattr(agent.runtime.config.context_strategy, "kind", None),
-            "long_horizon_strategy": getattr(agent.runtime.config.long_horizon_strategy, "kind", None),
-            "cooperation_strategy": getattr(agent.runtime.config.cooperation_strategy, "kind", None),
-            "memory_governance_strategy": getattr(agent.runtime.config.memory_governance_strategy, "kind", None),
+            "context_policy": getattr(agent.runtime.config.context_policy, "selection_mode", None),
+            "state_policy": getattr(agent.runtime.config.state_policy, "retention_mode", None),
+            "coordination_policy": getattr(agent.runtime.config.coordination_policy, "route_mode", None),
+            "memory_policy": getattr(agent.runtime.config.memory_policy, "recall_mode", None),
             "memory_policy_bundle": {
-                "promotion_policy": getattr(agent.runtime.config.memory_governance_strategy, "promotion_policy", None),
-                "index_policy": getattr(agent.runtime.config.memory_governance_strategy, "index_policy", None),
-                "recall_policy": getattr(agent.runtime.config.memory_governance_strategy, "recall_policy", None),
-                "decay_policy": getattr(agent.runtime.config.memory_governance_strategy, "decay_policy", None),
+                "promotion_policy": getattr(agent.runtime.config.memory_policy, "promotion_policy", None),
+                "index_policy": getattr(agent.runtime.config.memory_policy, "index_policy", None),
+                "recall_policy": getattr(agent.runtime.config.memory_policy, "recall_policy", None),
+                "decay_policy": getattr(agent.runtime.config.memory_policy, "decay_policy", None),
             },
             "rag_mode": config.rag_strategy.mode,
             "memory_record_path": str(shared_memory.config.record_path),

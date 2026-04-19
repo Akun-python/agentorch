@@ -11,14 +11,10 @@ from agentorch.knowledge import RagStrategyConfig
 from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
 from agentorch.strategies import (
-    BaseContextStrategy,
-    BaseCooperationStrategy,
-    BaseLongHorizonStrategy,
-    BaseMemoryGovernanceStrategy,
-    ContextStrategyConfig,
-    CooperationStrategyConfig,
-    LongHorizonStrategyConfig,
-    MemoryGovernanceStrategyConfig,
+    ContextPolicy,
+    CoordinationPolicy,
+    MemoryPolicy,
+    StatePolicy,
 )
 from agentorch.tools import BaseTool, ToolRegistry, create_brave_search_tool
 from agentorch.workflow import Workflow
@@ -37,7 +33,6 @@ class DeepResearchAgentConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     system_prompt: str = Field(default_factory=build_deep_research_system_prompt)
-    orchestration_profile: str | None = "deep_research"
     reasoning_strategy: ReasoningStrategyConfig = Field(
         default_factory=lambda: ReasoningStrategyConfig.plan_execute(
             config={"max_planning_steps": 5, "max_execution_steps": 8}
@@ -50,18 +45,10 @@ class DeepResearchAgentConfig(BaseModel):
             max_steps=4,
         )
     )
-    context_strategy: ContextStrategyConfig | BaseContextStrategy | None = Field(
-        default_factory=lambda: ContextStrategyConfig.compact(include_retrieval_evidence=True, include_retrieval_citations=True)
-    )
-    long_horizon_strategy: LongHorizonStrategyConfig | BaseLongHorizonStrategy | None = Field(
-        default_factory=LongHorizonStrategyConfig.long_running_safe
-    )
-    cooperation_strategy: CooperationStrategyConfig | BaseCooperationStrategy | None = Field(
-        default_factory=CooperationStrategyConfig.matriarchal
-    )
-    memory_governance_strategy: MemoryGovernanceStrategyConfig | BaseMemoryGovernanceStrategy | None = Field(
-        default_factory=MemoryGovernanceStrategyConfig.default
-    )
+    context_policy: ContextPolicy = Field(default_factory=lambda: ContextPolicy.evidence_friendly())
+    state_policy: StatePolicy = Field(default_factory=lambda: StatePolicy(retention_mode="state_plus_memory"))
+    coordination_policy: CoordinationPolicy = Field(default_factory=CoordinationPolicy.hybrid)
+    memory_policy: MemoryPolicy = Field(default_factory=MemoryPolicy.long_horizon)
     knowledge_scope: list[str] = Field(default_factory=list)
     include_web_search: bool = True
     include_workspace_tools: bool = False
@@ -92,11 +79,10 @@ class DeepResearchAgentConfig(BaseModel):
             system_prompt=self.system_prompt,
             reasoning=self.reasoning_strategy,
             rag=rag,
-            orchestration_profile=self.orchestration_profile,
-            context_strategy=self.context_strategy,
-            long_horizon_strategy=self.long_horizon_strategy,
-            cooperation_strategy=self.cooperation_strategy,
-            memory_governance_strategy=self.memory_governance_strategy,
+            context_policy=self.context_policy,
+            state_policy=self.state_policy,
+            coordination_policy=self.coordination_policy,
+            memory_policy=self.memory_policy,
             default_knowledge_scope=self.knowledge_scope,
         )
 

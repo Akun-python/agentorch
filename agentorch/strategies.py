@@ -1,413 +1,607 @@
 from __future__ import annotations
 
-from abc import ABC
-from typing import Any, Callable, Literal
+from abc import ABC, abstractmethod
+from copy import deepcopy
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class ContextStrategyConfig(BaseModel):
-    kind: str = "compact"
-    mode: Literal["compact", "balanced", "research_heavy", "custom"] = "compact"
-    max_conversation_messages: int = 6
-    include_memory_summary: bool = False
-    include_retrieval_summary: bool = True
-    include_retrieval_evidence: bool = False
-    include_retrieval_citations: bool = True
-    include_retrieval_report: bool = False
-    include_retrieval_plan: bool = False
-    include_tool_descriptions: bool = False
-    include_skill_instructions: bool = True
-    include_task_packet: bool = True
-    include_delegation_context: bool = True
-    tool_result_policy: Literal["full", "summary", "truncate", "off"] = "summary"
-    tool_result_max_chars: int = 500
-    retrieval_evidence_max_items: int = 3
-    citation_max_items: int = 4
-    prompt_char_budget: int = 12000
-    prefer_system_compaction: bool = True
-    budget_aware_compaction: bool = False
-    salience_mode: Literal["off", "rule", "hybrid"] = "off"
-    salience_rerank_top_k: int = 8
-    segment_char_budget: int | None = None
-    segment_min_keep: int = 6
-    stage_attention_profiles: dict[str, dict[str, float]] = Field(default_factory=dict)
+def _deepcopy_dict(value: dict[str, Any]) -> dict[str, Any]:
+    return deepcopy(value)
+
+
+_DEFAULT_CONTEXT_SOURCES: dict[str, Any] = {
+    "memory_summary": True,
+    "retrieval_summary": True,
+    "retrieval_evidence": {"enabled": False, "max_items": 3},
+    "retrieval_citations": {"enabled": True, "max_items": 4},
+    "retrieval_report": False,
+    "retrieval_plan": False,
+    "tool_descriptions": False,
+    "skill_instructions": True,
+    "task_packet": {"enabled": True, "representation": "capsule"},
+    "delegation_context": {"enabled": True, "representation": "capsule"},
+    "shared_memory": {"enabled": True, "max_items": 4},
+}
+
+_DEFAULT_MEMORY_THRESHOLDS: dict[str, Any] = {
+    "validation_threshold": 0.7,
+    "recall_top_k": 4,
+    "allow_cross_thread_recall": False,
+    "index_policy": "scene_hash",
+    "decay_policy": "relevance_only",
+    "episodic_memory_enabled": True,
+    "episodic_capsule_limit": 4,
+    "scene_index_fields": ["goal", "knowledge_scope", "agent_role", "thread_id"],
+    "capsule_promotion_threshold": 1.5,
+    "semantic_promotion_threshold": 2.3,
+    "collective_promotion_threshold": 2.8,
+    "relevance_weight": 4.0,
+    "evidence_weight": 1.8,
+    "reuse_weight": 0.8,
+    "outcome_weight": 1.2,
+    "recency_weight": 0.0,
+    "trail_knowledge_enabled": True,
+}
+
+
+class ContextPolicy(BaseModel):
+    """Neutral prompt-context governance policy."""
+
+    sources: dict[str, Any] = Field(default_factory=lambda: _deepcopy_dict(_DEFAULT_CONTEXT_SOURCES))
+    conversation_window: int = 8
+    char_budget: int = 18000
+    tool_observation_mode: Literal["full", "summary", "truncate", "off"] = "summary"
+    selection_mode: Literal["rule", "hybrid"] = "rule"
+    overflow_action: Literal["compress", "drop_low_priority", "disable_heavy_blocks", "fail_closed"] = "compress"
 
     @model_validator(mode="before")
     @classmethod
     def _normalize(cls, data: Any) -> Any:
-        if isinstance(data, str):
-            mapping = {
-                "compact": cls.compact().model_dump(),
-                "balanced": cls.balanced().model_dump(),
-                "research_heavy": cls.research_heavy().model_dump(),
-            }
-            return mapping.get(data, {"kind": data, "mode": "custom"})
-        return data
-
-    @classmethod
-    def from_any(cls, value: "ContextStrategyConfig | str | dict[str, Any] | None", **overrides: Any) -> "ContextStrategyConfig":
-        if value is None:
-            base = cls.compact()
-        elif isinstance(value, cls):
-            base = value.model_copy(deep=True)
-        else:
-            base = cls.model_validate(value)
-        return base.model_copy(update=overrides) if overrides else base
-
-    @classmethod
-    def compact(cls, **kwargs: Any) -> "ContextStrategyConfig":
-        payload = {"kind": "compact", "mode": "compact"}
-        payload.update(kwargs)
-        return cls(**payload)
-
-    @classmethod
-    def balanced(cls, **kwargs: Any) -> "ContextStrategyConfig":
-        payload = {
-            "kind": "balanced",
-            "mode": "balanced",
-            "max_conversation_messages": 8,
-            "include_memory_summary": True,
-            "include_retrieval_evidence": True,
-            "include_retrieval_citations": True,
-            "include_retrieval_report": False,
-            "include_retrieval_plan": False,
-            "include_tool_descriptions": False,
-            "citation_max_items": 6,
-            "retrieval_evidence_max_items": 5,
-            "prompt_char_budget": 18000,
-            "budget_aware_compaction": True,
-            "salience_mode": "rule",
-        }
-        payload.update(kwargs)
-        return cls(**payload)
-
-    @classmethod
-    def research_heavy(cls, **kwargs: Any) -> "ContextStrategyConfig":
-        payload = {
-            "kind": "research_heavy",
-            "mode": "research_heavy",
-            "max_conversation_messages": 10,
-            "include_memory_summary": True,
-            "include_retrieval_evidence": True,
-            "include_retrieval_citations": True,
-            "include_retrieval_report": True,
-            "include_retrieval_plan": True,
-            "include_tool_descriptions": False,
-            "citation_max_items": 8,
-            "retrieval_evidence_max_items": 8,
-            "prompt_char_budget": 24000,
-            "tool_result_policy": "truncate",
-            "tool_result_max_chars": 800,
-            "budget_aware_compaction": True,
-            "salience_mode": "hybrid",
-            "salience_rerank_top_k": 10,
-        }
-        payload.update(kwargs)
-        return cls(**payload)
-
-
-class LongHorizonStrategyConfig(BaseModel):
-    kind: str = "long_running_safe"
-    history_retention_policy: Literal["window_only", "window_plus_summary", "state_plus_memory"] = "window_plus_summary"
-    max_prompt_chars: int = 16000
-    max_prompt_messages: int = 14
-    summary_refresh_interval: int = 25
-    state_snapshot_interval: int = 50
-    artifact_rollup_interval: int = 20
-    overflow_strategy: Literal["compress", "drop_low_priority", "disable_heavy_blocks", "fail_closed"] = "compress"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize(cls, data: Any) -> Any:
-        if isinstance(data, str):
-            if data == "long_running_safe":
-                return cls.long_running_safe().model_dump()
-            if data == "state_centric":
-                return cls.state_centric().model_dump()
-            if data == "artifact_first":
-                return cls.artifact_first().model_dump()
-            return {"kind": data}
-        return data
-
-    @classmethod
-    def from_any(cls, value: "LongHorizonStrategyConfig | str | dict[str, Any] | None", **overrides: Any) -> "LongHorizonStrategyConfig":
-        if value is None:
-            base = cls.long_running_safe()
-        elif isinstance(value, cls):
-            base = value.model_copy(deep=True)
-        else:
-            base = cls.model_validate(value)
-        return base.model_copy(update=overrides) if overrides else base
-
-    @classmethod
-    def long_running_safe(cls, **kwargs: Any) -> "LongHorizonStrategyConfig":
-        return cls(kind="long_running_safe", **kwargs)
-
-    @classmethod
-    def state_centric(cls, **kwargs: Any) -> "LongHorizonStrategyConfig":
-        return cls(kind="state_centric", history_retention_policy="state_plus_memory", max_prompt_chars=14000, **kwargs)
-
-    @classmethod
-    def artifact_first(cls, **kwargs: Any) -> "LongHorizonStrategyConfig":
-        return cls(kind="artifact_first", history_retention_policy="state_plus_memory", artifact_rollup_interval=10, **kwargs)
-
-
-class CooperationStrategyConfig(BaseModel):
-    kind: str = "matriarchal_elephant"
-    topology: Literal["matriarchal_elephant", "distributed_herd", "hybrid_herd", "custom"] = "matriarchal_elephant"
-    matriarch_agent_name: str | None = "supervisor"
-    individual_memory_window: int = 6
-    shared_workspace_policy: Literal["artifacts_first", "notes_first", "balanced"] = "artifacts_first"
-    collective_memory_promotion_policy: Literal["matriarch_validated", "distributed_consensus", "hybrid"] = "matriarch_validated"
-    trail_knowledge_policy: Literal["enabled", "disabled"] = "enabled"
-    handoff_policy: Literal["summary_only", "summary_plus_artifacts", "raw_allowed"] = "summary_plus_artifacts"
-    route_guidance_policy: Literal["matriarch_guided", "distributed", "hybrid"] = "matriarch_guided"
-    risk_alert_policy: Literal["matriarch", "distributed", "hybrid"] = "matriarch"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize(cls, data: Any) -> Any:
-        if isinstance(data, str):
-            mapping = {
-                "matriarchal_elephant": cls.matriarchal().model_dump(),
-                "distributed_herd": cls.distributed().model_dump(),
-                "distributed_swarm": cls.distributed().model_dump(),
-                "hybrid_herd": cls.hybrid().model_dump(),
-            }
-            return mapping.get(data, {"kind": data, "topology": "custom"})
-        return data
-
-    @classmethod
-    def from_any(cls, value: "CooperationStrategyConfig | str | dict[str, Any] | None", **overrides: Any) -> "CooperationStrategyConfig":
-        if value is None:
-            base = cls.matriarchal()
-        elif isinstance(value, cls):
-            base = value.model_copy(deep=True)
-        else:
-            base = cls.model_validate(value)
-        return base.model_copy(update=overrides) if overrides else base
-
-    @classmethod
-    def matriarchal(cls, **kwargs: Any) -> "CooperationStrategyConfig":
-        return cls(kind="matriarchal_elephant", topology="matriarchal_elephant", **kwargs)
-
-    @classmethod
-    def distributed(cls, **kwargs: Any) -> "CooperationStrategyConfig":
-        return cls(
-            kind="distributed_herd",
-            topology="distributed_herd",
-            matriarch_agent_name=None,
-            collective_memory_promotion_policy="distributed_consensus",
-            handoff_policy="summary_only",
-            route_guidance_policy="distributed",
-            risk_alert_policy="distributed",
-            **kwargs,
-        )
-
-    @classmethod
-    def hybrid(cls, **kwargs: Any) -> "CooperationStrategyConfig":
-        return cls(
-            kind="hybrid_herd",
-            topology="hybrid_herd",
-            collective_memory_promotion_policy="hybrid",
-            route_guidance_policy="hybrid",
-            risk_alert_policy="hybrid",
-            **kwargs,
-        )
-
-
-class MemoryGovernanceStrategyConfig(BaseModel):
-    kind: str = "mgcm"
-    promotion_policy: str | None = None
-    index_policy: str | None = None
-    recall_policy: str | None = None
-    decay_policy: str | None = None
-    collective_promotion_policy: Literal["validated_only", "evidence_weighted", "manual"] = "validated_only"
-    trail_knowledge_enabled: bool = True
-    validation_threshold: float = 0.7
-    episodic_memory_enabled: bool = True
-    episodic_capsule_limit: int = 4
-    scene_index_fields: list[str] = Field(default_factory=lambda: ["goal", "knowledge_scope", "agent_role", "thread_id"])
-    capsule_promotion_threshold: float = 1.5
-    recall_top_k: int = 4
-    allow_cross_thread_recall: bool = False
-    relevance_weight: float = 4.0
-    evidence_weight: float = 1.8
-    reuse_weight: float = 0.8
-    outcome_weight: float = 1.2
-    recency_weight: float = 0.0
-    semantic_promotion_threshold: float = 2.3
-    collective_promotion_threshold: float = 2.8
-    config: dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize(cls, data: Any) -> Any:
-        if isinstance(data, str):
-            if data in {"mgcm", "default"}:
-                return cls.default().model_dump()
-            if data == "nutcracker_memory":
-                return cls.nutcracker().model_dump()
-            if data == "episodic_only":
-                return cls.episodic_only().model_dump()
-            if data == "semantic_only":
-                return cls.semantic_only().model_dump()
-            if data == "hybrid_long_memory":
-                return cls.hybrid_long_memory().model_dump()
-            return {"kind": data}
+        if data is None:
+            return cls.default().model_dump()
+        if isinstance(data, cls):
+            return data
         if isinstance(data, dict):
             normalized = dict(data)
-            legacy = normalized.get("promotion_policy")
-            if (
-                isinstance(legacy, str)
-                and legacy in {"validated_only", "evidence_weighted", "manual"}
-                and "collective_promotion_policy" not in normalized
-            ):
-                normalized["collective_promotion_policy"] = legacy
+            normalized.setdefault("sources", _deepcopy_dict(_DEFAULT_CONTEXT_SOURCES))
             return normalized
-        return data
+        raise TypeError("ContextPolicy accepts a ContextPolicy instance or a mapping.")
 
     @classmethod
-    def from_any(cls, value: "MemoryGovernanceStrategyConfig | str | dict[str, Any] | None", **overrides: Any) -> "MemoryGovernanceStrategyConfig":
+    def from_any(cls, value: "ContextPolicy | dict[str, Any] | None", **overrides: Any) -> "ContextPolicy":
         if value is None:
             base = cls.default()
         elif isinstance(value, cls):
             base = value.model_copy(deep=True)
-        elif isinstance(value, dict):
-            raw = dict(value)
-            kind = raw.get("kind")
-            preset_map = {
-                "mgcm": cls.default,
-                "default": cls.default,
-                "nutcracker_memory": cls.nutcracker,
-                "episodic_only": cls.episodic_only,
-                "semantic_only": cls.semantic_only,
-                "hybrid_long_memory": cls.hybrid_long_memory,
-            }
-            if kind in preset_map:
-                base = preset_map[kind]().model_copy(update=raw)
-            else:
-                base = cls.model_validate(raw)
         else:
             base = cls.model_validate(value)
         return base.model_copy(update=overrides) if overrides else base
 
     @classmethod
-    def default(cls, **kwargs: Any) -> "MemoryGovernanceStrategyConfig":
+    def default(cls, **overrides: Any) -> "ContextPolicy":
+        return cls(**overrides)
+
+    @classmethod
+    def lean(cls, **overrides: Any) -> "ContextPolicy":
         payload = {
-            "kind": "mgcm",
-            "collective_promotion_policy": "validated_only",
-            "index_policy": "scene_hash",
-            "recall_policy": "scene_first",
-            "decay_policy": "relevance_only",
+            "conversation_window": 6,
+            "char_budget": 12000,
+            "sources": {
+                **_deepcopy_dict(_DEFAULT_CONTEXT_SOURCES),
+                "memory_summary": False,
+                "retrieval_evidence": False,
+                "retrieval_report": False,
+                "tool_descriptions": False,
+            },
         }
-        payload.update(kwargs)
+        payload.update(overrides)
         return cls(**payload)
 
     @classmethod
-    def nutcracker(cls, **kwargs: Any) -> "MemoryGovernanceStrategyConfig":
+    def evidence_friendly(cls, **overrides: Any) -> "ContextPolicy":
         payload = {
-            "kind": "nutcracker_memory",
-            "promotion_policy": "episodic_salience",
-            "index_policy": "scene_hash",
-            "recall_policy": "scene_first",
-            "decay_policy": "relevance_only",
+            "conversation_window": 10,
+            "char_budget": 22000,
+            "sources": {
+                **_deepcopy_dict(_DEFAULT_CONTEXT_SOURCES),
+                "memory_summary": True,
+                "retrieval_evidence": {"enabled": True, "max_items": 6},
+                "retrieval_citations": {"enabled": True, "max_items": 8},
+                "retrieval_report": True,
+                "retrieval_plan": True,
+            },
         }
-        payload.update(kwargs)
+        payload.update(overrides)
         return cls(**payload)
 
     @classmethod
-    def episodic_only(cls, **kwargs: Any) -> "MemoryGovernanceStrategyConfig":
-        payload = cls.nutcracker().model_dump()
-        payload.update({"kind": "episodic_only", "semantic_promotion_threshold": 9999.0})
-        payload.update(kwargs)
+    def hybrid_budgeted(cls, **overrides: Any) -> "ContextPolicy":
+        payload = cls.evidence_friendly(selection_mode="hybrid").model_dump()
+        payload.update(overrides)
         return cls(**payload)
+
+    def _source_config(self, name: str) -> dict[str, Any]:
+        raw = self.sources.get(name, False)
+        if isinstance(raw, bool):
+            return {"enabled": raw}
+        if isinstance(raw, dict):
+            return {"enabled": raw.get("enabled", True), **raw}
+        return {"enabled": bool(raw)}
+
+    def source_enabled(self, name: str) -> bool:
+        return bool(self._source_config(name).get("enabled", False))
+
+    def source_limit(self, name: str, default: int | None = None) -> int | None:
+        value = self._source_config(name).get("max_items", default)
+        return int(value) if value is not None else None
+
+    def source_representation(self, name: str, default: str = "full") -> str:
+        return str(self._source_config(name).get("representation", default))
+
+    @property
+    def include_memory_summary(self) -> bool:
+        return self.source_enabled("memory_summary")
+
+    @property
+    def include_retrieval_summary(self) -> bool:
+        return self.source_enabled("retrieval_summary")
+
+    @property
+    def include_retrieval_evidence(self) -> bool:
+        return self.source_enabled("retrieval_evidence")
+
+    @property
+    def retrieval_evidence_max_items(self) -> int:
+        return int(self.source_limit("retrieval_evidence", 3) or 3)
+
+    @property
+    def include_retrieval_citations(self) -> bool:
+        return self.source_enabled("retrieval_citations")
+
+    @property
+    def citation_max_items(self) -> int:
+        return int(self.source_limit("retrieval_citations", 4) or 4)
+
+    @property
+    def include_retrieval_report(self) -> bool:
+        return self.source_enabled("retrieval_report")
+
+    @property
+    def include_retrieval_plan(self) -> bool:
+        return self.source_enabled("retrieval_plan")
+
+    @property
+    def include_tool_descriptions(self) -> bool:
+        return self.source_enabled("tool_descriptions")
+
+    @property
+    def include_skill_instructions(self) -> bool:
+        return self.source_enabled("skill_instructions")
+
+    @property
+    def include_task_packet(self) -> bool:
+        return self.source_enabled("task_packet")
+
+    @property
+    def include_delegation_context(self) -> bool:
+        return self.source_enabled("delegation_context")
+
+    @property
+    def include_collective_memory(self) -> bool:
+        return self.source_enabled("shared_memory")
+
+    @property
+    def collective_memory_max_items(self) -> int:
+        return int(self.source_limit("shared_memory", 4) or 4)
+
+    @property
+    def max_conversation_messages(self) -> int:
+        return self.conversation_window
+
+    @property
+    def prompt_char_budget(self) -> int:
+        return self.char_budget
+
+    @property
+    def segment_char_budget(self) -> int:
+        return self.char_budget
+
+    @property
+    def salience_mode(self) -> str:
+        return self.selection_mode
+
+    @property
+    def salience_rerank_top_k(self) -> int:
+        return 8
+
+    @property
+    def segment_min_keep(self) -> int:
+        return 6
+
+    @property
+    def budget_aware_compaction(self) -> bool:
+        return self.overflow_action in {"compress", "drop_low_priority", "disable_heavy_blocks"}
+
+    @property
+    def tool_result_policy(self) -> str:
+        return self.tool_observation_mode
+
+    @property
+    def tool_result_max_chars(self) -> int:
+        if self.tool_observation_mode == "truncate":
+            return 800
+        if self.tool_observation_mode == "summary":
+            return 500
+        return self.char_budget
+
+    @property
+    def stage_attention_profiles(self) -> dict[str, dict[str, float]]:
+        return {}
+
+
+class StatePolicy(BaseModel):
+    """Neutral state-retention and refresh policy."""
+
+    retention_mode: Literal["window_only", "window_plus_summary", "state_plus_memory"] = "window_plus_summary"
+    summary_refresh_every: int = 25
+    snapshot_every: int = 50
+    rollup_every: int = 20
 
     @classmethod
-    def semantic_only(cls, **kwargs: Any) -> "MemoryGovernanceStrategyConfig":
-        payload = cls.nutcracker().model_dump()
-        payload.update({"kind": "semantic_only", "episodic_memory_enabled": False})
-        payload.update(kwargs)
-        return cls(**payload)
+    def from_any(cls, value: "StatePolicy | dict[str, Any] | None", **overrides: Any) -> "StatePolicy":
+        if value is None:
+            base = cls()
+        elif isinstance(value, cls):
+            base = value.model_copy(deep=True)
+        else:
+            base = cls.model_validate(value)
+        return base.model_copy(update=overrides) if overrides else base
+
+    @property
+    def history_retention_policy(self) -> str:
+        return self.retention_mode
+
+    @property
+    def max_prompt_messages(self) -> int:
+        return 10 if self.retention_mode == "window_only" else 14
+
+
+class CoordinationPolicy(BaseModel):
+    """Neutral multi-agent coordination policy."""
+
+    handoff_mode: Literal["summary_only", "summary_plus_artifacts", "raw_allowed"] = "summary_plus_artifacts"
+    workspace_mode: Literal["artifacts_first", "notes_first", "balanced"] = "artifacts_first"
+    route_mode: Literal["guided", "distributed", "hybrid"] = "guided"
+    alert_mode: Literal["direct", "shared", "hybrid"] = "direct"
 
     @classmethod
-    def hybrid_long_memory(cls, **kwargs: Any) -> "MemoryGovernanceStrategyConfig":
-        payload = cls.nutcracker().model_dump()
-        payload.update({"kind": "hybrid_long_memory", "allow_cross_thread_recall": True, "recall_top_k": 6})
-        payload.update(kwargs)
+    def from_any(cls, value: "CoordinationPolicy | dict[str, Any] | None", **overrides: Any) -> "CoordinationPolicy":
+        if value is None:
+            base = cls()
+        elif isinstance(value, cls):
+            base = value.model_copy(deep=True)
+        else:
+            base = cls.model_validate(value)
+        return base.model_copy(update=overrides) if overrides else base
+
+    @classmethod
+    def distributed(cls, **overrides: Any) -> "CoordinationPolicy":
+        return cls(route_mode="distributed", handoff_mode="summary_only", alert_mode="shared", **overrides)
+
+    @classmethod
+    def hybrid(cls, **overrides: Any) -> "CoordinationPolicy":
+        return cls(route_mode="hybrid", alert_mode="hybrid", **overrides)
+
+    @property
+    def handoff_policy(self) -> str:
+        return self.handoff_mode
+
+    @property
+    def shared_workspace_policy(self) -> str:
+        return self.workspace_mode
+
+    @property
+    def route_guidance_policy(self) -> str:
+        return self.route_mode
+
+    @property
+    def risk_alert_policy(self) -> str:
+        return self.alert_mode
+
+    @property
+    def topology(self) -> str:
+        return self.route_mode
+
+    @property
+    def trail_knowledge_policy(self) -> str:
+        return "enabled"
+
+
+class MemoryPolicy(BaseModel):
+    """Neutral long-memory governance policy."""
+
+    recall_mode: Literal["off", "thread", "scene", "hybrid"] = "scene"
+    promotion_mode: Literal["off", "episodic", "semantic", "hybrid", "validated"] = "episodic"
+    validation_mode: Literal["off", "threshold", "manual"] = "threshold"
+    thresholds_and_weights: dict[str, Any] = Field(default_factory=lambda: _deepcopy_dict(_DEFAULT_MEMORY_THRESHOLDS))
+
+    @classmethod
+    def from_any(cls, value: "MemoryPolicy | dict[str, Any] | None", **overrides: Any) -> "MemoryPolicy":
+        if value is None:
+            base = cls()
+        elif isinstance(value, cls):
+            base = value.model_copy(deep=True)
+        else:
+            base = cls.model_validate(value)
+        return base.model_copy(update=overrides) if overrides else base
+
+    @classmethod
+    def long_horizon(cls, **overrides: Any) -> "MemoryPolicy":
+        payload = {
+            "recall_mode": "hybrid",
+            "promotion_mode": "hybrid",
+            "validation_mode": "threshold",
+            "thresholds_and_weights": {
+                **_deepcopy_dict(_DEFAULT_MEMORY_THRESHOLDS),
+                "allow_cross_thread_recall": True,
+                "recall_top_k": 6,
+            },
+        }
+        payload.update(overrides)
         return cls(**payload)
 
+    @property
+    def promotion_policy(self) -> str | None:
+        if self.promotion_mode in {"episodic", "hybrid", "validated"}:
+            return "episodic_salience"
+        return None
 
-class BaseContextStrategy(ABC):
-    def __init__(self, config: ContextStrategyConfig) -> None:
-        self.config = config
+    @property
+    def index_policy(self) -> str | None:
+        return str(self.thresholds_and_weights.get("index_policy", "scene_hash"))
+
+    @property
+    def recall_policy(self) -> str | None:
+        if self.recall_mode in {"scene", "hybrid"}:
+            return "scene_first"
+        return None
+
+    @property
+    def decay_policy(self) -> str | None:
+        if self.recall_mode in {"scene", "hybrid"}:
+            return str(self.thresholds_and_weights.get("decay_policy", "relevance_only"))
+        return None
+
+    @property
+    def validation_threshold(self) -> float:
+        return float(self.thresholds_and_weights.get("validation_threshold", 0.7))
+
+    @property
+    def trail_knowledge_enabled(self) -> bool:
+        return bool(self.thresholds_and_weights.get("trail_knowledge_enabled", True))
+
+    @property
+    def collective_promotion_policy(self) -> str:
+        if self.validation_mode == "manual":
+            return "manual"
+        if self.promotion_mode == "validated":
+            return "validated_only"
+        return "evidence_weighted"
+
+    @property
+    def episodic_memory_enabled(self) -> bool:
+        return bool(self.thresholds_and_weights.get("episodic_memory_enabled", True))
+
+    @property
+    def kind(self) -> str:
+        return "memory_policy"
 
 
-class BaseLongHorizonStrategy(ABC):
-    def __init__(self, config: LongHorizonStrategyConfig) -> None:
-        self.config = config
+class ContextSelector(ABC):
+    @abstractmethod
+    async def select(
+        self,
+        prompt_context: Any,
+        *,
+        context_policy: ContextPolicy,
+        state_policy: StatePolicy,
+        stage: str,
+        selected_skill_routes: list[dict[str, Any]],
+        rerank_callback: Any,
+    ) -> tuple[Any, dict[str, Any]]:
+        raise NotImplementedError
 
 
-class BaseCooperationStrategy(ABC):
-    def __init__(self, config: CooperationStrategyConfig) -> None:
-        self.config = config
+class DefaultContextSelector(ContextSelector):
+    async def select(
+        self,
+        prompt_context: Any,
+        *,
+        context_policy: ContextPolicy,
+        state_policy: StatePolicy,
+        stage: str,
+        selected_skill_routes: list[dict[str, Any]],
+        rerank_callback: Any,
+    ) -> tuple[Any, dict[str, Any]]:
+        from agentorch.runtime.context_compaction import (
+            apply_budget_aware_compaction,
+            apply_static_context_filters,
+            estimate_prompt_context_budget,
+        )
 
-    def build_handoff_packet(self, *, task_context: dict[str, Any], artifacts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-        if self.config.handoff_policy == "raw_allowed":
-            return {**task_context, "artifact_refs": artifacts or []}
-        if self.config.handoff_policy == "summary_only":
-            return {"summary": task_context.get("summary") or task_context.get("goal") or "", "artifact_refs": []}
-        return {"summary": task_context.get("summary") or task_context.get("goal") or "", "artifact_refs": artifacts or []}
+        updated, truncated_sections = apply_static_context_filters(
+            prompt_context,
+            context_policy=context_policy,
+            state_policy=state_policy,
+        )
+        before_budget = estimate_prompt_context_budget(updated, truncated_sections=truncated_sections)
+        if before_budget["estimated_total_chars"] <= context_policy.char_budget:
+            before_budget.update(
+                {
+                    "estimated_total_chars_before": before_budget["estimated_total_chars"],
+                    "estimated_total_chars_after": before_budget["estimated_total_chars"],
+                    "selected_segment_count": 0,
+                    "dropped_segment_count": 0,
+                    "segment_scores": [],
+                    "inhibition_events": [],
+                    "compression_reason": "within_budget",
+                    "compaction_applied": False,
+                    "overflow_action": context_policy.overflow_action,
+                }
+            )
+            return updated, before_budget
 
-    def select_shared_context(self, *, task_context: dict[str, Any]) -> dict[str, Any]:
-        return {"topology": self.config.topology, "task_context": task_context}
+        if context_policy.overflow_action == "fail_closed":
+            raise RuntimeError(
+                f"Context budget exceeded for thread {prompt_context.prompt_variables.get('thread_id', '<unknown>')} "
+                f"with overflow_action='fail_closed'."
+            )
 
-    def build_shared_workspace_view(self, *, notes: list[dict[str, Any]] | None = None, artifacts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-        return {"policy": self.config.shared_workspace_policy, "notes": notes or [], "artifacts": artifacts or []}
+        if context_policy.overflow_action == "disable_heavy_blocks":
+            stripped = updated.model_copy(
+                update={
+                    "retrieval_report": None,
+                    "retrieval_plan": None,
+                    "tool_descriptions": [],
+                    "skill_instructions": [],
+                }
+            )
+            stripped_budget = estimate_prompt_context_budget(stripped, truncated_sections=truncated_sections + ["heavy_blocks"])
+            if stripped_budget["estimated_total_chars"] <= context_policy.char_budget:
+                stripped_budget.update(
+                    {
+                        "estimated_total_chars_before": before_budget["estimated_total_chars"],
+                        "estimated_total_chars_after": stripped_budget["estimated_total_chars"],
+                        "selected_segment_count": 0,
+                        "dropped_segment_count": 0,
+                        "segment_scores": [],
+                        "inhibition_events": [],
+                        "compression_reason": "heavy_blocks_disabled",
+                        "compaction_applied": True,
+                        "overflow_action": context_policy.overflow_action,
+                    }
+                )
+                return stripped, stripped_budget
+            updated = stripped
 
-    def route_collective_memory(self, *, records: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-        return {"policy": self.config.collective_memory_promotion_policy, "records": records or []}
-
-    def promote_trail_knowledge(self, *, records: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-        return {"enabled": self.config.trail_knowledge_policy == "enabled", "records": records or []}
-
-    def build_supervisor_context(self, *, task_context: dict[str, Any]) -> dict[str, Any]:
-        return {"topology": self.config.topology, "matriarch_agent_name": self.config.matriarch_agent_name, "task_context": task_context}
-
-    def should_share_raw_history(self) -> bool:
-        return self.config.handoff_policy == "raw_allowed"
+        compacted, budget = await apply_budget_aware_compaction(
+            updated,
+            context_policy=context_policy,
+            stage=stage,
+            selected_skill_routes=selected_skill_routes,
+            rerank_callback=rerank_callback,
+        )
+        budget["overflow_action"] = context_policy.overflow_action
+        return compacted, budget
 
 
-class BaseMemoryGovernanceStrategy(ABC):
-    def __init__(self, config: MemoryGovernanceStrategyConfig) -> None:
-        self.config = config
+class RoutePlanner(ABC):
+    @abstractmethod
+    async def plan(
+        self,
+        *,
+        supervisor: Any,
+        task: Any,
+        registry: Any,
+        coordination_policy: CoordinationPolicy,
+    ) -> Any:
+        raise NotImplementedError
 
-    def policy_bundle(self) -> dict[str, str | None]:
+    def build_supervisor_context(
+        self,
+        *,
+        task_context: dict[str, Any],
+        coordination_policy: CoordinationPolicy,
+    ) -> dict[str, Any]:
         return {
-            "promotion_policy": self.config.promotion_policy,
-            "index_policy": self.config.index_policy,
-            "recall_policy": self.config.recall_policy,
-            "decay_policy": self.config.decay_policy,
+            "route_mode": coordination_policy.route_mode,
+            "workspace_mode": coordination_policy.workspace_mode,
+            "alert_mode": coordination_policy.alert_mode,
+            "task_context": task_context,
         }
 
-    def resolved_runtime_config(self) -> dict[str, Any]:
+    def build_shared_workspace_view(
+        self,
+        *,
+        notes: list[dict[str, Any]] | None = None,
+        artifacts: list[dict[str, Any]] | None = None,
+        coordination_policy: CoordinationPolicy,
+    ) -> dict[str, Any]:
         return {
-            "episodic_memory_enabled": self.config.episodic_memory_enabled,
-            "episodic_capsule_limit": self.config.episodic_capsule_limit,
-            "scene_index_fields": list(self.config.scene_index_fields),
-            "capsule_promotion_threshold": self.config.capsule_promotion_threshold,
-            "recall_top_k": self.config.recall_top_k,
-            "allow_cross_thread_recall": self.config.allow_cross_thread_recall,
-            "relevance_weight": self.config.relevance_weight,
-            "evidence_weight": self.config.evidence_weight,
-            "reuse_weight": self.config.reuse_weight,
-            "outcome_weight": self.config.outcome_weight,
-            "recency_weight": self.config.recency_weight,
-            "semantic_promotion_threshold": self.config.semantic_promotion_threshold,
-            "collective_promotion_threshold": self.config.collective_promotion_threshold,
-            **dict(self.config.config or {}),
+            "workspace_mode": coordination_policy.workspace_mode,
+            "notes": notes or [],
+            "artifacts": artifacts or [],
         }
+
+    def should_share_raw_history(self, coordination_policy: CoordinationPolicy) -> bool:
+        return coordination_policy.handoff_mode == "raw_allowed"
+
+
+class DefaultRoutePlanner(RoutePlanner):
+    async def plan(
+        self,
+        *,
+        supervisor: Any,
+        task: Any,
+        registry: Any,
+        coordination_policy: CoordinationPolicy,
+    ) -> Any:
+        return await supervisor.create_plan(task)
+
+
+class MemoryEvaluator(ABC):
+    @abstractmethod
+    def policy_bundle(self, policy: MemoryPolicy) -> dict[str, str | None]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def resolved_runtime_config(self, policy: MemoryPolicy) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def promote_episode(self, manager: Any, *, policy: MemoryPolicy, **kwargs: Any) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def search_long_term_memory(self, manager: Any, *, policy: MemoryPolicy, **kwargs: Any) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def build_memory_evidence(
+        self,
+        *,
+        policy: MemoryPolicy,
+        runtime: Any,
+        candidates: list[dict[str, Any]],
+        thread_id: str,
+        knowledge_scope: list[str],
+    ) -> tuple[list[Any], list[Any], dict[str, Any]]:
+        raise NotImplementedError
+
+    async def validate_memory(self, manager: Any, *, policy: MemoryPolicy, record_id: int) -> dict[str, Any] | None:
+        if policy.validation_mode == "off":
+            return None
+        return await manager.validate_collective_memory(record_id)
+
+
+class DefaultMemoryEvaluator(MemoryEvaluator):
+    def policy_bundle(self, policy: MemoryPolicy) -> dict[str, str | None]:
+        return {
+            "promotion_mode": policy.promotion_mode,
+            "recall_mode": policy.recall_mode,
+            "validation_mode": policy.validation_mode,
+            "promotion_policy": policy.promotion_policy,
+            "index_policy": policy.index_policy,
+            "recall_policy": policy.recall_policy,
+            "decay_policy": policy.decay_policy,
+        }
+
+    def resolved_runtime_config(self, policy: MemoryPolicy) -> dict[str, Any]:
+        resolved = _deepcopy_dict(_DEFAULT_MEMORY_THRESHOLDS)
+        resolved.update(policy.thresholds_and_weights)
+        return resolved
 
     def _policy_instance(self, policy_kind: str | None, factory_name: str):
         if not policy_kind:
@@ -427,29 +621,33 @@ class BaseMemoryGovernanceStrategy(ABC):
         }
         return factories[factory_name](policy_kind)
 
-    async def promote_episode(self, manager: Any, **kwargs: Any) -> list[dict[str, Any]]:
-        promotion_policy = self._policy_instance(self.config.promotion_policy, "promotion")
-        index_policy = self._policy_instance(self.config.index_policy, "index")
+    async def promote_episode(self, manager: Any, *, policy: MemoryPolicy, **kwargs: Any) -> list[dict[str, Any]]:
+        if policy.promotion_mode == "off":
+            return []
+        promotion_policy = self._policy_instance(policy.promotion_policy, "promotion")
+        index_policy = self._policy_instance(policy.index_policy, "index")
         if promotion_policy is None or index_policy is None:
             return []
         return await promotion_policy.promote(
             manager,
-            config=self.resolved_runtime_config(),
-            strategy_kind=self.config.kind,
+            config=self.resolved_runtime_config(policy),
+            strategy_kind=policy.kind,
             index_policy=index_policy,
             **kwargs,
         )
 
-    async def search_long_term_memory(self, manager: Any, **kwargs: Any) -> list[dict[str, Any]]:
-        recall_policy = self._policy_instance(self.config.recall_policy, "recall")
-        index_policy = self._policy_instance(self.config.index_policy, "index")
-        decay_policy = self._policy_instance(self.config.decay_policy, "decay")
+    async def search_long_term_memory(self, manager: Any, *, policy: MemoryPolicy, **kwargs: Any) -> list[dict[str, Any]]:
+        if policy.recall_mode in {"off", "thread"}:
+            return []
+        recall_policy = self._policy_instance(policy.recall_policy, "recall")
+        index_policy = self._policy_instance(policy.index_policy, "index")
+        decay_policy = self._policy_instance(policy.decay_policy, "decay")
         if recall_policy is None or index_policy is None or decay_policy is None:
             return []
         return await recall_policy.recall(
             manager,
-            config=self.resolved_runtime_config(),
-            strategy_kind=self.config.kind,
+            config=self.resolved_runtime_config(policy),
+            strategy_kind=policy.kind,
             index_policy=index_policy,
             decay_policy=decay_policy,
             **kwargs,
@@ -458,6 +656,7 @@ class BaseMemoryGovernanceStrategy(ABC):
     def build_memory_evidence(
         self,
         *,
+        policy: MemoryPolicy,
         runtime: Any,
         candidates: list[dict[str, Any]],
         thread_id: str,
@@ -517,265 +716,24 @@ class BaseMemoryGovernanceStrategy(ABC):
                 }
             )
         report = {
-            "mechanism": self.config.kind,
-            "policy_bundle": self.policy_bundle(),
-            "config": self.resolved_runtime_config(),
+            "mechanism": policy.kind,
+            "policy_bundle": self.policy_bundle(policy),
+            "config": self.resolved_runtime_config(policy),
             "selected_count": len(selected),
             "selected": selected,
         }
         return evidence, citations, report
 
-    async def validate_memory(self, manager: Any, record_id: int) -> dict[str, Any] | None:
-        return await manager.validate_collective_memory(record_id)
 
-
-class CompactContextStrategy(BaseContextStrategy):
-    pass
-
-
-class BalancedContextStrategy(BaseContextStrategy):
-    pass
-
-
-class ResearchHeavyContextStrategy(BaseContextStrategy):
-    pass
-
-
-class LongRunningSafeStrategy(BaseLongHorizonStrategy):
-    pass
-
-
-class StateCentricStrategy(BaseLongHorizonStrategy):
-    pass
-
-
-class ArtifactFirstStrategy(BaseLongHorizonStrategy):
-    pass
-
-
-class MatriarchalElephantStrategy(BaseCooperationStrategy):
-    pass
-
-
-class DistributedHerdStrategy(BaseCooperationStrategy):
-    pass
-
-
-class HybridHerdStrategy(BaseCooperationStrategy):
-    pass
-
-
-class DefaultMemoryGovernanceStrategy(BaseMemoryGovernanceStrategy):
-    pass
-
-
-class NutcrackerMemoryStrategy(BaseMemoryGovernanceStrategy):
-    pass
-
-
-class EpisodicOnlyMemoryStrategy(BaseMemoryGovernanceStrategy):
-    pass
-
-
-class SemanticOnlyMemoryStrategy(BaseMemoryGovernanceStrategy):
-    pass
-
-
-class HybridLongMemoryStrategy(BaseMemoryGovernanceStrategy):
-    pass
-
-
-class CustomMemoryGovernanceStrategy(BaseMemoryGovernanceStrategy):
-    pass
-
-
-class StrategyRegistration(BaseModel):
-    kind: str
-    factory: Callable[..., Any]
-
-
-_CONTEXT_REGISTRY: dict[str, Callable[..., Any]] = {}
-_LONG_HORIZON_REGISTRY: dict[str, Callable[..., Any]] = {}
-_COOPERATION_REGISTRY: dict[str, Callable[..., Any]] = {}
-_MEMORY_GOVERNANCE_REGISTRY: dict[str, Callable[..., Any]] = {}
-_PROFILE_REGISTRY: dict[str, Callable[[], dict[str, Any]]] = {}
-
-
-def register_context_strategy(kind: str, strategy_cls_or_factory: Callable[..., Any], config_cls=None) -> None:
-    _CONTEXT_REGISTRY[kind] = strategy_cls_or_factory
-
-
-def register_long_horizon_strategy(kind: str, strategy_cls_or_factory: Callable[..., Any], config_cls=None) -> None:
-    _LONG_HORIZON_REGISTRY[kind] = strategy_cls_or_factory
-
-
-def register_cooperation_strategy(kind: str, strategy_cls_or_factory: Callable[..., Any], config_cls=None) -> None:
-    _COOPERATION_REGISTRY[kind] = strategy_cls_or_factory
-
-
-def register_memory_governance_strategy(kind: str, strategy_cls_or_factory: Callable[..., Any], config_cls=None) -> None:
-    _MEMORY_GOVERNANCE_REGISTRY[kind] = strategy_cls_or_factory
-
-
-def register_orchestration_profile(name: str, profile_builder: Callable[[], dict[str, Any]]) -> None:
-    _PROFILE_REGISTRY[name] = profile_builder
-
-
-def list_context_strategies() -> list[str]:
-    return sorted(_CONTEXT_REGISTRY)
-
-
-def list_long_horizon_strategies() -> list[str]:
-    return sorted(_LONG_HORIZON_REGISTRY)
-
-
-def list_cooperation_strategies() -> list[str]:
-    return sorted(_COOPERATION_REGISTRY)
-
-
-def list_memory_governance_strategies() -> list[str]:
-    return sorted(_MEMORY_GOVERNANCE_REGISTRY)
-
-
-def list_orchestration_profiles() -> list[str]:
-    return sorted(_PROFILE_REGISTRY)
-
-
-def create_context_strategy(config: ContextStrategyConfig | str | dict[str, Any] | None = None) -> BaseContextStrategy:
-    if isinstance(config, BaseContextStrategy):
-        return config
-    resolved = ContextStrategyConfig.from_any(config)
-    factory = _CONTEXT_REGISTRY[resolved.kind]
-    return factory(resolved)
-
-
-def create_long_horizon_strategy(config: LongHorizonStrategyConfig | str | dict[str, Any] | None = None) -> BaseLongHorizonStrategy:
-    if isinstance(config, BaseLongHorizonStrategy):
-        return config
-    resolved = LongHorizonStrategyConfig.from_any(config)
-    factory = _LONG_HORIZON_REGISTRY[resolved.kind]
-    return factory(resolved)
-
-
-def create_cooperation_strategy(config: CooperationStrategyConfig | str | dict[str, Any] | None = None) -> BaseCooperationStrategy:
-    if isinstance(config, BaseCooperationStrategy):
-        return config
-    resolved = CooperationStrategyConfig.from_any(config)
-    factory = _COOPERATION_REGISTRY[resolved.kind]
-    return factory(resolved)
-
-
-def create_memory_governance_strategy(config: MemoryGovernanceStrategyConfig | str | dict[str, Any] | None = None) -> BaseMemoryGovernanceStrategy:
-    if isinstance(config, BaseMemoryGovernanceStrategy):
-        return config
-    resolved = MemoryGovernanceStrategyConfig.from_any(config)
-    factory = _MEMORY_GOVERNANCE_REGISTRY[resolved.kind]
-    return factory(resolved)
-
-
-def resolve_orchestration_profile(name: str | None) -> dict[str, Any]:
-    if not name:
-        return {}
-    builder = _PROFILE_REGISTRY[name]
-    return builder()
-
-
-def bootstrap_strategy_defaults() -> None:
-    register_context_strategy("compact", CompactContextStrategy)
-    register_context_strategy("balanced", BalancedContextStrategy)
-    register_context_strategy("research_heavy", ResearchHeavyContextStrategy)
-    register_long_horizon_strategy("long_running_safe", LongRunningSafeStrategy)
-    register_long_horizon_strategy("state_centric", StateCentricStrategy)
-    register_long_horizon_strategy("artifact_first", ArtifactFirstStrategy)
-    register_cooperation_strategy("matriarchal_elephant", MatriarchalElephantStrategy)
-    register_cooperation_strategy("distributed_herd", DistributedHerdStrategy)
-    register_cooperation_strategy("hybrid_herd", HybridHerdStrategy)
-    register_memory_governance_strategy("mgcm", DefaultMemoryGovernanceStrategy)
-    register_memory_governance_strategy("nutcracker_memory", NutcrackerMemoryStrategy)
-    register_memory_governance_strategy("episodic_only", EpisodicOnlyMemoryStrategy)
-    register_memory_governance_strategy("semantic_only", SemanticOnlyMemoryStrategy)
-    register_memory_governance_strategy("hybrid_long_memory", HybridLongMemoryStrategy)
-    register_memory_governance_strategy("custom", CustomMemoryGovernanceStrategy)
-    register_orchestration_profile(
-        "default_safe",
-        lambda: {
-            "context_strategy": ContextStrategyConfig.compact().model_dump(),
-            "long_horizon_strategy": LongHorizonStrategyConfig.long_running_safe().model_dump(),
-            "cooperation_strategy": CooperationStrategyConfig.matriarchal().model_dump(),
-            "memory_governance_strategy": MemoryGovernanceStrategyConfig.default().model_dump(),
-        },
-    )
-    register_orchestration_profile(
-        "compact_single_agent",
-        lambda: {
-            "context_strategy": ContextStrategyConfig.compact().model_dump(),
-            "long_horizon_strategy": LongHorizonStrategyConfig.state_centric().model_dump(),
-            "cooperation_strategy": CooperationStrategyConfig.distributed().model_dump(),
-            "memory_governance_strategy": MemoryGovernanceStrategyConfig.default().model_dump(),
-        },
-    )
-    register_orchestration_profile(
-        "deep_research",
-        lambda: {
-            "context_strategy": ContextStrategyConfig.compact(include_retrieval_evidence=True, include_retrieval_citations=True).model_dump(),
-            "long_horizon_strategy": LongHorizonStrategyConfig.long_running_safe().model_dump(),
-            "cooperation_strategy": CooperationStrategyConfig.matriarchal().model_dump(),
-            "memory_governance_strategy": MemoryGovernanceStrategyConfig.default().model_dump(),
-        },
-    )
-    register_orchestration_profile(
-        "matriarchal_elephant",
-        lambda: {
-            "context_strategy": ContextStrategyConfig.compact().model_dump(),
-            "long_horizon_strategy": LongHorizonStrategyConfig.long_running_safe().model_dump(),
-            "cooperation_strategy": CooperationStrategyConfig.matriarchal().model_dump(),
-            "memory_governance_strategy": MemoryGovernanceStrategyConfig.default().model_dump(),
-        },
-    )
-    register_orchestration_profile(
-        "distributed_swarm",
-        lambda: {
-            "context_strategy": ContextStrategyConfig.balanced().model_dump(),
-            "long_horizon_strategy": LongHorizonStrategyConfig.state_centric().model_dump(),
-            "cooperation_strategy": CooperationStrategyConfig.distributed().model_dump(),
-            "memory_governance_strategy": MemoryGovernanceStrategyConfig.default().model_dump(),
-        },
-    )
-    register_orchestration_profile(
-        "research_heavy",
-        lambda: {
-            "context_strategy": ContextStrategyConfig.research_heavy().model_dump(),
-            "long_horizon_strategy": LongHorizonStrategyConfig.artifact_first().model_dump(),
-            "cooperation_strategy": CooperationStrategyConfig.hybrid().model_dump(),
-            "memory_governance_strategy": MemoryGovernanceStrategyConfig.default().model_dump(),
-        },
-    )
-    register_orchestration_profile(
-        "coding_agent",
-        lambda: {
-            "context_strategy": ContextStrategyConfig.compact(
-                include_tool_descriptions=False,
-                max_conversation_messages=4,
-                tool_result_policy="truncate",
-                tool_result_max_chars=320,
-                budget_aware_compaction=True,
-                salience_mode="rule",
-                prompt_char_budget=10000,
-            ).model_dump(),
-            "long_horizon_strategy": LongHorizonStrategyConfig.state_centric().model_dump(),
-            "cooperation_strategy": CooperationStrategyConfig.distributed().model_dump(),
-            "memory_governance_strategy": MemoryGovernanceStrategyConfig.default().model_dump(),
-        },
-    )
-    register_orchestration_profile(
-        "workflow_oriented",
-        lambda: {
-            "context_strategy": ContextStrategyConfig.balanced(include_retrieval_plan=True).model_dump(),
-            "long_horizon_strategy": LongHorizonStrategyConfig.artifact_first().model_dump(),
-            "cooperation_strategy": CooperationStrategyConfig.hybrid().model_dump(),
-            "memory_governance_strategy": MemoryGovernanceStrategyConfig.default().model_dump(),
-        },
-    )
-
-
-bootstrap_strategy_defaults()
+__all__ = [
+    "ContextPolicy",
+    "StatePolicy",
+    "CoordinationPolicy",
+    "MemoryPolicy",
+    "ContextSelector",
+    "RoutePlanner",
+    "MemoryEvaluator",
+    "DefaultContextSelector",
+    "DefaultRoutePlanner",
+    "DefaultMemoryEvaluator",
+]

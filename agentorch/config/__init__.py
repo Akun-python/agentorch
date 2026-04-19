@@ -16,14 +16,13 @@ from .settings import (
 )
 from agentorch.security import PayloadBudgetConfig, RedactionConfig
 from agentorch.skills import SkillRoutingConfig
-from agentorch.strategies import ContextStrategyConfig, CooperationStrategyConfig, LongHorizonStrategyConfig, MemoryGovernanceStrategyConfig
+from agentorch.strategies import ContextPolicy, CoordinationPolicy, MemoryPolicy, StatePolicy
 
 __all__ = [
-    "ContextStrategyConfig",
-    "CooperationStrategyConfig",
-    "LongHorizonStrategyConfig",
+    "ContextPolicy",
+    "CoordinationPolicy",
     "MemoryConfig",
-    "MemoryGovernanceStrategyConfig",
+    "MemoryPolicy",
     "MemoryMechanismConfig",
     "ModelConfig",
     "ObservabilityConfig",
@@ -32,6 +31,7 @@ __all__ = [
     "RuntimeConfig",
     "SandboxConfig",
     "SkillRoutingConfig",
+    "StatePolicy",
     "initialize_environment",
     "validate_supported_python",
 ]

@@ -62,11 +62,10 @@ def _model_summary(runtime: Runtime) -> dict[str, Any]:
 def _resolved_strategy_summary(runtime: Runtime) -> dict[str, Any]:
     config = runtime.config
     return {
-        "orchestration_profile": config.orchestration_profile,
-        "context": _safe_export(config.context_strategy, config=config.redaction, unsafe=config.unsafe_export),
-        "long_horizon": _safe_export(config.long_horizon_strategy, config=config.redaction, unsafe=config.unsafe_export),
-        "cooperation": _safe_export(config.cooperation_strategy, config=config.redaction, unsafe=config.unsafe_export),
-        "memory_governance": _safe_export(config.memory_governance_strategy, config=config.redaction, unsafe=config.unsafe_export),
+        "context": _safe_export(config.context_policy, config=config.redaction, unsafe=config.unsafe_export),
+        "state": _safe_export(config.state_policy, config=config.redaction, unsafe=config.unsafe_export),
+        "coordination": _safe_export(config.coordination_policy, config=config.redaction, unsafe=config.unsafe_export),
+        "memory": _safe_export(config.memory_policy, config=config.redaction, unsafe=config.unsafe_export),
     }
 
 
@@ -81,7 +80,7 @@ def _runtime_summary(runtime: Runtime) -> dict[str, Any]:
         "sandbox": runtime.sandbox.__class__.__name__ if runtime.sandbox is not None else None,
         "has_supervisor": runtime.supervisor is not None,
         "registered_agents": [spec.name for spec in runtime.agent_registry.list_specs()],
-        "resolved_strategies": _resolved_strategy_summary(runtime),
+        "resolved_policies": _resolved_strategy_summary(runtime),
     }
 
 
@@ -262,13 +261,13 @@ class Agent:
             f"model={runtime_summary.get('model', {}).get('adapter', self.runtime.model.__class__.__name__)}",
             f"tools={', '.join(runtime_summary.get('tools', [])) or 'none'}",
         ]
-        strategy_summary = runtime_summary.get("resolved_strategies", {})
-        context_strategy = strategy_summary.get("context") or {}
-        memory_strategy = strategy_summary.get("memory_governance") or {}
-        if context_strategy.get("kind"):
-            lines.append(f"context_strategy={context_strategy['kind']}")
-        if memory_strategy.get("kind"):
-            lines.append(f"memory_governance={memory_strategy['kind']}")
+        strategy_summary = runtime_summary.get("resolved_policies", {})
+        context_policy = strategy_summary.get("context") or {}
+        memory_policy = strategy_summary.get("memory") or {}
+        if context_policy.get("selection_mode"):
+            lines.append(f"context_policy={context_policy['selection_mode']}")
+        if memory_policy.get("recall_mode"):
+            lines.append(f"memory_policy={memory_policy['recall_mode']}")
         if runtime_summary.get("registered_agents"):
             lines.append(f"registered_agents={', '.join(runtime_summary['registered_agents'])}")
         if blueprint.get("members"):

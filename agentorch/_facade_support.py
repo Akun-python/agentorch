@@ -15,6 +15,7 @@ from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
 from agentorch.runtime.agent import _runtime_summary, _safe_export, _workflow_summary
 from agentorch.sandbox import SandboxManager
+from agentorch.strategies import ContextPolicy, CoordinationPolicy, MemoryPolicy, StatePolicy
 from agentorch.tools import BaseTool, ToolRegistry
 from agentorch.workflow import Workflow
 
@@ -87,6 +88,7 @@ def normalize_tool_bundles(
     *,
     workspace_root: str | Path,
     sandbox: SandboxManager | None,
+    model: Any | None = None,
 ) -> ToolRegistry:
     if not tool_bundles:
         return ToolRegistry.empty()
@@ -95,6 +97,7 @@ def normalize_tool_bundles(
             workspace_root=workspace_root,
             sandbox=sandbox,
             include_execution=sandbox is not None,
+            model=model,
         )
     payload = dict(tool_bundles)
     return ToolRegistry.with_bundles(
@@ -104,7 +107,9 @@ def normalize_tool_bundles(
         include_execution=payload.pop("include_execution", sandbox is not None),
         include_git=payload.pop("include_git", True),
         include_web=payload.pop("include_web", False),
+        include_media=payload.pop("include_media", False),
         brave_api_key=payload.pop("brave_api_key", None),
+        model=payload.pop("model", model),
     )
 
 
@@ -145,15 +150,23 @@ def agent_member_summary(
 def profile_defaults(profile: str, *, sandbox: SandboxManager | None) -> dict[str, Any]:
     normalized = (profile or "default").strip().lower()
     if normalized == "default":
-        return {"orchestration_profile": "default_safe"}
+        return {
+            "context_policy": ContextPolicy.default(),
+            "state_policy": StatePolicy(),
+            "coordination_policy": CoordinationPolicy(),
+            "memory_policy": MemoryPolicy(),
+        }
     if normalized == "research":
         from agentorch.presets import build_deep_research_system_prompt
 
         return {
             "system_prompt": build_deep_research_system_prompt(),
-            "orchestration_profile": "deep_research",
             "reasoning": ReasoningStrategyConfig.plan_execute(config={"max_planning_steps": 5, "max_execution_steps": 8}),
             "rag": RagStrategyConfig.for_hybrid(mount="inline", injection_policy="full_report", max_steps=4),
+            "context_policy": ContextPolicy.hybrid_budgeted(),
+            "state_policy": StatePolicy(retention_mode="state_plus_memory"),
+            "coordination_policy": CoordinationPolicy.hybrid(),
+            "memory_policy": MemoryPolicy.long_horizon(),
             "enable_rag": True,
         }
     if normalized == "coding":
@@ -162,8 +175,11 @@ def profile_defaults(profile: str, *, sandbox: SandboxManager | None) -> dict[st
                 "You are a careful coding agent. Use tools when they improve accuracy, explain important tradeoffs, "
                 "and prefer safe, minimal changes."
             ),
-            "orchestration_profile": "coding_agent",
             "enable_tools": True,
+            "context_policy": ContextPolicy.lean(),
+            "state_policy": StatePolicy(),
+            "coordination_policy": CoordinationPolicy(),
+            "memory_policy": MemoryPolicy(),
             "tool_bundles": {
                 "include_filesystem": True,
                 "include_execution": sandbox is not None,
@@ -177,8 +193,11 @@ def profile_defaults(profile: str, *, sandbox: SandboxManager | None) -> dict[st
                 "You are a workflow-oriented agent. Follow configured workflow steps carefully, keep state explicit, "
                 "and make transitions easy to inspect."
             ),
-            "orchestration_profile": "workflow_oriented",
             "reasoning": "react",
+            "context_policy": ContextPolicy.default(),
+            "state_policy": StatePolicy(),
+            "coordination_policy": CoordinationPolicy(),
+            "memory_policy": MemoryPolicy(),
         }
     raise ValueError(f"Unsupported create_agent profile '{profile}'.")
 

@@ -1,0 +1,594 @@
+{
+  "generated_at_utc": "2026-04-19T06:55:06.190778+00:00",
+  "repo_root": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式",
+  "package_root": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\agentorch",
+  "git_commit": "07f5d01",
+  "root_public_api": {
+    "__all__": 256,
+    "line_count": 508,
+    "top_level_calls": [
+      {
+        "line": 247,
+        "name": "bootstrap_reasoning_defaults"
+      },
+      {
+        "line": 248,
+        "name": "bootstrap_evolution_defaults"
+      },
+      {
+        "line": 249,
+        "name": "bootstrap_memory_defaults"
+      }
+    ]
+  },
+  "line_counts": {
+    "__init__.py": 508,
+    "facade.py": 826,
+    "_facade_support.py": 296,
+    "runtime/runtime.py": 2179,
+    "runtime/agent.py": 280,
+    "runtime/context_kernel.py": 413,
+    "runtime/context_compaction.py": 410,
+    "strategies.py": 739,
+    "config/settings.py": 653,
+    "models/__init__.py": 36,
+    "evolution/session.py": 72
+  },
+  "top_import_fan_in": [
+    {
+      "module": "tools.base",
+      "count": 29,
+      "values": [
+        "runtime.runtime",
+        "tools.__init__",
+        "tools.code_interpreter",
+        "tools.coding.common",
+        "tools.coding.find_files",
+        "tools.coding.list_directory",
+        "tools.coding.read_file",
+        "tools.coding.search_text",
+        "tools.coding.write_file",
+        "tools.common.file_ops",
+        "tools.common.paths",
+        "tools.decorators",
+        "tools.execution.run_command",
+        "tools.filesystem.append_file",
+        "tools.filesystem.find_files",
+        "tools.filesystem.get_file_info",
+        "tools.filesystem.list_directory",
+        "tools.filesystem.make_directory",
+        "tools.filesystem.read_file",
+        "tools.filesystem.replace_in_file",
+        "tools.filesystem.search_text",
+        "tools.filesystem.write_file",
+        "tools.git_tools.git_diff_summary",
+        "tools.git_tools.git_recent_commits",
+        "tools.git_tools.git_status",
+        "tools.knowledge",
+        "tools.media",
+        "tools.registry",
+        "tools.web.brave_search"
+      ]
+    },
+    {
+      "module": "evolution.types",
+      "count": 13,
+      "values": [
+        "evolution.__init__",
+        "evolution.algorithms.beam_search",
+        "evolution.algorithms.genetic.algorithm",
+        "evolution.algorithms.genetic.mutation",
+        "evolution.algorithms.genetic.selection",
+        "evolution.algorithms.hill_climb",
+        "evolution.algorithms.random_search",
+        "evolution.base",
+        "evolution.context",
+        "evolution.helpers",
+        "evolution.manager",
+        "evolution.search_space",
+        "evolution.session"
+      ]
+    },
+    {
+      "module": "reasoning.base",
+      "count": 12,
+      "values": [
+        "config.settings",
+        "reasoning.__init__",
+        "reasoning.bootstrap",
+        "reasoning.factory",
+        "reasoning.mechanisms.cot",
+        "reasoning.mechanisms.legacy",
+        "reasoning.mechanisms.plan_execute",
+        "reasoning.mechanisms.react",
+        "reasoning.mechanisms.reflexion",
+        "reasoning.mechanisms.tot",
+        "reasoning.react",
+        "reasoning.registry"
+      ]
+    },
+    {
+      "module": "strategies",
+      "count": 11,
+      "values": [
+        "__init__",
+        "_facade_support",
+        "agents.registry",
+        "agents.types",
+        "config.__init__",
+        "config.settings",
+        "facade",
+        "presets",
+        "runtime.context_compaction",
+        "runtime.context_kernel",
+        "runtime.runtime"
+      ]
+    },
+    {
+      "module": "security",
+      "count": 8,
+      "values": [
+        "config.__init__",
+        "config.settings",
+        "memory.backends.sqlite_checkpoint_store",
+        "memory.backends.sqlite_record_store",
+        "observability.telemetry",
+        "runtime.agent",
+        "runtime.runtime",
+        "tests.test_security_and_lifecycle"
+      ]
+    },
+    {
+      "module": "models.base",
+      "count": 7,
+      "values": [
+        "models.__init__",
+        "models.embedding",
+        "models.media",
+        "models.registry",
+        "models.speech",
+        "tests.test_public_api_contracts",
+        "tests.test_security_and_lifecycle"
+      ]
+    },
+    {
+      "module": "evolution.base",
+      "count": 6,
+      "values": [
+        "evolution.__init__",
+        "evolution.algorithms.beam_search",
+        "evolution.algorithms.genetic.algorithm",
+        "evolution.algorithms.hill_climb",
+        "evolution.algorithms.random_search",
+        "evolution.registry"
+      ]
+    },
+    {
+      "module": "evolution.context",
+      "count": 6,
+      "values": [
+        "evolution.__init__",
+        "evolution.algorithms.beam_search",
+        "evolution.algorithms.genetic.algorithm",
+        "evolution.algorithms.hill_climb",
+        "evolution.algorithms.random_search",
+        "evolution.manager"
+      ]
+    },
+    {
+      "module": "feedback.types",
+      "count": 6,
+      "values": [
+        "feedback.__init__",
+        "feedback.base",
+        "feedback.channels",
+        "feedback.inbox",
+        "feedback.manager",
+        "feedback.policy"
+      ]
+    },
+    {
+      "module": "feedback.base",
+      "count": 5,
+      "values": [
+        "feedback.__init__",
+        "feedback.channels",
+        "feedback.inbox",
+        "feedback.manager",
+        "feedback.policy"
+      ]
+    },
+    {
+      "module": "knowledge.base",
+      "count": 5,
+      "values": [
+        "knowledge.__init__",
+        "knowledge.adapters",
+        "knowledge.classic",
+        "knowledge.in_memory",
+        "knowledge.indexed"
+      ]
+    },
+    {
+      "module": "memory.base",
+      "count": 5,
+      "values": [
+        "memory.__init__",
+        "memory.governance.mgcm",
+        "memory.manager",
+        "memory.mechanisms",
+        "memory.policies"
+      ]
+    },
+    {
+      "module": "tools.coding.common",
+      "count": 5,
+      "values": [
+        "tools.coding.find_files",
+        "tools.coding.list_directory",
+        "tools.coding.read_file",
+        "tools.coding.search_text",
+        "tools.coding.write_file"
+      ]
+    },
+    {
+      "module": "agents.types",
+      "count": 4,
+      "values": [
+        "agents.__init__",
+        "agents.coordinator",
+        "agents.registry",
+        "agents.supervisor"
+      ]
+    },
+    {
+      "module": "config.settings",
+      "count": 4,
+      "values": [
+        "config.__init__",
+        "models.openai_compatible_http",
+        "models.openai_model",
+        "tools.web.brave_search"
+      ]
+    },
+    {
+      "module": "models.speech",
+      "count": 4,
+      "values": [
+        "models.__init__",
+        "models.openai_compatible_http",
+        "models.openai_model",
+        "tools.media"
+      ]
+    },
+    {
+      "module": "runtime.agent",
+      "count": 4,
+      "values": [
+        "_facade_support",
+        "evolution.session",
+        "facade",
+        "runtime.__init__"
+      ]
+    },
+    {
+      "module": "evolution.algorithms.beam_search",
+      "count": 3,
+      "values": [
+        "evolution.__init__",
+        "evolution.algorithms.__init__",
+        "evolution.bootstrap"
+      ]
+    },
+    {
+      "module": "evolution.algorithms.hill_climb",
+      "count": 3,
+      "values": [
+        "evolution.__init__",
+        "evolution.algorithms.__init__",
+        "evolution.bootstrap"
+      ]
+    },
+    {
+      "module": "evolution.algorithms.random_search",
+      "count": 3,
+      "values": [
+        "evolution.__init__",
+        "evolution.algorithms.__init__",
+        "evolution.bootstrap"
+      ]
+    }
+  ],
+  "top_import_fan_out": [
+    {
+      "module": "evolution.__init__",
+      "count": 15,
+      "values": [
+        "evolution.algorithms.beam_search",
+        "evolution.algorithms.hill_climb",
+        "evolution.algorithms.random_search",
+        "evolution.base",
+        "evolution.bootstrap",
+        "evolution.context",
+        "evolution.factory",
+        "evolution.helpers",
+        "evolution.manager",
+        "evolution.registry",
+        "evolution.search_space",
+        "evolution.session",
+        "evolution.strategies",
+        "evolution.templates",
+        "evolution.types"
+      ]
+    },
+    {
+      "module": "tools.filesystem.__init__",
+      "count": 10,
+      "values": [
+        "tools.filesystem.append_file",
+        "tools.filesystem.find_files",
+        "tools.filesystem.get_file_info",
+        "tools.filesystem.list_directory",
+        "tools.filesystem.make_directory",
+        "tools.filesystem.read_file",
+        "tools.filesystem.register",
+        "tools.filesystem.replace_in_file",
+        "tools.filesystem.search_text",
+        "tools.filesystem.write_file"
+      ]
+    },
+    {
+      "module": "memory.__init__",
+      "count": 9,
+      "values": [
+        "memory.base",
+        "memory.bootstrap",
+        "memory.factory",
+        "memory.manager",
+        "memory.mechanisms",
+        "memory.policies",
+        "memory.registry",
+        "memory.state",
+        "memory.types"
+      ]
+    },
+    {
+      "module": "tools.filesystem.register",
+      "count": 9,
+      "values": [
+        "tools.filesystem.append_file",
+        "tools.filesystem.find_files",
+        "tools.filesystem.get_file_info",
+        "tools.filesystem.list_directory",
+        "tools.filesystem.make_directory",
+        "tools.filesystem.read_file",
+        "tools.filesystem.replace_in_file",
+        "tools.filesystem.search_text",
+        "tools.filesystem.write_file"
+      ]
+    },
+    {
+      "module": "knowledge.__init__",
+      "count": 7,
+      "values": [
+        "knowledge.adapters",
+        "knowledge.base",
+        "knowledge.classic",
+        "knowledge.factory",
+        "knowledge.in_memory",
+        "knowledge.indexed",
+        "knowledge.registry"
+      ]
+    },
+    {
+      "module": "models.__init__",
+      "count": 7,
+      "values": [
+        "models.base",
+        "models.embedding",
+        "models.media",
+        "models.openai_compatible_http",
+        "models.openai_model",
+        "models.registry",
+        "models.speech"
+      ]
+    },
+    {
+      "module": "runtime.runtime",
+      "count": 7,
+      "values": [
+        "evolution.session",
+        "runtime.context_compaction",
+        "runtime.context_kernel",
+        "security",
+        "strategies",
+        "tools.base",
+        "tools.knowledge"
+      ]
+    },
+    {
+      "module": "tools.__init__",
+      "count": 7,
+      "values": [
+        "tools.base",
+        "tools.bundles",
+        "tools.code_interpreter",
+        "tools.decorators",
+        "tools.knowledge",
+        "tools.media",
+        "tools.registry"
+      ]
+    },
+    {
+      "module": "feedback.__init__",
+      "count": 6,
+      "values": [
+        "feedback.base",
+        "feedback.channels",
+        "feedback.inbox",
+        "feedback.manager",
+        "feedback.policy",
+        "feedback.types"
+      ]
+    },
+    {
+      "module": "feedback.manager",
+      "count": 6,
+      "values": [
+        "feedback.base",
+        "feedback.channels",
+        "feedback.inbox",
+        "feedback.policy",
+        "feedback.types",
+        "runtime.runtime"
+      ]
+    },
+    {
+      "module": "reasoning.__init__",
+      "count": 6,
+      "values": [
+        "agents.supervisor",
+        "reasoning.base",
+        "reasoning.bootstrap",
+        "reasoning.factory",
+        "reasoning.react",
+        "reasoning.registry"
+      ]
+    },
+    {
+      "module": "reasoning.mechanisms.__init__",
+      "count": 6,
+      "values": [
+        "reasoning.mechanisms.cot",
+        "reasoning.mechanisms.legacy",
+        "reasoning.mechanisms.plan_execute",
+        "reasoning.mechanisms.react",
+        "reasoning.mechanisms.reflexion",
+        "reasoning.mechanisms.tot"
+      ]
+    },
+    {
+      "module": "evolution.algorithms.genetic.algorithm",
+      "count": 5,
+      "values": [
+        "evolution.algorithms.genetic.mutation",
+        "evolution.algorithms.genetic.selection",
+        "evolution.base",
+        "evolution.context",
+        "evolution.types"
+      ]
+    },
+    {
+      "module": "evolution.manager",
+      "count": 5,
+      "values": [
+        "evolution.bootstrap",
+        "evolution.context",
+        "evolution.factory",
+        "evolution.search_space",
+        "evolution.types"
+      ]
+    },
+    {
+      "module": "memory.manager",
+      "count": 5,
+      "values": [
+        "memory.base",
+        "memory.bootstrap",
+        "memory.factory",
+        "memory.state",
+        "memory.types"
+      ]
+    },
+    {
+      "module": "agents.__init__",
+      "count": 4,
+      "values": [
+        "agents.coordinator",
+        "agents.registry",
+        "agents.supervisor",
+        "agents.types"
+      ]
+    },
+    {
+      "module": "evolution.bootstrap",
+      "count": 4,
+      "values": [
+        "evolution.algorithms.beam_search",
+        "evolution.algorithms.hill_climb",
+        "evolution.algorithms.random_search",
+        "evolution.registry"
+      ]
+    },
+    {
+      "module": "facade",
+      "count": 4,
+      "values": [
+        "_facade_support",
+        "evolution.helpers",
+        "runtime.agent",
+        "strategies"
+      ]
+    },
+    {
+      "module": "models.openai_model",
+      "count": 4,
+      "values": [
+        "config.settings",
+        "models.embedding",
+        "models.media",
+        "models.speech"
+      ]
+    },
+    {
+      "module": "tools.git_tools.__init__",
+      "count": 4,
+      "values": [
+        "tools.git_tools.git_diff_summary",
+        "tools.git_tools.git_recent_commits",
+        "tools.git_tools.git_status",
+        "tools.git_tools.register"
+      ]
+    }
+  ],
+  "cycles": [
+    [
+      "evolution.session",
+      "runtime.agent",
+      "runtime.runtime"
+    ],
+    [
+      "runtime.context_compaction",
+      "strategies"
+    ]
+  ],
+  "import_time_registration": {
+    "models_init_top_level_calls": [
+      {
+        "line": 20,
+        "name": "register_model_provider"
+      },
+      {
+        "line": 21,
+        "name": "register_model_provider"
+      }
+    ]
+  },
+  "pytest_config": {
+    "present": true,
+    "norecursedirs": [
+      ".git",
+      ".playwright-cli",
+      ".agentorch_examples",
+      "artifacts",
+      "generated",
+      "tmp",
+      "codexharness/worktrees",
+      "__pycache__"
+    ],
+    "testpaths": [
+      "agentorch/tests",
+      "tests"
+    ]
+  }
+}

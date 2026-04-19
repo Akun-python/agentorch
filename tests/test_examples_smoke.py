@@ -14,10 +14,20 @@ from agentorch.models.base import BaseModelAdapter
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = ROOT / "examples"
+ELEPHANT_DEMO = ROOT / "experiments" / "elephant_context" / "demo.py"
 
 
 def _load_example_module(filename: str):
     path = EXAMPLES_DIR / filename
+    module_name = f"test_example_{path.stem}_{uuid.uuid4().hex}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_module_from_path(path: Path):
     module_name = f"test_example_{path.stem}_{uuid.uuid4().hex}"
     spec = importlib.util.spec_from_file_location(module_name, path)
     assert spec is not None and spec.loader is not None
@@ -146,10 +156,12 @@ async def _test_deep_research_example_stream_mode_runs_with_fake_model(monkeypat
 @pytest.mark.parametrize(
     "filename, expected_fragment",
     [
-        ("mgcm_demo.py", "Aggregated Output Preview"),
+        ("code_interpreter_session_workflow.py", "Code Interpreter Session Workflow"),
+        ("evolution_facade_demo.py", "Facade Evolution Demo"),
         ("evolution_demo.py", "Best Genome"),
         ("evolution_multi_mechanism.py", "=== genetic ==="),
         ("evolution_orchestration_search.py", "Best Orchestration Genome"),
+        ("evolution_workflow_demo.py", "Evolution Workflow Demo"),
     ],
 )
 def test_local_examples_run_end_to_end(filename: str, expected_fragment: str):
@@ -162,3 +174,13 @@ async def _test_local_examples_run_end_to_end(filename: str, expected_fragment: 
     output = await _run_example_main(module)
 
     assert expected_fragment in output
+
+
+def test_elephant_plugin_demo_runs_end_to_end():
+    asyncio.run(_test_elephant_plugin_demo_runs_end_to_end())
+
+
+async def _test_elephant_plugin_demo_runs_end_to_end():
+    module = _load_module_from_path(ELEPHANT_DEMO)
+    output = await _run_example_main(module)
+    assert "Elephant Plugin Output Preview" in output

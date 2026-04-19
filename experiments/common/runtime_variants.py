@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Any
 
 from agentorch import Agent, AgentCapability, AgentRegistry, AgentSpec, Runtime, Supervisor
-from agentorch.config import ContextStrategyConfig, CooperationStrategyConfig, LongHorizonStrategyConfig, MemoryConfig, MemoryGovernanceStrategyConfig, RuntimeConfig
+from agentorch.config import ContextPolicy, CoordinationPolicy, MemoryConfig, MemoryPolicy, RuntimeConfig, StatePolicy
 from agentorch.memory import MemoryManager
 from agentorch.models import OpenAIModel
+from experiments.elephant_context import build_elephant_runtime_config
 
 from .config import ExperimentConfig
 from .model_presets import resolve_model_runtime_profile
@@ -50,38 +51,43 @@ def build_runtime_variant(
         )
     )
 
-    context_strategy = ContextStrategyConfig.balanced(
-        prompt_char_budget=config.prompt_budget,
-        budget_aware_compaction=config.enable_context_compression,
-        salience_mode="rule" if config.enable_elephant_attention else "off",
-    )
-    long_horizon_strategy = (
-        LongHorizonStrategyConfig.long_running_safe(max_prompt_chars=max(config.prompt_budget, 4000))
-        if config.enable_long_horizon_attention
-        else LongHorizonStrategyConfig.long_running_safe(history_retention_policy="window_only", overflow_strategy="drop_low_priority")
-    )
-    memory_governance_strategy = (
-        MemoryGovernanceStrategyConfig.hybrid_long_memory(allow_cross_thread_recall=True)
-        if config.enable_seagull_memory
-        else MemoryGovernanceStrategyConfig.default(allow_cross_thread_recall=False, recall_top_k=2)
-    )
-    if config.variant_name == "multi_agent_naive_memory":
-        memory_governance_strategy = MemoryGovernanceStrategyConfig.semantic_only(episodic_memory_enabled=False, allow_cross_thread_recall=False)
-
-    runtime_config = RuntimeConfig.agent(
-        max_steps=config.max_steps,
-        context_strategy=context_strategy,
-        long_horizon_strategy=long_horizon_strategy,
-        cooperation_strategy=CooperationStrategyConfig.matriarchal() if config.enable_multi_agent else CooperationStrategyConfig.distributed(),
-        memory_governance_strategy=memory_governance_strategy,
-        observability={
-            "enabled": config.enable_observability,
-            "sqlite_path": sqlite_path,
-            "console_mode": "silent",
-            "capture_todos": True,
-        },
-        enable_retrieval=config.enable_retrieval,
-    )
+    if config.enable_multi_agent:
+        runtime_config = build_elephant_runtime_config(
+            hybrid_selection=False,
+            distributed=not config.enable_elephant_attention,
+            char_budget=config.prompt_budget,
+            max_steps=config.max_steps,
+            observability={
+                "enabled": config.enable_observability,
+                "sqlite_path": sqlite_path,
+                "console_mode": "silent",
+                "capture_todos": True,
+            },
+            enable_retrieval=config.enable_retrieval,
+        )
+    else:
+        runtime_config = RuntimeConfig.agent(
+            max_steps=config.max_steps,
+            context_policy=ContextPolicy(
+                char_budget=config.prompt_budget,
+                selection_mode="rule" if config.enable_context_compression else "rule",
+                overflow_action="compress" if config.enable_context_compression else "drop_low_priority",
+            ),
+            state_policy=StatePolicy(retention_mode="state_plus_memory" if config.enable_long_horizon_attention else "window_only"),
+            coordination_policy=CoordinationPolicy.distributed(),
+            memory_policy=(
+                MemoryPolicy.long_horizon()
+                if config.enable_seagull_memory
+                else MemoryPolicy(thresholds_and_weights={"allow_cross_thread_recall": False, "recall_top_k": 2})
+            ),
+            observability={
+                "enabled": config.enable_observability,
+                "sqlite_path": sqlite_path,
+                "console_mode": "silent",
+                "capture_todos": True,
+            },
+            enable_retrieval=config.enable_retrieval,
+        )
 
     agent_registry = AgentRegistry()
     supervisor = None

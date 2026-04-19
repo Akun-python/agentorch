@@ -1,0 +1,61 @@
+baseline,scenario,evaluation_top_k,evaluation_edge_k,raw_returned_nodes,returned_nodes,returned_edges,capsule_recall@k,subgraph_relevance,relation_hit_rate,returned_memory_usefulness,stale_node_injection_rate,conflict_resolution_success,latency_ms,summary_head
+no_long_term_memory,deploy_alpha_prod,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0004,No long-term memory returned.
+no_long_term_memory,deploy_beta_staging,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0002,No long-term memory returned.
+no_long_term_memory,api_gateway_patch,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0001,No long-term memory returned.
+no_long_term_memory,vendor_orion_procurement,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0001,No long-term memory returned.
+no_long_term_memory,vendor_zephyr_invoice,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0005,No long-term memory returned.
+no_long_term_memory,customer_titan_support,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0002,No long-term memory returned.
+no_long_term_memory,customer_nova_support,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0002,No long-term memory returned.
+no_long_term_memory,demand_forecast_analytics,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0002,No long-term memory returned.
+no_long_term_memory,nutcracker_memory_research,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0002,No long-term memory returned.
+no_long_term_memory,elephant_context_runtime,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0002,No long-term memory returned.
+no_long_term_memory,compliance_audit_eu,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0001,No long-term memory returned.
+no_long_term_memory,warehouse_robot_ops,6,12,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0001,No long-term memory returned.
+vector_memory,deploy_alpha_prod,6,12,12,6,0,0.0,0.0,0.0,0.0,0.1667,0.0,1.5261,Vector-only memory retrieval.
+vector_memory,deploy_beta_staging,6,12,12,6,0,0.0,0.0,0.0,0.0,0.1667,0.0,2.5365,Vector-only memory retrieval.
+vector_memory,api_gateway_patch,6,12,12,6,0,0.0,0.0,0.0,0.0,0.1667,0.0,2.1555,Vector-only memory retrieval.
+vector_memory,vendor_orion_procurement,6,12,12,6,0,0.25,0.1667,0.0,0.1667,0.1667,1.0,2.2391,Vector-only memory retrieval.
+vector_memory,vendor_zephyr_invoice,6,12,12,6,0,0.25,0.1667,0.0,0.1667,0.1667,1.0,3.8035,Vector-only memory retrieval.
+vector_memory,customer_titan_support,6,12,12,6,0,0.0,0.0,0.0,0.0,0.0,0.0,2.956,Vector-only memory retrieval.
+vector_memory,customer_nova_support,6,12,12,6,0,0.0,0.0,0.0,0.0,0.0,0.0,2.7348,Vector-only memory retrieval.
+vector_memory,demand_forecast_analytics,6,12,12,6,0,0.0,0.0,0.0,0.0,0.1667,0.0,3.9008,Vector-only memory retrieval.
+vector_memory,nutcracker_memory_research,6,12,12,6,0,0.25,0.1667,0.0,0.1667,0.1667,1.0,2.3092,Vector-only memory retrieval.
+vector_memory,elephant_context_runtime,6,12,12,6,0,0.25,0.1667,0.0,0.1667,0.3333,1.0,2.8009,Vector-only memory retrieval.
+vector_memory,compliance_audit_eu,6,12,12,6,0,0.25,0.1667,0.0,0.1667,0.1667,1.0,2.4831,Vector-only memory retrieval.
+vector_memory,warehouse_robot_ops,6,12,12,6,0,0.0,0.1667,0.0,0.1167,0.3333,0.0,2.4496,Vector-only memory retrieval.
+flat_summary_memory,deploy_alpha_prod,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,1.7405,Flat summary memory retrieval.
+flat_summary_memory,deploy_beta_staging,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,2.7975,Flat summary memory retrieval.
+flat_summary_memory,api_gateway_patch,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,3.0199,Flat summary memory retrieval.
+flat_summary_memory,vendor_orion_procurement,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,2.6532,Flat summary memory retrieval.
+flat_summary_memory,vendor_zephyr_invoice,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,2.9603,Flat summary memory retrieval.
+flat_summary_memory,customer_titan_support,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,4.4562,Flat summary memory retrieval.
+flat_summary_memory,customer_nova_support,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,2.7339,Flat summary memory retrieval.
+flat_summary_memory,demand_forecast_analytics,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,3.4944,Flat summary memory retrieval.
+flat_summary_memory,nutcracker_memory_research,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,2.8548,Flat summary memory retrieval.
+flat_summary_memory,elephant_context_runtime,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,2.958,Flat summary memory retrieval.
+flat_summary_memory,compliance_audit_eu,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,2.5823,Flat summary memory retrieval.
+flat_summary_memory,warehouse_robot_ops,6,12,12,6,0,1.0,0.8333,0.0,0.75,0.0,1.0,3.7202,Flat summary memory retrieval.
+naive_graph_memory,deploy_alpha_prod,6,12,12,6,12,0.25,0.1667,0.0,0.1667,0.3333,1.0,9.0337,Naive graph memory retrieval.
+naive_graph_memory,deploy_beta_staging,6,12,12,6,12,0.5,0.3333,0.0278,0.3333,0.3333,1.0,13.44,Naive graph memory retrieval.
+naive_graph_memory,api_gateway_patch,6,12,12,6,12,0.5,0.3333,0.0278,0.3333,0.3333,1.0,9.4176,Naive graph memory retrieval.
+naive_graph_memory,vendor_orion_procurement,6,12,12,6,12,0.25,0.1667,0.0,0.1667,0.3333,1.0,10.5514,Naive graph memory retrieval.
+naive_graph_memory,vendor_zephyr_invoice,6,12,12,6,12,0.25,0.1667,0.0,0.1667,0.3333,1.0,12.1282,Naive graph memory retrieval.
+naive_graph_memory,customer_titan_support,6,12,12,6,12,0.5,0.3333,0.0,0.3333,0.5,1.0,10.5221,Naive graph memory retrieval.
+naive_graph_memory,customer_nova_support,6,12,12,6,12,0.5,0.3333,0.0,0.3333,0.0,1.0,12.0652,Naive graph memory retrieval.
+naive_graph_memory,demand_forecast_analytics,6,12,12,6,12,0.5,0.3333,0.0,0.3333,0.3333,1.0,13.4621,Naive graph memory retrieval.
+naive_graph_memory,nutcracker_memory_research,6,12,12,6,12,0.25,0.1667,0.0,0.1667,0.3333,1.0,11.4695,Naive graph memory retrieval.
+naive_graph_memory,elephant_context_runtime,6,12,12,6,12,0.5,0.3333,0.0278,0.3333,0.3333,1.0,11.0107,Naive graph memory retrieval.
+naive_graph_memory,compliance_audit_eu,6,12,12,6,12,0.5,0.3333,0.0,0.3333,0.3333,1.0,12.5601,Naive graph memory retrieval.
+naive_graph_memory,warehouse_robot_ops,6,12,12,6,12,0.0,0.0,0.0,0.0,0.3333,0.0,11.2244,Naive graph memory retrieval.
+clarks_nutcracker_graph,deploy_alpha_prod,6,12,3,3,3,0.5,0.6667,0.0556,0.6667,0.0,1.0,23.4907,"Subgraph theme: prod, approval, round_3, deploy."
+clarks_nutcracker_graph,deploy_beta_staging,6,12,12,6,12,0.75,0.5,0.0278,0.4917,0.0,1.0,20.6565,"Subgraph theme: staging, release, round_3, deploy."
+clarks_nutcracker_graph,api_gateway_patch,6,12,12,6,12,0.75,0.5,0.0278,0.4917,0.0,1.0,17.7516,"Subgraph theme: prod, security, patch, gateway."
+clarks_nutcracker_graph,vendor_orion_procurement,6,12,12,6,12,0.75,0.5,0.0278,0.4917,0.0,1.0,22.7779,"Subgraph theme: procurement, vendor, plant, plant_north."
+clarks_nutcracker_graph,vendor_zephyr_invoice,6,12,12,6,12,0.75,0.5,0.0556,0.4917,0.0,1.0,27.333,"Subgraph theme: finance, invoice, q2_close, round_3."
+clarks_nutcracker_graph,customer_titan_support,6,12,12,6,12,0.75,0.5,0.0278,0.4917,0.0,1.0,22.93,"Subgraph theme: support, incident, region_east, round_3."
+clarks_nutcracker_graph,customer_nova_support,6,12,12,6,12,0.5,0.3333,0.0278,0.325,0.0,1.0,26.942,"Subgraph theme: support, escalation, handoff, region_west."
+clarks_nutcracker_graph,demand_forecast_analytics,6,12,12,6,12,0.75,0.5,0.0556,0.4917,0.0,1.0,22.7064,"Subgraph theme: q3, analytics, forecast, demand."
+clarks_nutcracker_graph,nutcracker_memory_research,6,12,12,6,12,0.5,0.3333,0.0,0.3333,0.0,1.0,21.1085,"Subgraph theme: research, memory_graph, benchmark, chapter_4."
+clarks_nutcracker_graph,elephant_context_runtime,6,12,12,6,12,0.5,0.3333,0.0278,0.3333,0.0,1.0,24.1351,"Subgraph theme: runtime, context, chapter_3, elephant."
+clarks_nutcracker_graph,compliance_audit_eu,6,12,12,6,12,0.5,0.3333,0.1111,0.3333,0.0,1.0,20.5094,"Subgraph theme: compliance, audit, retention, eu_market."
+clarks_nutcracker_graph,warehouse_robot_ops,6,12,12,6,12,0.25,0.1667,0.0,0.1667,0.0,1.0,22.2808,"Subgraph theme: operations, warehouse, night_shift, round_2."

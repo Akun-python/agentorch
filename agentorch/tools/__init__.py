@@ -46,6 +46,15 @@ from .knowledge import (
     create_open_retrieved_evidence_tool,
     create_search_knowledge_assets_tool,
 )
+from .media import (
+    AnalyzeVideoInput,
+    GenerateImageInput,
+    TextToSpeechInput,
+    create_analyze_video_tool,
+    create_generate_image_tool,
+    create_text_to_speech_tool,
+    register_media_tools,
+)
 from .web import BraveSearchInput, create_brave_search_tool, register_web_tools
 from .code_interpreter import PythonInterpreterInput, create_python_interpreter_tool
 from .decorators import tool
@@ -53,10 +62,12 @@ from .registry import ToolRegistry
 
 __all__ = [
     "AppendFileInput",
+    "AnalyzeVideoInput",
     "BaseTool",
     "BraveSearchInput",
     "DeliberativeRetrieveInput",
     "FindFilesInput",
+    "GenerateImageInput",
     "GetFileInfoInput",
     "GitDiffSummaryInput",
     "GitRecentCommitsInput",
@@ -70,14 +81,17 @@ __all__ = [
     "RunCommandInput",
     "SearchKnowledgeAssetsInput",
     "SearchTextInput",
+    "TextToSpeechInput",
     "ToolError",
     "ToolRegistry",
     "ToolResult",
     "WriteFileInput",
     "create_append_file_tool",
+    "create_analyze_video_tool",
     "create_brave_search_tool",
     "create_deliberative_retrieve_tool",
     "create_find_files_tool",
+    "create_generate_image_tool",
     "create_get_file_info_tool",
     "create_git_diff_summary_tool",
     "create_git_recent_commits_tool",
@@ -86,6 +100,7 @@ __all__ = [
     "create_make_directory_tool",
     "create_python_interpreter_tool",
     "create_read_file_tool",
+    "create_text_to_speech_tool",
     "create_open_retrieved_evidence_tool",
     "create_replace_in_file_tool",
     "create_run_command_tool",
@@ -97,6 +112,7 @@ __all__ = [
     "register_execution_tools",
     "register_filesystem_tools",
     "register_git_tools",
+    "register_media_tools",
     "register_web_tools",
     "tool",
 ]

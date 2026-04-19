@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-04-19T12:28:58.709210",
+  "counts": {
+    "pending": 0,
+    "running": 0,
+    "completed": 0,
+    "failed": 1,
+    "retry": 0,
+    "skipped": 0
+  },
+  "total_records": 1
+}

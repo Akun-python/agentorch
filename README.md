@@ -79,19 +79,36 @@ Python 3.10+
 
 ## Environment Setup
 
-`agentorch` automatically reads a local `.env` file in the project root and supports both:
+`agentorch` follows a standard library-style configuration boundary:
+
+- Pass `model`, `api_key`, and `base_url` explicitly in code when you want full control.
+- Use environment variables when you want deploy-time configuration.
+- `.env` loading is opt-in. Call `initialize_environment(...)` yourself, or set `AGENTORCH_AUTO_LOAD_ENV=1` before importing `agentorch`.
+
+Core environment contract:
 
 - `OPENAI_API_KEY` / `OPENAI_BASE_URL`
-- `API_KEY` / `BASE_URL`
+- `OPENAI_VISION_MODEL`
+- `OPENAI_EMBEDDING_API_KEY` / `OPENAI_EMBEDDING_BASE_URL` / `OPENAI_EMBEDDING_MODEL` / `OPENAI_EMBEDDING_DIMENSIONS`
+- `OPENAI_TTS_API_KEY` / `OPENAI_TTS_BASE_URL` / `OPENAI_TTS_MODEL` / `OPENAI_TTS_VOICE` / `OPENAI_TTS_FORMAT` / `OPENAI_TTS_SPEED`
+- `OPENAI_IMAGE_API_KEY` / `OPENAI_IMAGE_BASE_URL` / `OPENAI_IMAGE_EXPLICIT_URL` / `OPENAI_IMAGE_MODEL`
+- `OPENAI_IMAGE_ASPECT_RATIO` / `OPENAI_IMAGE_SIZE` / `OPENAI_IMAGE_TIMEOUT`
+- `OPENAI_IMAGE_FALLBACK_MODELS` / `OPENAI_IMAGE_RETRY_WITHOUT_PROXY` / `OPENAI_IMAGE_DISABLE_ENV_PROXY`
+- `OPENAI_VIDEO_API_KEY` / `OPENAI_VIDEO_BASE_URL` / `OPENAI_VIDEO_MODEL` / `OPENAI_VIDEO_DISABLE_ENV_PROXY`
+
+The core library keeps protocol-level defaults such as `/chat/completions`, `/embeddings`, `/audio/speech`, `mp3`, and `speed=1.0`. It does not choose provider gateways, models, or secrets for you.
 
 Recommended:
 
 ```env
 OPENAI_API_KEY=sk-xxxx
 OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_TTS_MODEL=your-tts-model
+OPENAI_TTS_VOICE=your-voice
 ```
 
-If you use an OpenAI-compatible gateway, a full `.../chat/completions` URL is normalized automatically to the required `/v1` base URL.
+If you use an OpenAI-compatible gateway, full endpoint URLs such as `.../chat/completions`, `.../embeddings`, or `.../audio/speech` are normalized back to the required provider base URL.
 
 ## Quick Start
 
@@ -175,6 +192,47 @@ tools = ToolRegistry.with_bundles(
 ```
 
 This registers the standard filesystem, execution, and git tool bundles in one step.
+
+### 3b. Media capabilities
+
+```python
+import asyncio
+
+from agentorch import OpenAIModel, create_agent
+
+
+async def main():
+    model = OpenAIModel(model="gpt-4.1-mini")
+
+    audio = await model.synthesize_speech("Hello from agentorch.")
+    print(audio.output_path)
+
+    image = await model.generate_image("A cinematic skyline at sunrise.")
+    print(image.output_path)
+
+    video = await model.analyze_video(
+        prompt="Summarize the important events in this clip.",
+        video_path="examples/demo.mp4",
+    )
+    print(video.content)
+
+    agent = create_agent(
+        model=model,
+        tool_bundles={
+            "include_filesystem": False,
+            "include_execution": False,
+            "include_git": False,
+            "include_media": True,
+        },
+    )
+    print(agent.export_blueprint()["runtime"]["tools"])
+
+
+asyncio.run(main())
+```
+
+This keeps normal chat generation unchanged while exposing every supported media tool on the same model instance.
+For `OpenAIModel` and `OpenAICompatibleHTTPModel`, `include_media=True` registers `text_to_speech`, `generate_image`, and `analyze_video` when available.
 
 ### 4. Multi-format RAG
 

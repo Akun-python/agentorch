@@ -1,0 +1,298 @@
+{
+  "prefix": "graph-scale-s02-",
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python_version": "3.13.5",
+    "cpu_count": 20,
+    "neo4j_component": "Neo4j Kernel",
+    "neo4j_version": "5.26.24",
+    "neo4j_edition": "community",
+    "node_count": 720,
+    "edge_count": 3045
+  },
+  "benchmark_config": {
+    "scenario_count": 12,
+    "warmup_rounds": 2,
+    "measured_rounds": 10,
+    "measured_recalls": 120,
+    "detail_limit": 3,
+    "scale_multiplier": 2,
+    "embedding_salt": "0",
+    "top_candidates": 6,
+    "top_seeds": 3,
+    "max_nodes": 12,
+    "max_edges": 24
+  },
+  "recall_summary": {
+    "count": 120.0,
+    "mean_ms": 55.521,
+    "median_ms": 53.706,
+    "p95_ms": 71.473,
+    "min_ms": 42.49,
+    "max_ms": 97.47,
+    "throughput_qps": 18.011
+  },
+  "detail_summary": {
+    "count": 120.0,
+    "mean_ms": 2.703,
+    "median_ms": 2.676,
+    "p95_ms": 3.159,
+    "min_ms": 2.083,
+    "max_ms": 4.489,
+    "throughput_qps": 369.959
+  },
+  "scenario_rows": [
+    {
+      "scenario": "deploy_alpha_prod",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 61.912,
+        "median_ms": 63.322,
+        "p95_ms": 74.418,
+        "min_ms": 48.893,
+        "max_ms": 74.418
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.703,
+        "median_ms": 2.664,
+        "p95_ms": 3.263,
+        "min_ms": 2.367,
+        "max_ms": 3.263
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 19
+    },
+    {
+      "scenario": "deploy_beta_staging",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 52.345,
+        "median_ms": 52.071,
+        "p95_ms": 61.465,
+        "min_ms": 44.742,
+        "max_ms": 61.465
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.737,
+        "median_ms": 2.635,
+        "p95_ms": 3.159,
+        "min_ms": 2.455,
+        "max_ms": 3.159
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 4
+    },
+    {
+      "scenario": "api_gateway_patch",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 57.472,
+        "median_ms": 54.936,
+        "p95_ms": 76.542,
+        "min_ms": 52.66,
+        "max_ms": 76.542
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.741,
+        "median_ms": 2.77,
+        "p95_ms": 2.942,
+        "min_ms": 2.418,
+        "max_ms": 2.942
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 0
+    },
+    {
+      "scenario": "vendor_orion_procurement",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 61.254,
+        "median_ms": 57.555,
+        "p95_ms": 81.269,
+        "min_ms": 52.015,
+        "max_ms": 81.269
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.754,
+        "median_ms": 2.703,
+        "p95_ms": 3.781,
+        "min_ms": 2.373,
+        "max_ms": 3.781
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 6
+    },
+    {
+      "scenario": "vendor_zephyr_invoice",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 55.447,
+        "median_ms": 50.51,
+        "p95_ms": 97.47,
+        "min_ms": 42.49,
+        "max_ms": 97.47
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.651,
+        "median_ms": 2.671,
+        "p95_ms": 3.015,
+        "min_ms": 2.083,
+        "max_ms": 3.015
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 4
+    },
+    {
+      "scenario": "customer_titan_support",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 50.439,
+        "median_ms": 50.0,
+        "p95_ms": 65.539,
+        "min_ms": 44.837,
+        "max_ms": 65.539
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.613,
+        "median_ms": 2.586,
+        "p95_ms": 3.05,
+        "min_ms": 2.287,
+        "max_ms": 3.05
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 4
+    },
+    {
+      "scenario": "customer_nova_support",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 53.017,
+        "median_ms": 52.523,
+        "p95_ms": 59.518,
+        "min_ms": 49.525,
+        "max_ms": 59.518
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.567,
+        "median_ms": 2.489,
+        "p95_ms": 3.219,
+        "min_ms": 2.21,
+        "max_ms": 3.219
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 13
+    },
+    {
+      "scenario": "demand_forecast_analytics",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 51.052,
+        "median_ms": 48.951,
+        "p95_ms": 73.738,
+        "min_ms": 43.243,
+        "max_ms": 73.738
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.689,
+        "median_ms": 2.745,
+        "p95_ms": 3.298,
+        "min_ms": 2.156,
+        "max_ms": 3.298
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 4
+    },
+    {
+      "scenario": "nutcracker_memory_research",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 52.44,
+        "median_ms": 51.997,
+        "p95_ms": 59.701,
+        "min_ms": 44.689,
+        "max_ms": 59.701
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.843,
+        "median_ms": 2.744,
+        "p95_ms": 4.489,
+        "min_ms": 2.281,
+        "max_ms": 4.489
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 4
+    },
+    {
+      "scenario": "elephant_context_runtime",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 58.549,
+        "median_ms": 56.338,
+        "p95_ms": 69.151,
+        "min_ms": 48.739,
+        "max_ms": 69.151
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.63,
+        "median_ms": 2.59,
+        "p95_ms": 2.907,
+        "min_ms": 2.312,
+        "max_ms": 2.907
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 10.1
+    },
+    {
+      "scenario": "compliance_audit_eu",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 54.359,
+        "median_ms": 51.954,
+        "p95_ms": 66.032,
+        "min_ms": 50.054,
+        "max_ms": 66.032
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.728,
+        "median_ms": 2.758,
+        "p95_ms": 3.032,
+        "min_ms": 2.303,
+        "max_ms": 3.032
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 3
+    },
+    {
+      "scenario": "warehouse_robot_ops",
+      "recall": {
+        "count": 10.0,
+        "mean_ms": 57.966,
+        "median_ms": 56.615,
+        "p95_ms": 73.891,
+        "min_ms": 47.257,
+        "max_ms": 73.891
+      },
+      "detail": {
+        "count": 10.0,
+        "mean_ms": 2.778,
+        "median_ms": 2.75,
+        "p95_ms": 3.197,
+        "min_ms": 2.331,
+        "max_ms": 3.197
+      },
+      "avg_returned_nodes": 12,
+      "avg_returned_edges": 4
+    }
+  ]
+}
