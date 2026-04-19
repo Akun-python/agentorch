@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from importlib import import_module
 from typing import Any, Callable
 
+from agentorch._component_registry import ComponentRegistry
+
 from .base import BaseReasoningFramework, ReasoningConfig
 
 ReasoningFactoryFn = Callable[..., BaseReasoningFramework]
@@ -17,9 +19,26 @@ class ReasoningRegistration:
     factory: ReasoningFactoryFn | None = None
 
 
-class ReasoningRegistry:
+def _create_reasoning_from_registration(
+    registration: ReasoningRegistration,
+    framework_cls: type[BaseReasoningFramework],
+    kwargs: dict[str, Any],
+) -> BaseReasoningFramework:
+    if registration.config_cls is not None:
+        return framework_cls(registration.config_cls(**kwargs))
+    return framework_cls(**kwargs)
+
+
+class ReasoningRegistry(ComponentRegistry[ReasoningRegistration, type[BaseReasoningFramework]]):
     def __init__(self) -> None:
-        self._frameworks: dict[str, ReasoningRegistration] = {}
+        super().__init__(
+            ReasoningRegistration,
+            implementation_attr="framework_cls",
+            register_error="register_reasoning_framework requires a framework class or factory.",
+            unsupported_error="Unsupported reasoning kind: {kind}",
+            missing_implementation_error="Reasoning kind '{kind}' has no framework class.",
+            creator=_create_reasoning_from_registration,
+        )
 
     def register(
         self,
@@ -29,34 +48,7 @@ class ReasoningRegistry:
         config_cls: type[ReasoningConfig] | None = None,
         factory: ReasoningFactoryFn | None = None,
     ) -> None:
-        normalized = str(kind)
-        if framework_cls is None and factory is None:
-            raise ValueError("register_reasoning_framework requires a framework class or factory.")
-        self._frameworks[normalized] = ReasoningRegistration(
-            kind=normalized,
-            framework_cls=framework_cls,
-            config_cls=config_cls,
-            factory=factory,
-        )
-
-    def get(self, kind: str) -> ReasoningRegistration:
-        try:
-            return self._frameworks[str(kind)]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported reasoning kind: {kind}") from exc
-
-    def list(self) -> list[str]:
-        return sorted(self._frameworks.keys())
-
-    def create(self, kind: str, **kwargs: Any) -> BaseReasoningFramework:
-        registration = self.get(kind)
-        if registration.factory is not None:
-            return registration.factory(**kwargs)
-        if registration.framework_cls is None:
-            raise ValueError(f"Reasoning kind '{kind}' has no framework class.")
-        if registration.config_cls is not None:
-            return registration.framework_cls(registration.config_cls(**kwargs))
-        return registration.framework_cls(**kwargs)
+        super().register(kind, framework_cls, factory=factory, config_cls=config_cls)
 
 
 def _ensure_reasoning_defaults_registered() -> None:

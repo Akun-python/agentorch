@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from importlib import import_module
 from typing import Any, Callable
 
+from agentorch._component_registry import ComponentRegistry
+
 
 @dataclass
 class MemoryBackendRegistration:
@@ -33,94 +35,33 @@ class MemoryPolicyRegistration:
     factory: Callable[..., Any] | None = None
 
 
-class MemoryBackendRegistry:
-    def __init__(self) -> None:
-        self._items: dict[str, MemoryBackendRegistration] = {}
+class _BaseMemoryRegistry(ComponentRegistry[Any, type]):
+    def __init__(self, registration_cls: type[Any]) -> None:
+        super().__init__(
+            registration_cls,
+            implementation_attr="component_cls",
+            register_error="A component class or factory is required.",
+            unsupported_error="Unsupported memory component kind: {kind}",
+            missing_implementation_error="Memory component '{kind}' has no implementation class.",
+        )
 
     def register(self, kind: str, component_cls: type | None = None, *, factory: Callable[..., Any] | None = None) -> None:
-        if component_cls is None and factory is None:
-            raise ValueError("A component class or factory is required.")
-        self._items[kind] = MemoryBackendRegistration(kind=kind, component_cls=component_cls, factory=factory)
-
-    def create(self, kind: str, **kwargs: Any) -> Any:
-        try:
-            registration = self._items[kind]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported memory component kind: {kind}") from exc
-        if registration.factory is not None:
-            return registration.factory(**kwargs)
-        if registration.component_cls is None:
-            raise ValueError(f"Memory component '{kind}' has no implementation class.")
-        return registration.component_cls(**kwargs)
-
-    def get(self, kind: str) -> MemoryBackendRegistration:
-        try:
-            return self._items[kind]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported memory component kind: {kind}") from exc
-
-    def list(self) -> list[str]:
-        return sorted(self._items.keys())
+        super().register(kind, component_cls, factory=factory)
 
 
-class MemoryGovernanceRegistry:
+class MemoryBackendRegistry(_BaseMemoryRegistry):
     def __init__(self) -> None:
-        self._items: dict[str, MemoryGovernanceRegistration] = {}
-
-    def register(self, kind: str, component_cls: type | None = None, *, factory: Callable[..., Any] | None = None) -> None:
-        if component_cls is None and factory is None:
-            raise ValueError("A component class or factory is required.")
-        self._items[kind] = MemoryGovernanceRegistration(kind=kind, component_cls=component_cls, factory=factory)
-
-    def create(self, kind: str, **kwargs: Any) -> Any:
-        try:
-            registration = self._items[kind]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported memory component kind: {kind}") from exc
-        if registration.factory is not None:
-            return registration.factory(**kwargs)
-        if registration.component_cls is None:
-            raise ValueError(f"Memory component '{kind}' has no implementation class.")
-        return registration.component_cls(**kwargs)
-
-    def get(self, kind: str) -> MemoryGovernanceRegistration:
-        try:
-            return self._items[kind]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported memory component kind: {kind}") from exc
-
-    def list(self) -> list[str]:
-        return sorted(self._items.keys())
+        super().__init__(MemoryBackendRegistration)
 
 
-class MemoryMechanismRegistry:
+class MemoryGovernanceRegistry(_BaseMemoryRegistry):
     def __init__(self) -> None:
-        self._items: dict[str, MemoryMechanismRegistration] = {}
+        super().__init__(MemoryGovernanceRegistration)
 
-    def register(self, kind: str, component_cls: type | None = None, *, factory: Callable[..., Any] | None = None) -> None:
-        if component_cls is None and factory is None:
-            raise ValueError("A component class or factory is required.")
-        self._items[kind] = MemoryMechanismRegistration(kind=kind, component_cls=component_cls, factory=factory)
 
-    def create(self, kind: str, **kwargs: Any) -> Any:
-        try:
-            registration = self._items[kind]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported memory component kind: {kind}") from exc
-        if registration.factory is not None:
-            return registration.factory(**kwargs)
-        if registration.component_cls is None:
-            raise ValueError(f"Memory component '{kind}' has no implementation class.")
-        return registration.component_cls(**kwargs)
-
-    def get(self, kind: str) -> MemoryMechanismRegistration:
-        try:
-            return self._items[kind]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported memory component kind: {kind}") from exc
-
-    def list(self) -> list[str]:
-        return sorted(self._items.keys())
+class MemoryMechanismRegistry(_BaseMemoryRegistry):
+    def __init__(self) -> None:
+        super().__init__(MemoryMechanismRegistration)
 
 
 def _ensure_memory_defaults_registered() -> None:
