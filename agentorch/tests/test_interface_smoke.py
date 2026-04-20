@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 import agentorch
+import pytest
 from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
 from agentorch.models.base import BaseModelAdapter
 
@@ -137,6 +138,32 @@ def test_create_multi_agent_evolution_interface_builds_and_runs_candidates() -> 
     asyncio.run(scenario())
 
 
+def test_create_agent_evolution_closes_candidate_when_evaluator_fails() -> None:
+    async def scenario() -> None:
+        model = DummyModel(reply="will-close")
+        session = agentorch.create_agent_evolution(
+            search_space={"reasoning.kind": ["react"]},
+            evolution_config=agentorch.EvolutionConfig(
+                algorithm_kind="random_search",
+                population_size=1,
+                generations=1,
+                evaluation_budget=1,
+                seed=17,
+            ),
+            model=model,
+            evaluator=_failing_agent_evaluator,
+            tasks=["task-c"],
+            name="evo-agent-fail",
+        )
+
+        with pytest.raises(RuntimeError, match="expected evaluator failure"):
+            await session.evolve()
+
+        assert model.closed is True
+
+    asyncio.run(scenario())
+
+
 async def _agent_evaluator(genome, candidate, tasks):
     result = await candidate.run("solve task", thread_id=f"eval-{genome.id}")
     return agentorch.EvaluationResult(
@@ -153,3 +180,7 @@ async def _team_evaluator(genome, candidate, tasks):
         fitness=2.0,
         metrics={"tasks": float(len(tasks)), "tokens": float(result.usage.total_tokens)},
     )
+
+
+async def _failing_agent_evaluator(genome, candidate, tasks):
+    raise RuntimeError("expected evaluator failure")

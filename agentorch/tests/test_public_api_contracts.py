@@ -9,6 +9,7 @@ from agentorch.config import RuntimeConfig
 from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
 from agentorch.models.base import BaseModelAdapter
 from agentorch.sandbox import SandboxManager, SandboxPolicy
+from agentorch.strategies import ContextPolicy, CoordinationPolicy
 from agentorch.tools import ToolRegistry
 
 
@@ -59,6 +60,38 @@ def test_runtime_config_precedence_beats_facade_defaults() -> None:
 
     assert agent.runtime.config.system_prompt == "runtime-config-prompt"
     agent.close()
+
+
+def test_create_agent_runtime_config_explicit_default_field_beats_profile_defaults() -> None:
+    config = RuntimeConfig(context_policy=ContextPolicy.default())
+    agent = agentorch.create_agent(model=DummyModel(), profile="coding", runtime_config=config)
+
+    assert agent.runtime.config.context_policy.char_budget == ContextPolicy.default().char_budget
+    assert agent.runtime.config.context_policy.char_budget != ContextPolicy.lean().char_budget
+    agent.close()
+
+
+def test_multi_agent_runtime_config_precedence_beats_facade_values() -> None:
+    config = RuntimeConfig(
+        system_prompt="runtime-team-prompt",
+        coordination_policy=CoordinationPolicy(),
+    )
+    system = agentorch.create_multi_agent(
+        roles=[
+            {
+                "name": "planner",
+                "model": DummyModel(name="planner-model"),
+            }
+        ],
+        system_prompt="facade-team-prompt",
+        coordination_policy=CoordinationPolicy.distributed(),
+        runtime_config=config,
+    )
+
+    assert system.runtime.config.system_prompt == "runtime-team-prompt"
+    assert system.runtime.config.coordination_policy.route_mode == "guided"
+    assert system.runtime.coordinator.execution_policy.allow_parallel is False
+    system.close()
 
 
 def test_coding_profile_without_sandbox_does_not_attach_run_command() -> None:

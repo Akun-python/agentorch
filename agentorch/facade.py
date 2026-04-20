@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +19,7 @@ from agentorch.agents import (
 )
 from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
 from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
-from agentorch.evolution import EvolutionConfig, EvolutionManager, EvolutionSession, SearchSpace
+from agentorch.evolution import EvolutionConfig, EvolutionSession, SearchSpace
 from agentorch.evolution.helpers import runtime_config_from_genome, workflow_from_genome
 from agentorch.extensions import RuntimeExtension
 from agentorch.knowledge import KnowledgeBase, RagStrategyConfig
@@ -52,15 +51,15 @@ from agentorch.workflow import Workflow
 from agentorch._facade_support import (
     BackgroundRuntimeBridge,
     agent_member_summary as _agent_member_summary,
-    apply_if_unset as _apply_if_unset,
+    build_facade_evolution_session as _build_facade_evolution_session,
     build_single_agent_blueprint as _build_single_agent_blueprint,
     coerce_model_inputs as _coerce_model_inputs,
     coerce_tool_registry as _coerce_tool_registry,
     compact_dict as _compact_dict,
-    finalize_runtime_config as _finalize_runtime_config,
     normalize_capabilities as _normalize_capabilities,
     normalize_tool_bundles as _normalize_tool_bundles,
     profile_defaults as _profile_defaults,
+    resolve_facade_runtime_config as _resolve_facade_runtime_config,
     resolve_reasoning_input as _resolve_reasoning_input,
 )
 
@@ -84,16 +83,6 @@ class _SupervisorRuntimeModelAdapter(BaseModelAdapter):
             "The root runtime of a multi-agent supervisor system does not support direct model generation "
             "without an explicit coordinator model."
         )
-
-
-async def _close_candidate(candidate: Any) -> None:
-    if hasattr(candidate, "aclose"):
-        result = candidate.aclose()
-        if inspect.isawaitable(result):
-            await result
-        return
-    if hasattr(candidate, "close"):
-        candidate.close()
 
 
 def _create_agent_instance(*, workflow: Workflow | None = None, **runtime_kwargs: Any) -> Agent:
@@ -246,10 +235,6 @@ def create_agent(
     if not enable_memory and memory is not None:
         raise ValueError("enable_memory=False conflicts with an explicit memory manager.")
 
-    runtime_config_supplied = runtime_config is not None
-    resolved_runtime_config = RuntimeConfig.from_any(runtime_config)
-    default_runtime_config = RuntimeConfig()
-
     rag_enabled = bool(enable_rag) or knowledge_base is not None or bool(knowledge_paths) or rag is not None
     rag_config = None
     if rag_enabled:
@@ -258,102 +243,24 @@ def create_agent(
             rag_config = rag_config.with_scope(*knowledge_scope)
 
     resolved_reasoning = _resolve_reasoning_input(reasoning, reasoning_framework)
-
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "system_prompt",
-        system_prompt,
+    runtime_config_supplied = runtime_config is not None
+    resolved_runtime_config = _resolve_facade_runtime_config(
+        runtime_config,
+        system_prompt=system_prompt,
+        reasoning_strategy=resolved_reasoning,
+        context_policy=context_policy,
+        state_policy=state_policy,
+        coordination_policy=coordination_policy,
+        memory_policy=memory_policy,
+        context_selector=context_selector,
+        route_planner=route_planner,
+        memory_evaluator=memory_evaluator,
+        observability=observability,
+        default_knowledge_scope=list(knowledge_scope or []),
+        apply_default_knowledge_scope=True,
+        rag_config=rag_config,
+        overrides=overrides,
     )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "reasoning_strategy",
-        resolved_reasoning,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "context_policy",
-        ContextPolicy.from_any(context_policy) if context_policy is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "state_policy",
-        StatePolicy.from_any(state_policy) if state_policy is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "coordination_policy",
-        CoordinationPolicy.from_any(coordination_policy) if coordination_policy is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "memory_policy",
-        MemoryPolicy.from_any(memory_policy) if memory_policy is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "context_selector",
-        context_selector,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "route_planner",
-        route_planner,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "memory_evaluator",
-        memory_evaluator,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "observability",
-        ObservabilityConfig.from_any(observability) if observability is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "default_knowledge_scope",
-        list(knowledge_scope or []),
-    )
-    if rag_config is not None:
-        resolved_runtime_config = _apply_if_unset(
-            resolved_runtime_config,
-            default_runtime_config,
-            runtime_config_supplied,
-            "rag_strategy",
-            rag_config,
-        )
-        resolved_runtime_config = _apply_if_unset(
-            resolved_runtime_config,
-            default_runtime_config,
-            runtime_config_supplied,
-            "enable_retrieval",
-            rag_config.mode != "off",
-        )
-    if overrides:
-        resolved_runtime_config = resolved_runtime_config.model_copy(update=overrides)
-    resolved_runtime_config = _finalize_runtime_config(resolved_runtime_config)
 
     selected_model, selected_model_config = _coerce_model_inputs(model)
     include_media_tools = bool(enable_tools) and isinstance(tool_bundles, dict) and bool(tool_bundles.get("include_media"))
@@ -563,81 +470,20 @@ def create_multi_agent(
         aggregation_policy=aggregation_policy or AggregationPolicy(),
     )
 
-    resolved_runtime_config = RuntimeConfig.from_any(runtime_config)
-    default_runtime_config = RuntimeConfig()
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "system_prompt",
-        system_prompt,
+    resolved_runtime_config = _resolve_facade_runtime_config(
+        runtime_config,
+        system_prompt=system_prompt,
+        reasoning_strategy=_resolve_reasoning_input(reasoning),
+        context_policy=context_policy,
+        state_policy=state_policy,
+        coordination_policy=coordination_policy,
+        memory_policy=memory_policy,
+        context_selector=context_selector,
+        route_planner=route_planner,
+        memory_evaluator=memory_evaluator,
+        observability=observability,
+        overrides=overrides,
     )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "reasoning_strategy",
-        _resolve_reasoning_input(reasoning),
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "context_policy",
-        ContextPolicy.from_any(context_policy) if context_policy is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "state_policy",
-        StatePolicy.from_any(state_policy) if state_policy is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "coordination_policy",
-        CoordinationPolicy.from_any(coordination_policy) if coordination_policy is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "memory_policy",
-        MemoryPolicy.from_any(memory_policy) if memory_policy is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "context_selector",
-        context_selector,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "route_planner",
-        route_planner,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "memory_evaluator",
-        memory_evaluator,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "observability",
-        ObservabilityConfig.from_any(observability) if observability is not None else None,
-    )
-    if overrides:
-        resolved_runtime_config = resolved_runtime_config.model_copy(update=overrides)
-    resolved_runtime_config = _finalize_runtime_config(resolved_runtime_config)
     runtime_coordination = CoordinationPolicy.from_any(resolved_runtime_config.coordination_policy)
     resolved_coordinator.execution_policy.allow_parallel = runtime_coordination.route_mode in {"distributed", "hybrid"}
     resolved_coordinator.execution_policy.max_parallel_tasks = max(1, len(member_inputs))
@@ -775,22 +621,14 @@ def create_agent_evolution(
             overrides=overrides,
         )
 
-    async def evaluate_candidate(genome, candidate, evaluation_tasks):
-        try:
-            value = evaluator(genome, candidate, evaluation_tasks)
-            if inspect.isawaitable(value):
-                return await value
-            return value
-        finally:
-            await _close_candidate(candidate)
-
-    manager = EvolutionManager(
-        builder=build_candidate,
-        evaluator=evaluate_candidate,
-        config=evolution_config,
+    return _build_facade_evolution_session(
         search_space=search_space,
+        evaluator=evaluator,
+        tasks=tasks,
+        evolution_config=evolution_config,
+        candidate_kind="agent",
+        builder=build_candidate,
     )
-    return EvolutionSession(manager=manager, tasks=tasks, candidate_kind="agent")
 
 
 def create_multi_agent_evolution(
@@ -861,19 +699,11 @@ def create_multi_agent_evolution(
             overrides=overrides,
         )
 
-    async def evaluate_candidate(genome, candidate, evaluation_tasks):
-        try:
-            value = evaluator(genome, candidate, evaluation_tasks)
-            if inspect.isawaitable(value):
-                return await value
-            return value
-        finally:
-            await _close_candidate(candidate)
-
-    manager = EvolutionManager(
-        builder=build_candidate,
-        evaluator=evaluate_candidate,
-        config=evolution_config,
+    return _build_facade_evolution_session(
         search_space=search_space,
+        evaluator=evaluator,
+        tasks=tasks,
+        evolution_config=evolution_config,
+        candidate_kind="multi_agent",
+        builder=build_candidate,
     )
-    return EvolutionSession(manager=manager, tasks=tasks, candidate_kind="multi_agent")

@@ -3,13 +3,15 @@ from __future__ import annotations
 import asyncio
 import atexit
 import contextlib
+import inspect
 import threading
 import weakref
 from pathlib import Path
 from typing import Any
 
 from agentorch.agents import AgentCapability
-from agentorch.config import ModelConfig, RuntimeConfig
+from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
+from agentorch.evolution import EvolutionConfig, EvolutionManager, EvolutionSession, SearchSpace
 from agentorch.knowledge import RagStrategyConfig
 from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
@@ -37,8 +39,12 @@ def apply_if_unset(
     runtime_config_supplied: bool,
     field_name: str,
     value: Any,
+    *,
+    explicit_fields: set[str] | None = None,
 ) -> RuntimeConfig:
     if value is None:
+        return runtime_config
+    if runtime_config_supplied and field_name in (explicit_fields or set()):
         return runtime_config
     if runtime_config_supplied and not is_default_value(runtime_config, default_config, field_name):
         return runtime_config
@@ -60,6 +66,82 @@ def resolve_reasoning_input(
             raise ValueError("Pass only one of 'reasoning' or 'reasoning_framework'.")
     selected = reasoning if reasoning is not None else reasoning_framework
     return ReasoningStrategyConfig.from_any(selected) if selected is not None else None
+
+
+def resolve_facade_runtime_config(
+    runtime_config: RuntimeConfig | dict[str, Any] | None,
+    *,
+    system_prompt: str | None = None,
+    reasoning_strategy: ReasoningStrategyConfig | None = None,
+    context_policy: ContextPolicy | dict[str, Any] | None = None,
+    state_policy: StatePolicy | dict[str, Any] | None = None,
+    coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
+    memory_policy: MemoryPolicy | dict[str, Any] | None = None,
+    context_selector: Any = None,
+    route_planner: Any = None,
+    memory_evaluator: Any = None,
+    observability: Any = None,
+    default_knowledge_scope: list[str] | None = None,
+    apply_default_knowledge_scope: bool = False,
+    rag_config: RagStrategyConfig | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> RuntimeConfig:
+    runtime_config_supplied = runtime_config is not None
+    resolved_runtime_config = RuntimeConfig.from_any(runtime_config)
+    default_runtime_config = RuntimeConfig()
+    explicit_fields = set(getattr(resolved_runtime_config, "model_fields_set", set()))
+
+    updates = (
+        ("system_prompt", system_prompt),
+        ("reasoning_strategy", reasoning_strategy),
+        ("context_policy", ContextPolicy.from_any(context_policy) if context_policy is not None else None),
+        ("state_policy", StatePolicy.from_any(state_policy) if state_policy is not None else None),
+        ("coordination_policy", CoordinationPolicy.from_any(coordination_policy) if coordination_policy is not None else None),
+        ("memory_policy", MemoryPolicy.from_any(memory_policy) if memory_policy is not None else None),
+        ("context_selector", context_selector),
+        ("route_planner", route_planner),
+        ("memory_evaluator", memory_evaluator),
+        ("observability", ObservabilityConfig.from_any(observability) if observability is not None else None),
+    )
+    for field_name, value in updates:
+        resolved_runtime_config = apply_if_unset(
+            resolved_runtime_config,
+            default_runtime_config,
+            runtime_config_supplied,
+            field_name,
+            value,
+            explicit_fields=explicit_fields,
+        )
+
+    if apply_default_knowledge_scope:
+        resolved_runtime_config = apply_if_unset(
+            resolved_runtime_config,
+            default_runtime_config,
+            runtime_config_supplied,
+            "default_knowledge_scope",
+            list(default_knowledge_scope or []),
+            explicit_fields=explicit_fields,
+        )
+    if rag_config is not None:
+        resolved_runtime_config = apply_if_unset(
+            resolved_runtime_config,
+            default_runtime_config,
+            runtime_config_supplied,
+            "rag_strategy",
+            rag_config,
+            explicit_fields=explicit_fields,
+        )
+        resolved_runtime_config = apply_if_unset(
+            resolved_runtime_config,
+            default_runtime_config,
+            runtime_config_supplied,
+            "enable_retrieval",
+            rag_config.mode != "off",
+            explicit_fields=explicit_fields,
+        )
+    if overrides:
+        resolved_runtime_config = resolved_runtime_config.model_copy(update=overrides)
+    return finalize_runtime_config(resolved_runtime_config)
 
 
 def coerce_model_inputs(model: Any) -> tuple[Any | None, ModelConfig | dict[str, Any] | str | None]:
@@ -231,6 +313,43 @@ def build_single_agent_blueprint(
             "background_managed": getattr(runtime, "_background_managed", False),
         },
     }
+
+
+async def close_resource(candidate: Any) -> None:
+    if hasattr(candidate, "aclose"):
+        result = candidate.aclose()
+        if inspect.isawaitable(result):
+            await result
+        return
+    if hasattr(candidate, "close"):
+        candidate.close()
+
+
+def build_facade_evolution_session(
+    *,
+    search_space: SearchSpace | dict[str, list[Any]],
+    evaluator: Any,
+    tasks: list[Any] | None,
+    evolution_config: EvolutionConfig | None,
+    candidate_kind: str,
+    builder: Any,
+) -> EvolutionSession[Any]:
+    async def evaluate_candidate(genome: Any, candidate: Any, evaluation_tasks: list[Any] | None):
+        try:
+            value = evaluator(genome, candidate, evaluation_tasks)
+            if inspect.isawaitable(value):
+                return await value
+            return value
+        finally:
+            await close_resource(candidate)
+
+    manager = EvolutionManager(
+        builder=builder,
+        evaluator=evaluate_candidate,
+        config=evolution_config,
+        search_space=search_space,
+    )
+    return EvolutionSession(manager=manager, tasks=tasks, candidate_kind=candidate_kind)
 
 
 class BackgroundRuntimeBridge:
