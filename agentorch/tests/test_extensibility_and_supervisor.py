@@ -108,6 +108,45 @@ def test_capability_supervisor_policy_prefers_matching_capability_and_scope() ->
     assert decision.scores["retriever"] > 0
 
 
+def test_capability_supervisor_policy_rejects_unsatisfied_required_capability() -> None:
+    registry = AgentRegistry()
+    registry.register(
+        AgentSpec.assistant("reviewer", capabilities=["review"]),
+        object(),
+    )
+    task = agentorch.TaskPacket(
+        task_id="route-miss-capability",
+        goal="Need retrieval evidence",
+        context={"required_capabilities": ["retrieve"]},
+        metadata={"coordination_policy": {"route_mode": "guided"}},
+    )
+
+    with pytest.raises(ValueError, match="required_capabilities"):
+        asyncio.run(CapabilitySupervisorPolicy().select_agents(task, registry))
+
+
+def test_capability_supervisor_policy_required_tools_excludes_toolless_agents() -> None:
+    registry = AgentRegistry()
+    registry.register(
+        AgentSpec.assistant("tool_user", capabilities=["review"], tools=["search"]),
+        object(),
+    )
+    registry.register(
+        AgentSpec.assistant("plain_reviewer", capabilities=["review"]),
+        object(),
+    )
+    task = agentorch.TaskPacket(
+        task_id="route-tools",
+        goal="Review with search",
+        context={"required_tools": ["search"]},
+        metadata={"coordination_policy": {"route_mode": "guided"}},
+    )
+
+    decision = asyncio.run(CapabilitySupervisorPolicy().select_agents(task, registry))
+
+    assert decision.selected_agents == ["tool_user"]
+
+
 def test_adaptive_task_planner_marks_parallel_for_distributed_parallel_agents() -> None:
     registry = AgentRegistry()
     registry.register(

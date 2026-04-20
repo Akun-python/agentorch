@@ -71,6 +71,14 @@ def test_create_agent_runtime_config_explicit_default_field_beats_profile_defaul
     agent.close()
 
 
+def test_enable_streaming_is_materialized_in_runtime_config() -> None:
+    agent = agentorch.create_agent(model=DummyModel(), enable_streaming=False)
+
+    assert agent.runtime.config.enable_streaming is False
+    assert agent.export_blueprint()["runtime"]["config"]["enable_streaming"] is False
+    agent.close()
+
+
 def test_multi_agent_runtime_config_precedence_beats_facade_values() -> None:
     config = RuntimeConfig(
         system_prompt="runtime-team-prompt",
@@ -160,6 +168,14 @@ def test_create_multi_agent_applies_shared_defaults_to_inline_members() -> None:
 def test_research_profile_is_no_longer_supported() -> None:
     with pytest.raises(ValueError, match="Unsupported create_agent profile 'research'"):
         agentorch.create_agent(model=DummyModel(), profile="research")
+
+
+def test_runtime_config_explicit_streaming_flag_beats_facade_value() -> None:
+    config = RuntimeConfig(enable_streaming=False)
+    agent = agentorch.create_agent(model=DummyModel(), enable_streaming=True, runtime_config=config)
+
+    assert agent.runtime.config.enable_streaming is False
+    agent.close()
 
 
 def test_top_level_api_no_longer_exports_research_presets() -> None:

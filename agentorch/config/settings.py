@@ -514,6 +514,7 @@ class RuntimeConfig(BaseModel):
     )
     prompt_template: ChatPromptTemplate | None = None
     max_steps: int = 8
+    enable_streaming: bool = True
     auto_select_skills: bool = True
     skill_routing: SkillRoutingConfig | None = Field(default_factory=SkillRoutingConfig)
     parser_retry_limit: int = 1

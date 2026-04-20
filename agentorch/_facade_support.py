@@ -83,6 +83,7 @@ def resolve_facade_runtime_config(
     runtime_config: RuntimeConfig | dict[str, Any] | None,
     *,
     system_prompt: str | None = None,
+    enable_streaming: bool | None = None,
     reasoning_strategy: ReasoningStrategyConfig | None = None,
     context_policy: ContextPolicy | dict[str, Any] | None = None,
     state_policy: StatePolicy | dict[str, Any] | None = None,
@@ -104,6 +105,7 @@ def resolve_facade_runtime_config(
 
     updates = (
         ("system_prompt", system_prompt),
+        ("enable_streaming", enable_streaming),
         ("reasoning_strategy", reasoning_strategy),
         ("context_policy", ContextPolicy.from_any(context_policy) if context_policy is not None else None),
         ("state_policy", StatePolicy.from_any(state_policy) if state_policy is not None else None),

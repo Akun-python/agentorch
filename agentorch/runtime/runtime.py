@@ -571,6 +571,11 @@ class Runtime:
         stream: bool = False,
     ) -> Any:
         if stream:
+            if not self.config.enable_streaming:
+                raise RuntimeError(
+                    "Streaming is disabled for this runtime. "
+                    "Set RuntimeConfig(enable_streaming=True) or create_agent(..., enable_streaming=True) to enable stream=True."
+                )
             return self._run_stream(user_input, thread_id=thread_id, workflow=workflow, metadata=metadata)
         return self._run(user_input, thread_id=thread_id, workflow=workflow, metadata=metadata)
 

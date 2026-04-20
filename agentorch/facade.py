@@ -155,6 +155,7 @@ def create_agent(
             reasoning,
             reasoning_framework,
             sandbox,
+            enable_streaming,
             human_feedback,
             observability,
             extensions,
@@ -243,6 +244,7 @@ def create_agent(
     resolved_runtime_config = _resolve_facade_runtime_config(
         runtime_config,
         system_prompt=system_prompt,
+        enable_streaming=enable_streaming,
         reasoning_strategy=resolved_reasoning,
         context_policy=context_policy,
         state_policy=state_policy,

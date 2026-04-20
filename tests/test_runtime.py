@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from pydantic import BaseModel
 
 from agentorch.agents import AgentCapability, AgentRegistry, AgentSpec, Supervisor
@@ -156,6 +157,19 @@ async def _test_runtime_stream_emits_model_delta_and_final_result():
     assert events[-1].result is not None
     assert events[-1].result.output_text == "Hello streaming world"
     assert events[-1].payload["output_text"] == "Hello streaming world"
+
+
+def test_runtime_rejects_stream_when_streaming_disabled():
+    asyncio.run(_test_runtime_rejects_stream_when_streaming_disabled())
+
+
+async def _test_runtime_rejects_stream_when_streaming_disabled():
+    runtime = Runtime(model=StreamingTextModel(), config=RuntimeConfig(enable_streaming=False))
+    agent = Agent(runtime=runtime)
+
+    with pytest.raises(RuntimeError, match="Streaming is disabled for this runtime"):
+        async for _event in agent.run("hello", thread_id="stream-disabled", stream=True):
+            pass
 
 
 def test_runtime_stream_emits_tool_events():

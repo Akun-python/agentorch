@@ -97,6 +97,7 @@ class CapabilitySupervisorPolicy(SupervisorPolicy):
         required_tools = set(_string_list(task_context.get("required_tools") or metadata.get("required_tools")))
         goal_tokens = _tokenize(task.goal)
         ranked: list[tuple[float, str, list[str]]] = []
+        hard_constraints_applied = bool(explicit_targets or excluded_agents or required_capabilities or required_tags or required_tools)
 
         for spec in registry.list_specs():
             spec_name = spec.name.lower()
@@ -115,7 +116,7 @@ class CapabilitySupervisorPolicy(SupervisorPolicy):
                 continue
             if required_tags and not required_tags.issubset(tag_values):
                 continue
-            if required_tools and tool_values and not required_tools.issubset(tool_values):
+            if required_tools and not required_tools.issubset(tool_values):
                 continue
 
             score = 0.0
@@ -164,6 +165,21 @@ class CapabilitySupervisorPolicy(SupervisorPolicy):
             ranked.append((score, spec.name, reasons))
 
         ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        if not ranked and hard_constraints_applied:
+            constraint_bits = []
+            if explicit_targets:
+                constraint_bits.append(f"target_agents={sorted(explicit_targets)}")
+            if excluded_agents:
+                constraint_bits.append(f"excluded_agents={sorted(excluded_agents)}")
+            if required_capabilities:
+                constraint_bits.append(f"required_capabilities={sorted(required_capabilities)}")
+            if required_tags:
+                constraint_bits.append(f"required_tags={sorted(required_tags)}")
+            if required_tools:
+                constraint_bits.append(f"required_tools={sorted(required_tools)}")
+            raise ValueError(
+                "No agents satisfy the routing constraints: " + ", ".join(constraint_bits)
+            )
         if not ranked and registry.list_specs():
             fallback = registry.list_specs()[0].name
             return AgentRouteDecision(selected_agents=[fallback], reason="fallback_first_registered", scores={fallback: 0.0})
