@@ -1,3 +1,5 @@
+"""Lower-level runtime assembly example for tool bundles, tracing, and streaming."""
+
 import asyncio
 from pathlib import Path
 from pprint import pprint

@@ -112,6 +112,8 @@ OPENAI_TTS_VOICE=your-voice
 
 ## 快速开始
 
+如果你想快速区分 facade 推荐示例和底层 runtime 装配示例，可先看 [`examples/README.md`](examples/README.md)。
+
 ### 1. 最小 Agent
 
 ```python

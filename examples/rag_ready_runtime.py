@@ -1,3 +1,5 @@
+"""Lower-level runtime assembly example for manual RAG wiring."""
+
 import asyncio
 
 from agentorch import Agent, InMemoryKnowledgeBase, OpenAIModel, Runtime

@@ -112,6 +112,8 @@ If you use an OpenAI-compatible gateway, full endpoint URLs such as `.../chat/co
 
 ## Quick Start
 
+For a curated map of facade-first examples versus lower-level runtime examples, see [`examples/README.md`](examples/README.md).
+
 ### 1. Minimal agent
 
 Normal Python script:
