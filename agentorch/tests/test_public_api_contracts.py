@@ -134,6 +134,29 @@ def test_create_multi_agent_inline_member_blueprints_work() -> None:
     system.close()
 
 
+def test_create_multi_agent_applies_shared_defaults_to_inline_members() -> None:
+    shared_memory = object()
+    system = agentorch.create_multi_agent(
+        roles=[
+            {
+                "name": "planner",
+                "model": DummyModel(name="planner-shared-model"),
+            }
+        ],
+        shared_memory=shared_memory,
+        shared_knowledge={"knowledge_scope": ["shared-scope"]},
+        name="shared-team",
+    )
+
+    member = system.runtime.agent_registry.get("planner").agent
+    blueprint = system.export_blueprint()
+
+    assert member.runtime.memory is shared_memory
+    assert member.runtime.config.default_knowledge_scope == ["shared-scope"]
+    assert blueprint["members"][0]["knowledge_scope"] == ["shared-scope"]
+    system.close()
+
+
 def test_deep_research_agent_legacy_entrypoint_respects_secure_exports() -> None:
     research = agentorch.DeepResearchAgent.create(model=DummyModel(), config={"include_web_search": False})
     exported = research.export_blueprint()

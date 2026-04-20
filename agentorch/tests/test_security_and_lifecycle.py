@@ -192,6 +192,44 @@ def test_create_multi_agent_keeps_external_member_runtime_open_on_close() -> Non
     member.close()
 
 
+def test_create_multi_agent_role_wrapper_preserves_external_member_and_override_metadata() -> None:
+    member = agentorch.create_agent(model=DummyModel(), name="worker-base")
+    system = agentorch.create_multi_agent(
+        roles=[
+            {
+                "agent": member,
+                "name": "reviewer",
+                "role": "paper_reviewer",
+                "description": "Review specialist",
+                "knowledge_scope": ["papers"],
+                "capabilities": ["retrieve"],
+                "tags": ["paper"],
+                "metadata": {"compat_mode": True},
+                "supports_parallel_tasks": True,
+                "max_delegation_depth": 3,
+            }
+        ],
+        name="team-role-wrapper",
+    )
+
+    registered = system.runtime.agent_registry.get("reviewer")
+    blueprint = system.export_blueprint()
+
+    assert registered.agent is member
+    assert registered.spec.metadata["compat_mode"] is True
+    assert registered.spec.supports_parallel_tasks is True
+    assert registered.spec.max_delegation_depth == 3
+    assert registered.spec.allowed_knowledge_scopes == ["papers"]
+    assert blueprint["members"][0]["role"] == "paper_reviewer"
+    assert blueprint["members"][0]["knowledge_scope"] == ["papers"]
+
+    system.close()
+
+    assert member.runtime._closed is False
+    assert member.runtime.model.closed is False
+    member.close()
+
+
 def test_create_multi_agent_closes_inline_managed_member_runtimes() -> None:
     system = agentorch.create_multi_agent(
         roles=[

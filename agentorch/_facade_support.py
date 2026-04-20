@@ -6,13 +6,14 @@ import contextlib
 import inspect
 import threading
 import weakref
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from agentorch.agents import AgentCapability
+from agentorch.agents import AgentCapability, AgentSpec
 from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
 from agentorch.evolution import EvolutionConfig, EvolutionManager, EvolutionSession, SearchSpace
-from agentorch.knowledge import RagStrategyConfig
+from agentorch.knowledge import KnowledgeBase, RagStrategyConfig
 from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
 from agentorch.runtime._export_support import _safe_export, _workflow_summary
@@ -21,6 +22,16 @@ from agentorch.sandbox import SandboxManager
 from agentorch.strategies import ContextPolicy, CoordinationPolicy, MemoryPolicy, StatePolicy
 from agentorch.tools import BaseTool, ToolRegistry
 from agentorch.workflow import Workflow
+
+CreateAgentFn = Callable[..., Agent]
+
+
+@dataclass
+class MultiAgentMemberAssembly:
+    agent: Agent
+    spec: AgentSpec
+    summary: dict[str, Any]
+    managed: bool = False
 
 
 def compact_dict(payload: dict[str, Any]) -> dict[str, Any]:
@@ -230,6 +241,96 @@ def agent_member_summary(
     }
 
 
+def split_shared_knowledge_input(
+    shared_knowledge: KnowledgeBase | dict[str, Any] | None,
+) -> tuple[KnowledgeBase | None, dict[str, Any]]:
+    return (
+        shared_knowledge if isinstance(shared_knowledge, KnowledgeBase) else None,
+        shared_knowledge if isinstance(shared_knowledge, dict) else {},
+    )
+
+
+def resolve_multi_agent_member(
+    item: Agent | dict[str, Any],
+    *,
+    index: int,
+    create_agent_fn: CreateAgentFn,
+    model: Any = None,
+    sandbox: SandboxManager | None = None,
+    shared_memory: Any = None,
+    shared_knowledge: KnowledgeBase | dict[str, Any] | None = None,
+) -> MultiAgentMemberAssembly:
+    shared_knowledge_base, shared_knowledge_payload = split_shared_knowledge_input(shared_knowledge)
+    managed = False
+
+    if isinstance(item, Agent):
+        exported = item.export_blueprint()
+        member_agent = item
+        member_name = exported.get("name") or f"agent_{index}"
+        member_role = member_name
+        member_description = exported.get("description") or member_name
+        member_capabilities = normalize_capabilities(None, item)
+        member_scope = item.runtime.config.default_knowledge_scope
+        member_tags: list[str] = []
+        member_supports_parallel = False
+        member_max_delegation_depth = 1
+        member_metadata: dict[str, Any] = {}
+    else:
+        payload = dict(item)
+        existing_agent = payload.pop("agent", None)
+        role_name = payload.pop("role", None)
+        member_name = payload.pop("name", None) or role_name or f"agent_{index}"
+        member_role = role_name or member_name
+        member_description = payload.pop("description", None) or f"{member_name} specialist"
+        requested_capabilities = payload.pop("capabilities", None)
+        member_tags = list(payload.pop("tags", []) or [])
+        member_supports_parallel = bool(payload.pop("supports_parallel_tasks", False))
+        member_max_delegation_depth = int(payload.pop("max_delegation_depth", 1) or 1)
+        member_metadata = dict(payload.pop("metadata", {}) or {})
+
+        if existing_agent is not None:
+            member_agent = existing_agent
+            member_scope = payload.pop("knowledge_scope", None) or member_agent.runtime.config.default_knowledge_scope
+            member_capabilities = normalize_capabilities(requested_capabilities, member_agent)
+        else:
+            if shared_memory is not None and "memory" not in payload:
+                payload["memory"] = shared_memory
+            if shared_knowledge_base is not None and "knowledge_base" not in payload:
+                payload["knowledge_base"] = shared_knowledge_base
+            if shared_knowledge_payload:
+                for key in ("knowledge_paths", "knowledge_scope", "rag", "enable_rag"):
+                    payload.setdefault(key, shared_knowledge_payload.get(key))
+            payload.setdefault("model", model)
+            payload.setdefault("sandbox", sandbox)
+            payload.setdefault("name", member_name)
+            payload.setdefault("description", member_description)
+            member_agent = create_agent_fn(**payload)
+            managed = True
+            member_scope = payload.get("knowledge_scope") or member_agent.runtime.config.default_knowledge_scope
+            member_capabilities = normalize_capabilities(requested_capabilities, member_agent)
+
+    spec = AgentSpec.assistant(
+        member_name,
+        description=member_description,
+        tags=member_tags,
+        capabilities=member_capabilities,
+        tools=sorted(getattr(member_agent.runtime.tools, "_tools", {}).keys()),
+        knowledge_scopes=list(member_scope or []),
+        supports_parallel_tasks=member_supports_parallel,
+        max_delegation_depth=member_max_delegation_depth,
+        metadata=member_metadata,
+    )
+    summary = agent_member_summary(
+        member_agent,
+        name=member_name,
+        role=member_role,
+        description=member_description,
+        capabilities=member_capabilities,
+        knowledge_scope=list(member_scope or []),
+    )
+    return MultiAgentMemberAssembly(agent=member_agent, spec=spec, summary=summary, managed=managed)
+
+
 def profile_defaults(profile: str, *, sandbox: SandboxManager | None) -> dict[str, Any]:
     normalized = (profile or "default").strip().lower()
     if normalized == "default":
@@ -312,6 +413,59 @@ def build_single_agent_blueprint(
             "closed": getattr(runtime, "_closed", False),
             "background_managed": getattr(runtime, "_background_managed", False),
         },
+    }
+
+
+def build_multi_agent_blueprint(
+    *,
+    name: str | None,
+    description: str | None,
+    topology: str,
+    members: list[dict[str, Any]],
+    runtime: Runtime,
+    workflow: Workflow | None,
+    member_count: int,
+    shared_knowledge: KnowledgeBase | dict[str, Any] | None,
+    shared_memory: Any = None,
+    reasoning: Any = None,
+    context_policy: Any = None,
+    state_policy: Any = None,
+    coordination_policy: Any = None,
+    memory_policy: Any = None,
+    extensions: list[Any] | tuple[Any, ...] | None = None,
+) -> dict[str, Any]:
+    return {
+        "facade": "create_multi_agent",
+        "kind": "multi_agent",
+        "name": name or "multi_agent_system",
+        "description": description or "Multi-agent system assembled from create_agent members",
+        "topology": topology,
+        "members": members,
+        "runtime": _runtime_summary(runtime),
+        "workflow": _workflow_summary(workflow),
+        "redaction_applied": not getattr(runtime.config, "unsafe_export", False),
+        "resource_state": {
+            "closed": getattr(runtime, "_closed", False),
+            "background_managed": getattr(runtime, "_background_managed", False),
+        },
+        "facade_inputs": _safe_export(
+            compact_dict(
+                {
+                    "member_count": member_count,
+                    "shared_knowledge": shared_knowledge.__class__.__name__ if isinstance(shared_knowledge, KnowledgeBase) else shared_knowledge,
+                    "shared_memory": shared_memory.__class__.__name__ if shared_memory is not None else None,
+                    "reasoning": reasoning,
+                    "context_policy": context_policy,
+                    "state_policy": state_policy,
+                    "coordination_policy": coordination_policy,
+                    "memory_policy": memory_policy,
+                    "topology": topology,
+                    "workflow_attached": workflow is not None,
+                    "extensions": [extension.extension_name for extension in extensions] if extensions else None,
+                }
+            )
+        ),
+        "resolved_defaults": {"topology": topology},
     }
 
 
