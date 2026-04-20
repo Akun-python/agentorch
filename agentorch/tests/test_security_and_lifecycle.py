@@ -8,6 +8,7 @@ import pytest
 
 import agentorch
 from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig, initialize_environment
+from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
 from agentorch.models.base import BaseModelAdapter
 from agentorch.observability import SQLiteEventStore
 from agentorch.runtime import Agent, Runtime
@@ -30,6 +31,46 @@ class DummyModel(BaseModelAdapter):
 
     async def aclose(self) -> None:
         self.closed = True
+
+
+class ReplyModel(DummyModel):
+    def __init__(self, reply: str = "ok") -> None:
+        super().__init__()
+        self.reply = reply
+
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        return ModelResponse(
+            message=Message(role="assistant", content=self.reply),
+            content=self.reply,
+            finish_reason="stop",
+            usage=UsageInfo(total_tokens=4),
+        )
+
+
+class RecordingAgent(Agent):
+    def __init__(self, *, runtime: Runtime) -> None:
+        super().__init__(runtime=runtime)
+        self.calls: list[dict[str, object]] = []
+
+    def run(
+        self,
+        user_input: str,
+        *,
+        thread_id: str,
+        metadata: dict[str, object] | None = None,
+        stream: bool = False,
+    ):
+        self.calls.append(
+            {
+                "user_input": user_input,
+                "thread_id": thread_id,
+                "metadata": dict(metadata or {}),
+                "memory": self.runtime.memory,
+                "knowledge_base": self.runtime.knowledge_base,
+                "retriever": self.runtime.retriever,
+            }
+        )
+        return super().run(user_input, thread_id=thread_id, metadata=metadata, stream=stream)
 
 
 def test_agent_exports_redact_secrets() -> None:
@@ -222,6 +263,67 @@ def test_create_multi_agent_role_wrapper_preserves_external_member_and_override_
     assert registered.spec.allowed_knowledge_scopes == ["papers"]
     assert blueprint["members"][0]["role"] == "paper_reviewer"
     assert blueprint["members"][0]["knowledge_scope"] == ["papers"]
+
+    system.close()
+
+    assert member.runtime._closed is False
+    assert member.runtime.model.closed is False
+    member.close()
+
+
+def test_create_multi_agent_external_member_applies_shared_scope_and_restores_runtime() -> None:
+    original_memory = agentorch.MemoryManager()
+    shared_memory = agentorch.MemoryManager()
+    member = RecordingAgent(runtime=Runtime(model=ReplyModel("direct-ok"), memory=original_memory, config=RuntimeConfig()))
+    system = agentorch.create_multi_agent(
+        agents=[member],
+        shared_memory=shared_memory,
+        shared_knowledge={"knowledge_scope": ["shared-scope"]},
+        name="team-shared-scope",
+    )
+
+    result = system.run_sync("use the shared defaults", thread_id="team-shared-scope")
+
+    assert "direct-ok" in result.output_text
+    assert member.calls[-1]["metadata"]["knowledge_scope"] == ["shared-scope"]
+    assert member.calls[-1]["memory"] is shared_memory
+    assert member.runtime.memory is original_memory
+
+    system.close()
+
+    assert member.runtime._closed is False
+    assert member.runtime.model.closed is False
+    member.close()
+
+
+def test_create_multi_agent_external_role_wrapper_applies_shared_runtime_dependencies_temporarily() -> None:
+    original_memory = agentorch.MemoryManager()
+    shared_memory = agentorch.MemoryManager()
+    shared_knowledge = agentorch.InMemoryKnowledgeBase()
+    member = RecordingAgent(runtime=Runtime(model=ReplyModel("wrapped-ok"), memory=original_memory, config=RuntimeConfig()))
+    system = agentorch.create_multi_agent(
+        roles=[
+            {
+                "agent": member,
+                "name": "reviewer",
+                "knowledge_scope": ["papers"],
+            }
+        ],
+        shared_memory=shared_memory,
+        shared_knowledge=shared_knowledge,
+        name="team-shared-runtime",
+    )
+
+    result = system.run_sync("review the paper", thread_id="team-shared-runtime")
+
+    assert "wrapped-ok" in result.output_text
+    assert member.calls[-1]["metadata"]["knowledge_scope"] == ["papers"]
+    assert member.calls[-1]["memory"] is shared_memory
+    assert member.calls[-1]["knowledge_base"] is shared_knowledge
+    assert member.calls[-1]["retriever"] is not None
+    assert member.runtime.memory is original_memory
+    assert member.runtime.knowledge_base is None
+    assert member.runtime.retriever is None
 
     system.close()
 

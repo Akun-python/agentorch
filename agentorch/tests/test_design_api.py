@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import agentorch
+from agentorch.config import RuntimeConfig
 from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
 from agentorch.extensions import RuntimeExtension
 from agentorch.models.base import BaseModelAdapter
@@ -177,3 +178,18 @@ def test_design_helper_methods_cover_overlay_runtime_config_and_team_payload_pat
     assert team_kwargs["name"] == "mixed-team"
 
     external_agent.close()
+
+
+def test_agent_design_overlay_merges_existing_runtime_config_fields() -> None:
+    base = agentorch.AgentDesign.named("overlay-base", model=DummyModel(reply="base")).with_runtime_config(
+        system_prompt="one",
+        enable_streaming=True,
+    )
+
+    merged = base.overlay({"runtime_config": {"max_steps": 3}})
+    runtime_config = merged.as_create_kwargs()["runtime_config"]
+
+    assert isinstance(runtime_config, RuntimeConfig)
+    assert runtime_config.system_prompt == "one"
+    assert runtime_config.enable_streaming is True
+    assert runtime_config.max_steps == 3

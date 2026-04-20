@@ -38,6 +38,23 @@ def test_create_agent_runtime_conflict_is_enforced() -> None:
     runtime.close()
 
 
+@pytest.mark.parametrize(
+    "conflict_kwargs",
+    [
+        {"enable_tools": False},
+        {"enable_rag": False},
+        {"enable_memory": False},
+    ],
+)
+def test_create_agent_runtime_rejects_runtime_switch_conflicts(conflict_kwargs: dict[str, bool]) -> None:
+    runtime = agentorch.Runtime.create(model=DummyModel())
+    try:
+        with pytest.raises(ValueError, match="cannot be mixed"):
+            agentorch.create_agent(runtime=runtime, **conflict_kwargs)
+    finally:
+        runtime.close()
+
+
 def test_create_agent_rejects_tool_conflict_when_tools_disabled() -> None:
     tool_registry = ToolRegistry.with_bundles(workspace_root=Path.cwd(), include_filesystem=True, include_execution=False)
     with pytest.raises(ValueError):

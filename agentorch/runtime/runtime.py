@@ -1527,33 +1527,59 @@ class Runtime:
             stream_writer=stream_writer,
         )
 
-        if stream_writer is None:
-            run_result = await registered.agent.run(
-                invocation.task.goal,
-                thread_id=invocation.task.task_id,
-                metadata=child_metadata,
-                stream=False,
-            )
-        else:
-            run_result = None
-            async for child_event in registered.agent.run(
-                invocation.task.goal,
-                thread_id=invocation.task.task_id,
-                metadata=child_metadata,
-                stream=True,
-            ):
-                forwarded = child_event.model_copy(deep=True)
-                if not forwarded.agent_name:
-                    forwarded.agent_name = registered.spec.name
-                if not forwarded.task_id:
-                    forwarded.task_id = invocation.task.task_id
-                if not forwarded.parent_task_id:
-                    forwarded.parent_task_id = invocation.task.parent_task_id
-                await stream_writer(forwarded)
-                if child_event.event_type == "final_result" and child_event.result is not None:
-                    run_result = child_event.result
-            if run_result is None:  # pragma: no cover
-                raise RuntimeError(f"Delegated agent '{registered.spec.name}' did not produce a final_result event.")
+        delegated_runtime = getattr(registered.agent, "runtime", None)
+        original_memory = getattr(delegated_runtime, "memory", None)
+        original_knowledge_base = getattr(delegated_runtime, "knowledge_base", None)
+        original_retriever = getattr(delegated_runtime, "retriever", None)
+        patch_shared_memory = bool(getattr(self, "_facade_explicit_shared_memory", False)) and delegated_runtime is not None
+        patch_shared_knowledge = (
+            bool(getattr(self, "_facade_explicit_shared_knowledge", False))
+            and delegated_runtime is not None
+            and getattr(delegated_runtime, "knowledge_base", None) is None
+            and self.knowledge_base is not None
+        )
+        try:
+            if patch_shared_memory:
+                delegated_runtime.memory = self.memory
+            if patch_shared_knowledge:
+                delegated_runtime.knowledge_base = self.knowledge_base
+                delegated_runtime.retriever = self.retriever or (
+                    self.knowledge_base.get_retriever() if self.knowledge_base is not None else None
+                )
+
+            if stream_writer is None:
+                run_result = await registered.agent.run(
+                    invocation.task.goal,
+                    thread_id=invocation.task.task_id,
+                    metadata=child_metadata,
+                    stream=False,
+                )
+            else:
+                run_result = None
+                async for child_event in registered.agent.run(
+                    invocation.task.goal,
+                    thread_id=invocation.task.task_id,
+                    metadata=child_metadata,
+                    stream=True,
+                ):
+                    forwarded = child_event.model_copy(deep=True)
+                    if not forwarded.agent_name:
+                        forwarded.agent_name = registered.spec.name
+                    if not forwarded.task_id:
+                        forwarded.task_id = invocation.task.task_id
+                    if not forwarded.parent_task_id:
+                        forwarded.parent_task_id = invocation.task.parent_task_id
+                    await stream_writer(forwarded)
+                    if child_event.event_type == "final_result" and child_event.result is not None:
+                        run_result = child_event.result
+                if run_result is None:  # pragma: no cover
+                    raise RuntimeError(f"Delegated agent '{registered.spec.name}' did not produce a final_result event.")
+        finally:
+            if patch_shared_memory:
+                delegated_runtime.memory = original_memory
+            if patch_shared_knowledge:
+                delegated_runtime.knowledge_base = original_knowledge_base
+                delegated_runtime.retriever = original_retriever
 
         run_status = (
             TaskStatus.COMPLETED

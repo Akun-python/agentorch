@@ -294,6 +294,7 @@ class Supervisor:
                         "parent_task_id": task.task_id,
                         "origin_agent": task.origin_agent or "supervisor",
                         "status": TaskStatus.PENDING,
+                        "knowledge_scope": self._delegated_knowledge_scope(step.assigned_agent or "", task),
                     }
                 ),
                 delegation_depth=int(task.metadata.get("delegation_depth", 0)) + 1,
@@ -306,6 +307,20 @@ class Supervisor:
             for step in task_plan.steps
         ]
         return DelegationPlan(invocations=invocations, reason=decision.reason, task_plan=task_plan)
+
+    def _delegated_knowledge_scope(self, agent_name: str, task: TaskPacket) -> list[str]:
+        requested = list(task.knowledge_scope or [])
+        try:
+            allowed = list(self.registry.get(agent_name).spec.allowed_knowledge_scopes or [])
+        except KeyError:
+            return requested
+        if requested and allowed:
+            return [scope for scope in requested if scope in allowed]
+        if requested:
+            return requested
+        if allowed:
+            return allowed
+        return []
 
     async def run(self, task: TaskPacket, *, parent_run_id: str | None = None) -> list[AgentResult]:
         plan = await self.create_plan(task)

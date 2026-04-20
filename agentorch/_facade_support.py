@@ -272,7 +272,7 @@ def resolve_multi_agent_member(
         member_role = member_name
         member_description = exported.get("description") or member_name
         member_capabilities = normalize_capabilities(None, item)
-        member_scope = item.runtime.config.default_knowledge_scope
+        member_scope = shared_knowledge_payload.get("knowledge_scope") or item.runtime.config.default_knowledge_scope
         member_tags: list[str] = []
         member_supports_parallel = False
         member_max_delegation_depth = 1
@@ -292,7 +292,11 @@ def resolve_multi_agent_member(
 
         if existing_agent is not None:
             member_agent = existing_agent
-            member_scope = payload.pop("knowledge_scope", None) or member_agent.runtime.config.default_knowledge_scope
+            member_scope = (
+                payload.pop("knowledge_scope", None)
+                or shared_knowledge_payload.get("knowledge_scope")
+                or member_agent.runtime.config.default_knowledge_scope
+            )
             member_capabilities = normalize_capabilities(requested_capabilities, member_agent)
         else:
             if shared_memory is not None and "memory" not in payload:

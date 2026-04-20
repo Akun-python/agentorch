@@ -105,7 +105,14 @@ class AgentDesign(BaseModel):
         payload = incoming.model_dump(exclude_unset=True, round_trip=True)
         updated = self.model_copy(deep=True)
         for field_name, value in payload.items():
-            if field_name in {"runtime_config", "overrides"}:
+            if field_name == "runtime_config":
+                current = getattr(updated, field_name)
+                current_runtime = RuntimeConfig.from_any(current) if current is not None else RuntimeConfig()
+                incoming_runtime = RuntimeConfig.from_any(value) if value is not None else RuntimeConfig()
+                value = current_runtime.model_copy(
+                    update=incoming_runtime.model_dump(exclude_unset=True, round_trip=True)
+                )
+            elif field_name == "overrides":
                 current = getattr(updated, field_name)
                 if isinstance(current, dict) and isinstance(value, dict):
                     value = {**current, **value}

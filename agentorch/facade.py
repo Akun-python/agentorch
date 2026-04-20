@@ -57,6 +57,7 @@ from agentorch._facade_support import (
     resolve_multi_agent_member as _resolve_multi_agent_member,
     resolve_facade_runtime_config as _resolve_facade_runtime_config,
     resolve_reasoning_input as _resolve_reasoning_input,
+    split_shared_knowledge_input as _split_shared_knowledge_input,
 )
 
 _ALLOWED_MULTI_AGENT_TOPOLOGIES = {"supervisor"}
@@ -146,11 +147,14 @@ def create_agent(
         conflicting = [
             model,
             system_prompt,
+            enable_tools,
             tools,
             tool_bundles,
+            enable_rag,
             knowledge_base,
             knowledge_paths,
             rag,
+            enable_memory,
             memory,
             reasoning,
             reasoning_framework,
@@ -382,6 +386,7 @@ def create_multi_agent(
         raise ValueError(f"Unsupported multi-agent topology '{resolved_topology}'. Supported values: {supported}.")
 
     registry = AgentRegistry()
+    shared_knowledge_base, shared_knowledge_payload = _split_shared_knowledge_input(shared_knowledge)
     assembled_members = [
         _resolve_multi_agent_member(
             item,
@@ -425,6 +430,9 @@ def create_multi_agent(
         route_planner=route_planner,
         memory_evaluator=memory_evaluator,
         observability=observability,
+        default_knowledge_scope=list(shared_knowledge_payload.get("knowledge_scope") or []),
+        apply_default_knowledge_scope=bool(shared_knowledge_payload.get("knowledge_scope")),
+        rag_config=RagStrategyConfig.from_any(shared_knowledge_payload["rag"]) if shared_knowledge_payload.get("rag") is not None else None,
         overrides=overrides,
     )
     runtime_coordination = CoordinationPolicy.from_any(resolved_runtime_config.coordination_policy)
@@ -438,6 +446,7 @@ def create_multi_agent(
         model=selected_model,
         model_config=selected_model_config,
         memory=shared_memory,
+        knowledge_base=shared_knowledge_base,
         sandbox=sandbox,
         agent_registry=registry,
         supervisor=resolved_supervisor,
@@ -447,6 +456,8 @@ def create_multi_agent(
         extensions=extensions,
         managed_agents=managed_member_agents,
     )
+    runtime._facade_explicit_shared_memory = shared_memory is not None
+    runtime._facade_explicit_shared_knowledge = shared_knowledge_base is not None
     agent = Agent(runtime=runtime, workflow=workflow)
     return agent.bind_blueprint(
         _build_multi_agent_blueprint(
