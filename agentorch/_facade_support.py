@@ -13,7 +13,7 @@ from typing import Any, Callable
 from agentorch.agents import AgentCapability, AgentSpec
 from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
 from agentorch.evolution import EvolutionConfig, EvolutionManager, EvolutionSession, SearchSpace
-from agentorch.knowledge import KnowledgeBase, RagStrategyConfig
+from agentorch.knowledge import IndexedKnowledgeBase, KnowledgeBase, RagStrategyConfig
 from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
 from agentorch.runtime._export_support import _safe_export, _workflow_summary
@@ -251,10 +251,46 @@ def agent_member_summary(
 def split_shared_knowledge_input(
     shared_knowledge: KnowledgeBase | dict[str, Any] | None,
 ) -> tuple[KnowledgeBase | None, dict[str, Any]]:
-    return (
-        shared_knowledge if isinstance(shared_knowledge, KnowledgeBase) else None,
-        shared_knowledge if isinstance(shared_knowledge, dict) else {},
-    )
+    if isinstance(shared_knowledge, KnowledgeBase):
+        return shared_knowledge, {}
+    if not isinstance(shared_knowledge, dict):
+        return None, {}
+    payload = dict(shared_knowledge)
+    embedded_knowledge_base = payload.get("knowledge_base")
+    if isinstance(embedded_knowledge_base, KnowledgeBase):
+        payload.pop("knowledge_base", None)
+        return embedded_knowledge_base, payload
+    return None, payload
+
+
+def materialize_shared_knowledge_base(
+    shared_knowledge_base: KnowledgeBase | None,
+    shared_knowledge_payload: dict[str, Any],
+    *,
+    run_async: Callable[[Any], Any] | None = None,
+) -> KnowledgeBase | None:
+    if shared_knowledge_base is not None:
+        return shared_knowledge_base
+
+    knowledge_paths = shared_knowledge_payload.get("knowledge_paths")
+    knowledge_assets = shared_knowledge_payload.get("knowledge_assets")
+    knowledge_documents = shared_knowledge_payload.get("knowledge_documents")
+    if not any((knowledge_paths, knowledge_assets, knowledge_documents)):
+        return None
+
+    create_kwargs = {
+        "paths": list(knowledge_paths or []),
+        "assets": list(knowledge_assets or []),
+        "documents": list(knowledge_documents or []),
+        "scopes": list(shared_knowledge_payload.get("knowledge_scope") or []),
+    }
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return IndexedKnowledgeBase.create(**create_kwargs)
+    if run_async is None:
+        raise RuntimeError("materialize_shared_knowledge_base(...) requires an async runner inside a running event loop.")
+    return run_async(IndexedKnowledgeBase.acreate(**create_kwargs))
 
 
 def resolve_multi_agent_member(
@@ -309,8 +345,20 @@ def resolve_multi_agent_member(
             if shared_knowledge_base is not None and "knowledge_base" not in payload:
                 payload["knowledge_base"] = shared_knowledge_base
             if shared_knowledge_payload:
-                for key in ("knowledge_paths", "knowledge_scope", "rag", "enable_rag"):
-                    payload.setdefault(key, shared_knowledge_payload.get(key))
+                shared_keys = ("knowledge_scope", "rag", "enable_rag")
+                if shared_knowledge_base is None:
+                    shared_keys = (
+                        "knowledge_paths",
+                        "knowledge_assets",
+                        "knowledge_documents",
+                        "knowledge_scope",
+                        "rag",
+                        "enable_rag",
+                    )
+                for key in shared_keys:
+                    shared_value = shared_knowledge_payload.get(key)
+                    if shared_value is not None:
+                        payload.setdefault(key, shared_value)
             payload.setdefault("model", model)
             payload.setdefault("sandbox", sandbox)
             payload.setdefault("name", member_name)

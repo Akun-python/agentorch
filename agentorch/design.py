@@ -13,7 +13,7 @@ from agentorch.memory import MemoryManager
 from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
 from agentorch.sandbox import SandboxManager
-from agentorch.skills import SkillRegistry
+from agentorch.skills import SkillCatalog, SkillCatalogConfig, SkillRegistry, SkillRoutingConfig
 from agentorch.strategies import (
     ContextPolicy,
     ContextSelector,
@@ -65,7 +65,9 @@ class AgentDesign(BaseModel):
     human_feedback: Any | None = None
     observability: ObservabilityConfig | dict[str, Any] | None = None
     extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None
-    skills: SkillRegistry | None = None
+    skills: SkillRegistry | SkillCatalog | str | Path | list[str | Path] | tuple[str | Path, ...] | None = None
+    skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None
+    skill_routing: SkillRoutingConfig | str | dict[str, Any] | None = None
     context_policy: ContextPolicy | dict[str, Any] | None = None
     state_policy: StatePolicy | dict[str, Any] | None = None
     coordination_policy: CoordinationPolicy | dict[str, Any] | None = None
@@ -86,7 +88,9 @@ class AgentDesign(BaseModel):
         else:
             base = cls.model_validate(value)
         if overrides:
-            return base.model_copy(update=overrides)
+            payload = base.model_dump(round_trip=True)
+            payload.update(overrides)
+            return cls.model_validate(payload)
         return base
 
     @classmethod
@@ -202,6 +206,8 @@ class AgentDesign(BaseModel):
             "observability": self.observability,
             "extensions": self.extensions,
             "skills": self.skills,
+            "skill_catalog": self.skill_catalog,
+            "skill_routing": self.skill_routing,
             "context_policy": self.context_policy,
             "state_policy": self.state_policy,
             "coordination_policy": self.coordination_policy,
@@ -324,7 +330,9 @@ class TeamDesign(BaseModel):
         else:
             base = cls.model_validate(value)
         if overrides:
-            return base.model_copy(update=overrides)
+            payload = base.model_dump(round_trip=True)
+            payload.update(overrides)
+            return cls.model_validate(payload)
         return base
 
     def add_role(

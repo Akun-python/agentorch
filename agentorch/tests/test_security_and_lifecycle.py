@@ -296,6 +296,31 @@ def test_create_multi_agent_external_member_applies_shared_scope_and_restores_ru
     member.close()
 
 
+def test_create_multi_agent_materializes_declared_shared_knowledge_for_external_members(tmp_path: Path) -> None:
+    shared_path = tmp_path / "shared.txt"
+    shared_path.write_text("shared team knowledge", encoding="utf-8")
+    member = RecordingAgent(runtime=Runtime(model=ReplyModel("knowledge-ok"), config=RuntimeConfig()))
+    system = agentorch.create_multi_agent(
+        agents=[member],
+        shared_knowledge={"knowledge_paths": [shared_path], "knowledge_scope": ["shared-scope"]},
+        name="team-shared-knowledge",
+    )
+
+    result = system.run_sync("use the shared knowledge", thread_id="team-shared-knowledge")
+
+    assert "knowledge-ok" in result.output_text
+    assert system.runtime.knowledge_base is not None
+    assert system.runtime.config.default_knowledge_scope == ["shared-scope"]
+    assert member.calls[-1]["metadata"]["knowledge_scope"] == ["shared-scope"]
+    assert member.calls[-1]["knowledge_base"] is system.runtime.knowledge_base
+    assert member.calls[-1]["retriever"] is not None
+    assert member.runtime.knowledge_base is None
+    assert member.runtime.retriever is None
+
+    system.close()
+    member.close()
+
+
 def test_create_multi_agent_external_role_wrapper_applies_shared_runtime_dependencies_temporarily() -> None:
     original_memory = agentorch.MemoryManager()
     shared_memory = agentorch.MemoryManager()
@@ -310,7 +335,7 @@ def test_create_multi_agent_external_role_wrapper_applies_shared_runtime_depende
             }
         ],
         shared_memory=shared_memory,
-        shared_knowledge=shared_knowledge,
+        shared_knowledge={"knowledge_base": shared_knowledge},
         name="team-shared-runtime",
     )
 

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import agentorch
+import pytest
+from pydantic import ValidationError
 from agentorch.config import RuntimeConfig
 from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
 from agentorch.extensions import RuntimeExtension
 from agentorch.models.base import BaseModelAdapter
+from agentorch.skills import SkillRoutingConfig
 from agentorch.strategies import CoordinationPolicy
 
 
@@ -19,6 +24,21 @@ class DummyModel(BaseModelAdapter):
             content=self.reply,
             finish_reason="stop",
             usage=UsageInfo(total_tokens=4),
+        )
+
+
+class RecordingPromptModel(BaseModelAdapter):
+    def __init__(self) -> None:
+        self.system_prompts: list[str] = []
+
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        system_text = next(message.content for message in request.messages if message.role == "system")
+        self.system_prompts.append(system_text)
+        return ModelResponse(
+            message=Message(role="assistant", content="handled with prompt recording"),
+            content="handled with prompt recording",
+            finish_reason="stop",
+            usage=UsageInfo(total_tokens=1),
         )
 
 
@@ -193,3 +213,43 @@ def test_agent_design_overlay_merges_existing_runtime_config_fields() -> None:
     assert runtime_config.system_prompt == "one"
     assert runtime_config.enable_streaming is True
     assert runtime_config.max_steps == 3
+
+
+def test_agent_design_from_any_revalidates_override_types() -> None:
+    with pytest.raises(ValidationError):
+        agentorch.AgentDesign.from_any(None, profile=123)
+    with pytest.raises(ValidationError):
+        agentorch.TeamDesign.from_any(None, name=123)
+
+
+def test_agent_design_build_forwards_skill_catalog_routing_and_explicit_skill_paths(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "explicit-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: explicit-skill\ndescription: Explicit design skill\n---\nLoad the explicit design skill.",
+        encoding="utf-8",
+    )
+
+    model = RecordingPromptModel()
+    design = agentorch.AgentDesign(
+        model=model,
+        workspace_root=tmp_path,
+        skills=skill_dir,
+        skill_catalog={"discovery_roots": [".claude/skills"]},
+        skill_routing=SkillRoutingConfig(mode="progressive", disclosure_level="progressive", selection_mode="model"),
+    )
+
+    agent = design.build()
+    result = agent.run_sync(
+        "record the design skill prompt",
+        thread_id="design-skill-thread",
+        skill_request={"force_load": ["explicit-skill"], "allow_auto_select": False},
+    )
+
+    assert result.output_text == "handled with prompt recording"
+    assert any("Load the explicit design skill." in prompt for prompt in model.system_prompts)
+    exported_runtime = agent.export_config()["runtime"]
+    assert exported_runtime["skill_catalog"]["discovery_roots"] == [".claude/skills"]
+    assert exported_runtime["skill_routing"]["selection_mode"] == "model"
+
+    agent.close()

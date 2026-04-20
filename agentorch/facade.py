@@ -57,6 +57,7 @@ from agentorch._facade_support import (
     resolve_multi_agent_member as _resolve_multi_agent_member,
     resolve_facade_runtime_config as _resolve_facade_runtime_config,
     resolve_reasoning_input as _resolve_reasoning_input,
+    materialize_shared_knowledge_base as _materialize_shared_knowledge_base,
     split_shared_knowledge_input as _split_shared_knowledge_input,
 )
 
@@ -394,6 +395,18 @@ def create_multi_agent(
 
     registry = AgentRegistry()
     shared_knowledge_base, shared_knowledge_payload = _split_shared_knowledge_input(shared_knowledge)
+    shared_knowledge_base = _materialize_shared_knowledge_base(
+        shared_knowledge_base,
+        shared_knowledge_payload,
+        run_async=_BACKGROUND_BRIDGE.run,
+    )
+    resolved_shared_knowledge: KnowledgeBase | dict[str, Any] | None = shared_knowledge_base
+    if shared_knowledge_payload:
+        resolved_shared_knowledge = (
+            {"knowledge_base": shared_knowledge_base, **shared_knowledge_payload}
+            if shared_knowledge_base is not None
+            else dict(shared_knowledge_payload)
+        )
     assembled_members = [
         _resolve_multi_agent_member(
             item,
@@ -402,7 +415,7 @@ def create_multi_agent(
             model=model,
             sandbox=sandbox,
             shared_memory=shared_memory,
-            shared_knowledge=shared_knowledge,
+            shared_knowledge=resolved_shared_knowledge,
         )
         for index, item in enumerate(member_inputs, start=1)
     ]
