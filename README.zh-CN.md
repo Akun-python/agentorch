@@ -41,7 +41,14 @@
 
 ## 当前推荐 API 风格
 
-目前推荐使用这一套统一调用方式：
+当前推荐 API 风格如下：
+
+高层入口：
+
+- `create_agent(...)`
+- `create_multi_agent(...)`
+
+核心装配：
 
 - `ModelConfig.from_any(...)`
 - `OpenAIModel.from_config(...)`
@@ -54,7 +61,7 @@
 - `Agent.create(...)` / `acreate(...)`
 - `WorkflowBuilder()` 配合 `Node.*(...)` shortcuts
 
-普通脚本中使用 `create(...)`，Notebook 或异步应用中使用 `await ...acreate(...)`。
+日常使用优先选择 facade 高层入口。只有在你需要完全手动装配 runtime 时，再下沉到 `create(...)` / `acreate(...)`。
 
 ## 安装
 
@@ -107,18 +114,13 @@ OPENAI_TTS_VOICE=your-voice
 
 ### 1. 最小 Agent
 
-普通 Python 脚本：
-
 ```python
-from agentorch import Agent
-from agentorch.config import RuntimeConfig
+from agentorch import create_agent
 
-agent = Agent.create(
-    model_config="gpt-4.1-mini",
-    config=RuntimeConfig.agent(
-        system_prompt="你是一个简洁、准确的助手。",
-        reasoning="react",
-    ),
+agent = create_agent(
+    model="gpt-4.1-mini",
+    system_prompt="你是一个简洁、准确的助手。",
+    reasoning="react",
 )
 
 result = agent.run_sync(
@@ -129,25 +131,14 @@ result = agent.run_sync(
 print(result.output_text)
 ```
 
-Notebook / 异步应用：
-
-```python
-agent = await Agent.acreate(
-    model_config="gpt-4.1-mini",
-    config=RuntimeConfig.agent(reasoning="react"),
-)
-
-result = await agent.run("请介绍一下 agentorch。", thread_id="nb-001")
-print(result.output_text)
-```
+`create_agent(...)` 是单代理的推荐高层入口。若需要完全手动装配 runtime，可使用 `Agent.create(...)` / `Runtime.create(...)`。
 
 ### 2. 结构化工具调用
 
 ```python
 from pydantic import BaseModel
 
-from agentorch import Agent, ToolRegistry, tool
-from agentorch.config import RuntimeConfig
+from agentorch import ToolRegistry, create_agent, tool
 
 
 class AddInput(BaseModel):
@@ -160,10 +151,10 @@ async def add_numbers(input: AddInput):
     return {"sum": input.a + input.b}
 
 
-agent = Agent.create(
-    model_config="gpt-4.1-mini",
+agent = create_agent(
+    model="gpt-4.1-mini",
     tools=ToolRegistry.from_tools(add_numbers),
-    config=RuntimeConfig.agent(reasoning="react"),
+    reasoning="react",
 )
 
 result = agent.run_sync(
@@ -204,8 +195,7 @@ tools = ToolRegistry.with_bundles(
 ```python
 from pathlib import Path
 
-from agentorch import Agent, IndexedKnowledgeBase
-from agentorch.config import RuntimeConfig
+from agentorch import IndexedKnowledgeBase, create_agent
 from agentorch.knowledge import RagStrategyConfig
 
 knowledge_base = IndexedKnowledgeBase.create(
@@ -217,18 +207,16 @@ knowledge_base = IndexedKnowledgeBase.create(
     scopes=["architecture", "ops", "legal"],
 )
 
-agent = Agent.create(
-    model_config="gpt-4.1-mini",
+agent = create_agent(
+    model="gpt-4.1-mini",
     knowledge_base=knowledge_base,
-    config=RuntimeConfig.agent(
-        rag=RagStrategyConfig.for_deliberative(
-            knowledge_scope=["architecture", "ops", "legal"],
-            file_types=[".md", ".docx", ".pdf"],
-            must_cover=["deployment restrictions"],
-            max_steps=3,
-        ),
-        reasoning="react",
+    rag=RagStrategyConfig.for_deliberative(
+        knowledge_scope=["architecture", "ops", "legal"],
+        file_types=[".md", ".docx", ".pdf"],
+        must_cover=["deployment restrictions"],
+        max_steps=3,
     ),
+    reasoning="react",
 )
 
 result = agent.run_sync(
@@ -292,31 +280,29 @@ agent = Agent.create(
 ### 7. 多智能体 supervisor 委派
 
 ```python
-from agentorch import Agent, AgentCapability, AgentRegistry, AgentSpec, Supervisor
+from agentorch import AgentCapability, create_agent, create_multi_agent
 
-planner = Agent.create(
-    model_config="gpt-4.1-mini",
-    config=RuntimeConfig.agent(reasoning="plan_execute", rag="hybrid"),
+planner = create_agent(
+    model="gpt-4.1-mini",
+    reasoning="plan_execute",
+    rag="hybrid",
+    name="planner",
+    description="架构规划 specialist",
 )
 
-registry = AgentRegistry()
-registry.register(
-    AgentSpec.assistant(
-        "planner",
-        description="架构规划 specialist",
-        capabilities=[AgentCapability.PLAN],
-        knowledge_scopes=["architecture"],
-        default_rag_strategy="hybrid",
-        preferred_reasoning_kind="plan_execute",
-    ),
-    planner,
-)
-
-orchestrator = Agent.create(
-    model_config="gpt-4.1-mini",
-    agent_registry=registry,
-    supervisor=Supervisor(registry=registry),
-    config=RuntimeConfig.agent(reasoning="react"),
+orchestrator = create_multi_agent(
+    model="gpt-4.1-mini",
+    agents=[
+        {
+            "agent": planner,
+            "name": "planner",
+            "role": "planner",
+            "description": "架构规划 specialist",
+            "capabilities": [AgentCapability.PLAN],
+            "knowledge_scope": ["architecture"],
+        }
+    ],
+    system_prompt="你负责协调多个 specialist，并把任务委派给最合适的智能体。",
 )
 ```
 
@@ -367,7 +353,7 @@ manager = EvolutionManager(
 
 ## 公开 API 重点
 
-当前顶层 API 重点包括：
+当前顶层 API 包括稳定公开面以及兼容导出，常用入口包括：
 
 ```python
 from agentorch import (
@@ -384,6 +370,8 @@ from agentorch import (
     ToolRegistry,
     Workflow,
     WorkflowBuilder,
+    create_agent,
+    create_multi_agent,
     tool,
 )
 ```

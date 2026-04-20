@@ -397,7 +397,7 @@ This gives you a single place to control:
 
 ## Public API Highlights
 
-The current top-level API includes:
+The current top-level API includes the stable v1 surface plus compatibility exports such as:
 
 ```python
 from agentorch import (
