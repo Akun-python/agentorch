@@ -21,7 +21,10 @@ class ContextPolicyLike(Protocol):
     include_retrieval_report: bool
     include_retrieval_plan: bool
     include_tool_descriptions: bool
+    include_skill_catalog: bool
     include_skill_instructions: bool
+    include_skill_resources: bool
+    skill_resource_max_items: int
     include_task_packet: bool
     include_delegation_context: bool
     include_collective_memory: bool
@@ -52,7 +55,9 @@ def estimate_prompt_context_budget(prompt_context: PromptContext, *, truncated_s
     task_packet_chars = len(json.dumps(prompt_context.task_packet, ensure_ascii=False)) if prompt_context.task_packet else 0
     delegation_context_chars = len(json.dumps(prompt_context.delegation_context, ensure_ascii=False)) if prompt_context.delegation_context else 0
     collective_evidence_chars = len(json.dumps(prompt_context.collective_memory_evidence, ensure_ascii=False)) if prompt_context.collective_memory_evidence else 0
+    available_skill_chars = len(json.dumps(prompt_context.available_skills, ensure_ascii=False)) if prompt_context.available_skills else 0
     skill_instruction_chars = sum(len(item) for item in prompt_context.skill_instructions)
+    skill_resource_chars = sum(len(item) for item in prompt_context.skill_resources)
     tool_description_chars = len(json.dumps(prompt_context.tool_descriptions, ensure_ascii=False)) if prompt_context.tool_descriptions else 0
     system_chars = len(prompt_context.system_prompt or "")
     conversation_chars = sum(len(message.content or "") for message in prompt_context.conversation)
@@ -72,7 +77,9 @@ def estimate_prompt_context_budget(prompt_context: PromptContext, *, truncated_s
         + task_packet_chars
         + delegation_context_chars
         + collective_evidence_chars
+        + available_skill_chars
         + skill_instruction_chars
+        + skill_resource_chars
         + tool_description_chars
     )
     return {
@@ -85,8 +92,12 @@ def estimate_prompt_context_budget(prompt_context: PromptContext, *, truncated_s
         "citation_items": len(prompt_context.citations),
         "tool_description_count": len(prompt_context.tool_descriptions),
         "tool_description_chars": tool_description_chars,
+        "available_skill_count": len(prompt_context.available_skills),
+        "available_skill_chars": available_skill_chars,
         "skill_instruction_count": len(prompt_context.skill_instructions),
         "skill_instruction_chars": skill_instruction_chars,
+        "skill_resource_count": len(prompt_context.skill_resources),
+        "skill_resource_chars": skill_resource_chars,
         "task_packet_chars": task_packet_chars,
         "delegation_context_chars": delegation_context_chars,
         "collective_memory_evidence_items": len(prompt_context.collective_memory_evidence),
@@ -134,7 +145,9 @@ def apply_static_context_filters(
             "retrieval_coverage": prompt_context.retrieval_coverage if context_policy.include_retrieval_report else None,
             "retrieval_plan": prompt_context.retrieval_plan if context_policy.include_retrieval_plan else None,
             "tool_descriptions": prompt_context.tool_descriptions if context_policy.include_tool_descriptions else [],
+            "available_skills": prompt_context.available_skills if context_policy.include_skill_catalog else [],
             "skill_instructions": prompt_context.skill_instructions if context_policy.include_skill_instructions else [],
+            "skill_resources": list(prompt_context.skill_resources[: context_policy.skill_resource_max_items]) if context_policy.include_skill_resources else [],
             "task_packet": prompt_context.task_packet if context_policy.include_task_packet else None,
             "delegation_context": prompt_context.delegation_context if context_policy.include_delegation_context else {},
             "collective_memory_context": prompt_context.collective_memory_context if context_policy.include_collective_memory else None,
@@ -160,8 +173,12 @@ def apply_static_context_filters(
         truncated_sections.append("retrieval_plan")
     if prompt_context.tool_descriptions and not context_policy.include_tool_descriptions:
         truncated_sections.append("tool_descriptions")
+    if prompt_context.available_skills and not context_policy.include_skill_catalog:
+        truncated_sections.append("available_skills")
     if prompt_context.skill_instructions and not context_policy.include_skill_instructions:
         truncated_sections.append("skill_instructions")
+    if prompt_context.skill_resources and len(updated.skill_resources) < len(prompt_context.skill_resources):
+        truncated_sections.append("skill_resources")
     if prompt_context.task_packet and not context_policy.include_task_packet:
         truncated_sections.append("task_packet")
     if prompt_context.delegation_context and not context_policy.include_delegation_context:
@@ -259,7 +276,7 @@ def build_handoff_capsule(task_packet: dict[str, Any] | None, handoff: dict[str,
 
 
 def resolve_attention_profile(context_policy: ContextPolicyLike, *, stage: str, agent_role: str | None) -> dict[str, float]:
-    defaults = {"retrieval_evidence": 1.15, "citation": 0.65, "retrieval_report": 0.7, "skill": 0.95, "collective_memory": 0.9, "delegation_context": 0.92, "conversation": 0.86, "tool_observation": 0.88, "task_packet": 1.0}
+    defaults = {"retrieval_evidence": 1.15, "citation": 0.65, "retrieval_report": 0.7, "skill_catalog": 0.92, "skill": 0.95, "skill_resource": 0.9, "collective_memory": 0.9, "delegation_context": 0.92, "conversation": 0.86, "tool_observation": 0.88, "task_packet": 1.0}
     if stage.startswith("execute"):
         stage_profile = {"tool_observation": 1.2, "retrieval_evidence": 1.1, "delegation_context": 1.0, "skill": 0.82}
     elif stage == "plan":
@@ -284,7 +301,7 @@ def resolve_attention_profile(context_policy: ContextPolicyLike, *, stage: str, 
 
 
 def _segment_type_priority(segment_type: str) -> int:
-    order = {"citation": 0, "retrieval_report": 1, "skill": 2, "collective_memory": 3, "delegation_context": 4, "tool_observation": 5, "conversation": 6, "retrieval_evidence": 7, "task_packet": 8}
+    order = {"citation": 0, "retrieval_report": 1, "skill_catalog": 2, "skill": 3, "skill_resource": 4, "collective_memory": 5, "delegation_context": 6, "tool_observation": 7, "conversation": 8, "retrieval_evidence": 9, "task_packet": 10}
     return order.get(segment_type, 99)
 
 
@@ -320,10 +337,14 @@ def segment_prompt_context(prompt_context: PromptContext, *, user_input: str, th
             add_segment(f"retrieval_report:{key}", "retrieval_report", "retrieval_report", {key: value}, {"key": key}, 0.65)
     for idx, item in enumerate(prompt_context.collective_memory_evidence):
         add_segment(f"collective:{idx}", "collective_memory", str(item.get("kind") or "collective_memory"), item, {"index": idx, "record_id": item.get("id"), "memory_role": item.get("memory_role")}, 0.75)
+    for idx, item in enumerate(prompt_context.available_skills):
+        add_segment(f"skill_catalog:{idx}", "skill_catalog", "skill_catalog", item, {"index": idx, "skill_name": item.get("name")}, 0.78)
     for idx, route in enumerate(selected_skill_routes):
         descriptor = route.get("descriptor") or {}
         descriptor_text = f"Skill: {descriptor.get('name')}\nPurpose: {descriptor.get('description')}\nRecommended Tools: {', '.join(descriptor.get('allowed_tools', []))}".strip()
         add_segment(f"skill:{idx}", "skill", "skill", {"descriptor": descriptor_text, "summary": route.get("content") or descriptor_text, "full": route.get("content") or descriptor_text}, {"index": idx, "skill_name": route.get("skill_name")}, 0.82)
+    for idx, item in enumerate(prompt_context.skill_resources):
+        add_segment(f"skill_resource:{idx}", "skill_resource", "skill_resource", item, {"index": idx}, 0.8)
     if prompt_context.task_packet:
         add_segment("task_packet", "task_packet", "task_packet", {"full": prompt_context.task_packet, "capsule": compact_task_packet(prompt_context.task_packet)}, {"kind": "task_packet"}, 0.9, int((prompt_context.task_packet.get("metadata") or {}).get("delegation_depth", 0) or 0))
     if prompt_context.delegation_context:
@@ -384,7 +405,18 @@ async def apply_budget_aware_compaction(
     decisions: list[CompactionDecision] = []
     min_keep = min(max(1, context_policy.segment_min_keep), len(ranked_segments))
     selected_group: dict[str, str] = {}
-    selected_chars = before_budget["estimated_total_chars"] - (before_budget["conversation_chars"] + before_budget["evidence_chars"] + before_budget["citation_chars"] + before_budget["retrieval_report_chars"] + before_budget["task_packet_chars"] + before_budget["delegation_context_chars"] + before_budget["collective_memory_evidence_chars"] + before_budget["skill_instruction_chars"])
+    selected_chars = before_budget["estimated_total_chars"] - (
+        before_budget["conversation_chars"]
+        + before_budget["evidence_chars"]
+        + before_budget["citation_chars"]
+        + before_budget["retrieval_report_chars"]
+        + before_budget["task_packet_chars"]
+        + before_budget["delegation_context_chars"]
+        + before_budget["collective_memory_evidence_chars"]
+        + before_budget["available_skill_chars"]
+        + before_budget["skill_instruction_chars"]
+        + before_budget["skill_resource_chars"]
+    )
     for segment in ranked_segments:
         selected_content, representation = select_segment_representation(segment, compact=(selected_chars > (char_budget * 0.8)))
         segment_chars = len(_serialize(selected_content))
@@ -406,7 +438,9 @@ async def apply_budget_aware_compaction(
     selected_evidence: list[tuple[int, dict[str, Any]]] = []
     selected_citations: list[tuple[int, dict[str, Any]]] = []
     selected_collective: list[tuple[int, dict[str, Any]]] = []
+    selected_available_skills: list[tuple[int, dict[str, Any]]] = []
     selected_skill_texts: list[tuple[int, str]] = []
+    selected_skill_resources: list[tuple[int, str]] = []
     selected_report: dict[str, Any] = {}
     selected_task_packet = None
     selected_delegation_context: dict[str, Any] = {}
@@ -422,8 +456,12 @@ async def apply_budget_aware_compaction(
             selected_report.update(segment.content)
         elif segment.segment_type == "collective_memory":
             selected_collective.append((int(segment.metadata.get("index", 0)), segment.content))
+        elif segment.segment_type == "skill_catalog":
+            selected_available_skills.append((int(segment.metadata.get("index", 0)), segment.content))
         elif segment.segment_type == "skill":
             selected_skill_texts.append((int(segment.metadata.get("index", 0)), _serialize(selected_content)))
+        elif segment.segment_type == "skill_resource":
+            selected_skill_resources.append((int(segment.metadata.get("index", 0)), _serialize(selected_content)))
         elif segment.segment_type == "task_packet":
             selected_task_packet = selected_content
         elif segment.segment_type == "delegation_context" and isinstance(selected_content, dict):
@@ -434,8 +472,12 @@ async def apply_budget_aware_compaction(
             truncated_sections.add("citations")
         elif segment.segment_type == "retrieval_report":
             truncated_sections.add("retrieval_report")
+        elif segment.segment_type == "skill_catalog":
+            truncated_sections.add("available_skills")
         elif segment.segment_type == "skill":
             truncated_sections.add("skill_instructions")
+        elif segment.segment_type == "skill_resource":
+            truncated_sections.add("skill_resources")
         elif segment.segment_type == "collective_memory":
             truncated_sections.add("collective_memory")
         elif segment.segment_type == "delegation_context":
@@ -463,7 +505,9 @@ async def apply_budget_aware_compaction(
                 for _, item in sorted(selected_collective, key=lambda row: row[0])
                 if item.get("id") is not None
             ],
+            "available_skills": [item for _, item in sorted(selected_available_skills, key=lambda row: row[0])],
             "skill_instructions": [item for _, item in sorted(selected_skill_texts, key=lambda row: row[0])],
+            "skill_resources": [item for _, item in sorted(selected_skill_resources, key=lambda row: row[0])],
             "task_packet": selected_task_packet,
             "delegation_context": selected_delegation_context,
         }

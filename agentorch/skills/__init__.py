@@ -1,11 +1,37 @@
-"""Skill package loading and registry utilities.
+"""Skill discovery, catalog, and lazy package loading utilities."""
 
-Skills are task-oriented resource bundles that contribute instructions,
-references, scripts, and metadata without becoming execution engines themselves.
-"""
-
-from .base import Skill, SkillDescriptor, SkillManifest, SkillRoute, SkillRoutingConfig
+from .base import (
+    Skill,
+    SkillActivation,
+    SkillArgumentBundle,
+    SkillCatalog,
+    SkillCatalogConfig,
+    SkillCatalogEntry,
+    SkillDescriptor,
+    SkillDiagnostic,
+    SkillManifest,
+    SkillRequest,
+    SkillResourceLoad,
+    SkillRoute,
+    SkillRoutingConfig,
+)
 from .loader import SkillLoader
 from .registry import SkillRegistry
 
-__all__ = ["Skill", "SkillDescriptor", "SkillLoader", "SkillManifest", "SkillRoute", "SkillRoutingConfig", "SkillRegistry"]
+__all__ = [
+    "Skill",
+    "SkillActivation",
+    "SkillArgumentBundle",
+    "SkillCatalog",
+    "SkillCatalogConfig",
+    "SkillCatalogEntry",
+    "SkillDescriptor",
+    "SkillDiagnostic",
+    "SkillLoader",
+    "SkillManifest",
+    "SkillRequest",
+    "SkillResourceLoad",
+    "SkillRoute",
+    "SkillRoutingConfig",
+    "SkillRegistry",
+]

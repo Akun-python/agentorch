@@ -12,7 +12,7 @@ from agentorch.knowledge import RagStrategyConfig, RetrievalMode
 from agentorch.prompts import ChatPromptTemplate
 from agentorch.reasoning.base import ReasoningStrategyConfig
 from agentorch.security import PayloadBudgetConfig, RedactionConfig
-from agentorch.skills import SkillRoutingConfig
+from agentorch.skills import SkillCatalogConfig, SkillRoutingConfig
 from agentorch.strategies import (
     ContextPolicy,
     CoordinationPolicy,
@@ -516,6 +516,7 @@ class RuntimeConfig(BaseModel):
     max_steps: int = 8
     enable_streaming: bool = True
     auto_select_skills: bool = True
+    skill_catalog: SkillCatalogConfig = Field(default_factory=SkillCatalogConfig)
     skill_routing: SkillRoutingConfig | None = Field(default_factory=SkillRoutingConfig)
     parser_retry_limit: int = 1
     enable_retrieval: bool = False
@@ -555,6 +556,8 @@ class RuntimeConfig(BaseModel):
             normalized["rag_strategy"] = RagStrategyConfig.from_any(normalized["rag_strategy"])
         if "reasoning_strategy" in normalized and normalized["reasoning_strategy"] is not None:
             normalized["reasoning_strategy"] = ReasoningStrategyConfig.from_any(normalized["reasoning_strategy"])
+        if "skill_catalog" in normalized and normalized["skill_catalog"] is not None:
+            normalized["skill_catalog"] = SkillCatalogConfig.from_any(normalized["skill_catalog"])
         if "skill_routing" in normalized and normalized["skill_routing"] is not None:
             normalized["skill_routing"] = SkillRoutingConfig.from_any(normalized["skill_routing"])
         if "context_policy" in normalized and normalized["context_policy"] is not None:
@@ -598,6 +601,7 @@ class RuntimeConfig(BaseModel):
         memory_policy: MemoryPolicy | dict[str, object] | None = None,
         observability: ObservabilityConfig | dict[str, object] | None = None,
         prompt_template: ChatPromptTemplate | None = None,
+        skill_catalog: SkillCatalogConfig | dict[str, object] | None = None,
         skill_routing: SkillRoutingConfig | str | dict[str, object] | None = None,
         default_knowledge_scope: list[str] | None = None,
         **kwargs: object,
@@ -614,6 +618,8 @@ class RuntimeConfig(BaseModel):
         }
         if skill_routing is not None:
             payload["skill_routing"] = SkillRoutingConfig.from_any(skill_routing)
+        if skill_catalog is not None:
+            payload["skill_catalog"] = SkillCatalogConfig.from_any(skill_catalog)
         if context_policy is not None:
             payload["context_policy"] = ContextPolicy.from_any(context_policy)
         if state_policy is not None:
@@ -637,6 +643,7 @@ class RuntimeConfig(BaseModel):
         coordination_policy: CoordinationPolicy | dict[str, object] | None = None,
         memory_policy: MemoryPolicy | dict[str, object] | None = None,
         observability: ObservabilityConfig | dict[str, object] | None = None,
+        skill_catalog: SkillCatalogConfig | dict[str, object] | None = None,
         skill_routing: SkillRoutingConfig | str | dict[str, object] | None = None,
         **kwargs: object,
     ) -> "RuntimeConfig":
@@ -648,6 +655,7 @@ class RuntimeConfig(BaseModel):
             coordination_policy=coordination_policy,
             memory_policy=memory_policy,
             observability=observability,
+            skill_catalog=skill_catalog,
             skill_routing=skill_routing,
             **kwargs,
         )

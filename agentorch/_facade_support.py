@@ -19,6 +19,7 @@ from agentorch.runtime import Agent, Runtime
 from agentorch.runtime._export_support import _safe_export, _workflow_summary
 from agentorch.runtime.agent import _runtime_summary
 from agentorch.sandbox import SandboxManager
+from agentorch.skills import SkillCatalogConfig, SkillRoutingConfig
 from agentorch.strategies import ContextPolicy, CoordinationPolicy, MemoryPolicy, StatePolicy
 from agentorch.tools import BaseTool, ToolRegistry
 from agentorch.workflow import Workflow
@@ -85,6 +86,8 @@ def resolve_facade_runtime_config(
     system_prompt: str | None = None,
     enable_streaming: bool | None = None,
     reasoning_strategy: ReasoningStrategyConfig | None = None,
+    skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None,
+    skill_routing: SkillRoutingConfig | str | dict[str, Any] | None = None,
     context_policy: ContextPolicy | dict[str, Any] | None = None,
     state_policy: StatePolicy | dict[str, Any] | None = None,
     coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
@@ -107,6 +110,8 @@ def resolve_facade_runtime_config(
         ("system_prompt", system_prompt),
         ("enable_streaming", enable_streaming),
         ("reasoning_strategy", reasoning_strategy),
+        ("skill_catalog", SkillCatalogConfig.from_any(skill_catalog) if skill_catalog is not None else None),
+        ("skill_routing", SkillRoutingConfig.from_any(skill_routing) if skill_routing is not None else None),
         ("context_policy", ContextPolicy.from_any(context_policy) if context_policy is not None else None),
         ("state_policy", StatePolicy.from_any(state_policy) if state_policy is not None else None),
         ("coordination_policy", CoordinationPolicy.from_any(coordination_policy) if coordination_policy is not None else None),

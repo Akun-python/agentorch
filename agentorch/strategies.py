@@ -19,7 +19,9 @@ _DEFAULT_CONTEXT_SOURCES: dict[str, Any] = {
     "retrieval_report": False,
     "retrieval_plan": False,
     "tool_descriptions": False,
+    "skill_catalog": True,
     "skill_instructions": True,
+    "skill_resources": {"enabled": True, "max_items": 4},
     "task_packet": {"enabled": True, "representation": "capsule"},
     "delegation_context": {"enabled": True, "representation": "capsule"},
     "shared_memory": {"enabled": True, "max_items": 4},
@@ -177,8 +179,20 @@ class ContextPolicy(BaseModel):
         return self.source_enabled("tool_descriptions")
 
     @property
+    def include_skill_catalog(self) -> bool:
+        return self.source_enabled("skill_catalog")
+
+    @property
     def include_skill_instructions(self) -> bool:
         return self.source_enabled("skill_instructions")
+
+    @property
+    def include_skill_resources(self) -> bool:
+        return self.source_enabled("skill_resources")
+
+    @property
+    def skill_resource_max_items(self) -> int:
+        return int(self.source_limit("skill_resources", 4) or 4)
 
     @property
     def include_task_packet(self) -> bool:

@@ -15,7 +15,7 @@ from .settings import (
     validate_supported_python,
 )
 from agentorch.security import PayloadBudgetConfig, RedactionConfig
-from agentorch.skills import SkillRoutingConfig
+from agentorch.skills import SkillCatalogConfig, SkillRoutingConfig
 from agentorch.strategies import ContextPolicy, CoordinationPolicy, MemoryPolicy, StatePolicy
 
 __all__ = [
@@ -30,6 +30,7 @@ __all__ = [
     "RedactionConfig",
     "RuntimeConfig",
     "SandboxConfig",
+    "SkillCatalogConfig",
     "SkillRoutingConfig",
     "StatePolicy",
     "initialize_environment",

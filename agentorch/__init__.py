@@ -213,7 +213,21 @@ from .prompts import ChatPromptTemplate, FewShotExample, FewShotPromptCard, Mess
 from .runtime import Agent, Runtime
 from .sandbox import ExecutionRequest, ExecutionResult, SandboxManager, SandboxPolicy
 from .core import CompactionDecision, ContextSegment, RunStreamEvent, SalienceReport, SegmentScore
-from .skills import SkillDescriptor, SkillLoader, SkillRegistry, SkillRoute, SkillRoutingConfig
+from .skills import (
+    SkillActivation,
+    SkillArgumentBundle,
+    SkillCatalog,
+    SkillCatalogConfig,
+    SkillCatalogEntry,
+    SkillDescriptor,
+    SkillDiagnostic,
+    SkillLoader,
+    SkillRegistry,
+    SkillRequest,
+    SkillResourceLoad,
+    SkillRoute,
+    SkillRoutingConfig,
+)
 from .strategies import (
     ContextPolicy,
     ContextSelector,
@@ -376,8 +390,16 @@ __all__ = [
     "SandboxPolicy",
     "SearchSpace",
     "SegmentScore",
+    "SkillActivation",
+    "SkillArgumentBundle",
+    "SkillCatalog",
+    "SkillCatalogConfig",
+    "SkillCatalogEntry",
+    "SkillDiagnostic",
     "SkillLoader",
     "SkillDescriptor",
+    "SkillRequest",
+    "SkillResourceLoad",
     "SkillRoute",
     "SkillRoutingConfig",
     "SkillRegistry",

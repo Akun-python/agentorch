@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ from agentorch import (
 from agentorch.core import Message, ModelRequest, ModelResponse, ToolCall, UsageInfo
 from agentorch.knowledge import RagStrategyConfig
 from agentorch.models.base import BaseModelAdapter
+from agentorch.skills import SkillRoutingConfig
 from agentorch.workflow import Node
 
 
@@ -44,6 +46,21 @@ class ToolCallingModel(BaseModelAdapter):
             content="",
             tool_calls=[tool_call],
             finish_reason="tool_calls",
+            usage=UsageInfo(total_tokens=1),
+        )
+
+
+class RecordingPromptModel(BaseModelAdapter):
+    def __init__(self) -> None:
+        self.system_prompts: list[str] = []
+
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        system_text = next(message.content for message in request.messages if message.role == "system")
+        self.system_prompts.append(system_text)
+        return ModelResponse(
+            message=Message(role="assistant", content="handled with prompt recording"),
+            content="handled with prompt recording",
+            finish_reason="stop",
             usage=UsageInfo(total_tokens=1),
         )
 
@@ -179,3 +196,58 @@ def test_create_multi_agent_accepts_inline_blueprints_and_existing_agents():
     assert [member["name"] for member in blueprint["members"]] == ["planner", "reviewer"]
     assert orchestrator.export_core_assembly()["supervisor_constructor"] == "Supervisor(registry=...)"
     assert "planner" in orchestrator.describe()
+
+
+def test_create_agent_skill_catalog_and_run_time_skill_request(tmp_path: Path):
+    skill_dir = tmp_path / ".claude" / "skills" / "facade-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: facade-skill\ndescription: Facade skill for explicit force loading\n---\nFollow the facade checklist carefully.",
+        encoding="utf-8",
+    )
+
+    model = RecordingPromptModel()
+    agent = create_agent(
+        model=model,
+        workspace_root=tmp_path,
+        skill_catalog={"discovery_roots": [".claude/skills"]},
+        skill_routing=SkillRoutingConfig(mode="progressive", disclosure_level="progressive", selection_mode="model"),
+    )
+
+    result = agent.run_sync(
+        "record the skill prompt",
+        thread_id="facade-skill-thread",
+        skill_request={"force_load": ["facade-skill"], "allow_auto_select": False},
+    )
+
+    assert result.output_text == "handled with prompt recording"
+    assert any("Follow the facade checklist carefully." in prompt for prompt in model.system_prompts)
+    exported_runtime = agent.export_config()["runtime"]
+    assert exported_runtime["skill_catalog"]["discovery_roots"] == [".claude/skills"]
+    assert exported_runtime["skill_routing"]["selection_mode"] == "model"
+
+
+def test_create_agent_accepts_explicit_skill_path_input(tmp_path: Path):
+    skill_dir = tmp_path / "explicit-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: explicit-skill\ndescription: Explicit skill path input\n---\nLoad the explicit path skill.",
+        encoding="utf-8",
+    )
+
+    model = RecordingPromptModel()
+    agent = create_agent(
+        model=model,
+        workspace_root=tmp_path,
+        skills=skill_dir,
+        skill_routing=SkillRoutingConfig(mode="progressive", disclosure_level="progressive", selection_mode="model"),
+    )
+
+    result = agent.run_sync(
+        "record the explicit path skill prompt",
+        thread_id="facade-explicit-skill-thread",
+        skill_request={"force_load": ["explicit-skill"], "allow_auto_select": False},
+    )
+
+    assert result.output_text == "handled with prompt recording"
+    assert any("Load the explicit path skill." in prompt for prompt in model.system_prompts)

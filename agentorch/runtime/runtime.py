@@ -72,8 +72,15 @@ from agentorch.runtime.context_compaction import (
 from agentorch.runtime.context_kernel import ContextKernel
 from agentorch.runtime.workflow_execution import execute_runtime_workflow
 from agentorch.sandbox import SandboxManager
-from agentorch.skills import SkillLoader, SkillRegistry
-from agentorch.skills import SkillRoutingConfig
+from agentorch.skills import (
+    SkillArgumentBundle,
+    SkillCatalog,
+    SkillCatalogConfig,
+    SkillLoader,
+    SkillRegistry,
+    SkillRequest,
+    SkillRoutingConfig,
+)
 from agentorch.strategies import (
     ContextPolicy,
     CoordinationPolicy,
@@ -105,7 +112,8 @@ class Runtime:
         include_web_tools: bool = False,
         web_search_api_key: str | None = None,
         workspace_root: str | Path | None = None,
-        skills: SkillRegistry | None = None,
+        skills: SkillRegistry | SkillCatalog | str | Path | list[str | Path] | tuple[str | Path, ...] | None = None,
+        skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None,
         memory: MemoryManager | None = None,
         retriever: BaseRetriever | None = None,
         knowledge_base: KnowledgeBase | None = None,
@@ -127,10 +135,14 @@ class Runtime:
     ) -> "Runtime":
         runtime_config = RuntimeConfig.from_any(config)
         selected_model = model or create_model_adapter(model_config)
-        skill_root = Path(workspace_root or Path.cwd()) / ".skills"
-        selected_skills = skills or SkillRegistry()
-        for discovered_skill in SkillLoader().discover(skill_root):
-            selected_skills.register(discovered_skill)
+        selected_workspace_root = Path(workspace_root or Path.cwd())
+        selected_skills = cls._resolve_skill_registry(
+            skills=skills,
+            workspace_root=selected_workspace_root,
+            loader=SkillLoader(),
+            runtime_config=runtime_config,
+            skill_catalog=skill_catalog,
+        )
         selected_tools = cls._coerce_tool_registry(tools)
         selected_tools.extend(cls._coerce_tool_registry(custom_tools))
         if not selected_tools.list_specs():
@@ -170,6 +182,7 @@ class Runtime:
             model=selected_model,
             tools=selected_tools,
             skills=selected_skills,
+            workspace_root=selected_workspace_root,
             memory=memory,
             retriever=retriever,
             knowledge_base=selected_knowledge_base,
@@ -200,6 +213,44 @@ class Runtime:
             registry.register(tool)
         return registry
 
+    @staticmethod
+    def _resolve_skill_registry(
+        *,
+        skills: SkillRegistry | SkillCatalog | str | Path | list[str | Path] | tuple[str | Path, ...] | None,
+        workspace_root: Path,
+        loader: SkillLoader,
+        runtime_config: RuntimeConfig,
+        skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None,
+    ) -> SkillRegistry:
+        catalog_config = SkillCatalogConfig.from_any(skill_catalog or runtime_config.skill_catalog)
+        if isinstance(skills, SkillRegistry):
+            return skills
+        if isinstance(skills, SkillCatalog):
+            return SkillRegistry(catalog=skills, diagnostics=skills.diagnostics)
+
+        registry = SkillRegistry()
+        explicit_items: list[str | Path] = []
+        if skills is None:
+            discovered = loader.discover_catalog(workspace_root, config=catalog_config)
+            registry.register_catalog(discovered)
+            return registry
+        if isinstance(skills, (str, Path)):
+            explicit_items = [skills]
+        else:
+            explicit_items = list(skills)
+
+        for item in explicit_items:
+            candidate = Path(item)
+            resolved_candidate = candidate if candidate.is_absolute() else (workspace_root / candidate)
+            if (resolved_candidate / "SKILL.md").exists():
+                registry.register(loader.load(resolved_candidate))
+                continue
+            if any((resolved_candidate / relative_root).exists() for relative_root in catalog_config.discovery_roots):
+                registry.register_catalog(loader.discover_catalog(resolved_candidate, config=catalog_config))
+                continue
+            registry.register_many(*loader.discover(resolved_candidate))
+        return registry
+
     @classmethod
     def create(cls, **kwargs: Any) -> "Runtime":
         try:
@@ -217,6 +268,7 @@ class Runtime:
         model: BaseModelAdapter,
         tools: ToolRegistry | None = None,
         skills: SkillRegistry | None = None,
+        workspace_root: str | Path | None = None,
         memory: MemoryManager | None = None,
         retriever: BaseRetriever | None = None,
         knowledge_base: KnowledgeBase | None = None,
@@ -236,6 +288,7 @@ class Runtime:
         self.model = model
         self.tools = tools or ToolRegistry()
         self.skills = skills or SkillRegistry()
+        self.workspace_root = Path(workspace_root or Path.cwd())
         self.memory = memory or MemoryManager()
         self.retriever = retriever or (knowledge_base.get_retriever() if knowledge_base is not None else None)
         self.knowledge_base = knowledge_base
@@ -255,6 +308,7 @@ class Runtime:
             self.human_feedback.bind_runtime(self)
         self.extensions = ExtensionManager.from_any(extensions)
         self._managed_agents = list(managed_agents or [])
+        self._skill_thread_cache: dict[str, dict[str, Any]] = {}
         self.reasoning_framework = self._normalize_reasoning(self.policy)
         self.context_kernel = ContextKernel(
             runtime=self,
@@ -561,6 +615,256 @@ class Runtime:
             metadata=metadata or {},
         )
 
+    def _resolve_skill_request(self, metadata: dict[str, Any] | None = None) -> SkillRequest:
+        return SkillRequest.from_any((metadata or {}).get("skill_request"))
+
+    def _resolve_skill_routing(self, metadata: dict[str, Any] | None = None) -> SkillRoutingConfig:
+        metadata = metadata or {}
+        skill_request = self._resolve_skill_request(metadata)
+        resolved = SkillRoutingConfig.from_any(skill_request.skill_routing or metadata.get("skill_routing") or self.config.skill_routing or SkillRoutingConfig())
+        if skill_request.selection_mode is not None:
+            resolved = resolved.model_copy(update={"selection_mode": skill_request.selection_mode})
+        return resolved
+
+    def _resolve_skill_catalog_config(self) -> SkillCatalogConfig:
+        return SkillCatalogConfig.from_any(self.config.skill_catalog)
+
+    def _skill_selection_mode(self, metadata: dict[str, Any] | None = None) -> str:
+        skill_request = self._resolve_skill_request(metadata)
+        if skill_request.selection_mode is not None:
+            return skill_request.selection_mode
+        resolved_routing = self._resolve_skill_routing(metadata)
+        if resolved_routing.selection_mode:
+            return resolved_routing.selection_mode
+        return self._resolve_skill_catalog_config().selection_mode
+
+    def _sync_skill_cache_to_envelope(self, thread_id: str, envelope: ContextEnvelope) -> None:
+        cache = self._skill_thread_cache.get(thread_id, {"loaded_skills": {}, "loaded_skill_resources": {}})
+        envelope.metadata["loaded_skills"] = list(cache.get("loaded_skills", {}).values())
+        envelope.metadata["loaded_skill_resources"] = list(cache.get("loaded_skill_resources", {}).values())
+
+    def _available_skill_names(self, envelope: ContextEnvelope) -> set[str]:
+        return {item.get("name", "") for item in envelope.metadata.get("available_skills", [])}
+
+    def _skill_prompt_payload(self, envelope: ContextEnvelope, selected_skills: list[str] | None = None) -> dict[str, Any]:
+        loaded_skills = list(envelope.metadata.get("loaded_skills") or [])
+        loaded_resources = list(envelope.metadata.get("loaded_skill_resources") or [])
+        prompt_skills = list(selected_skills or [])
+        seen_skill_texts = {item for item in prompt_skills if item}
+        for item in loaded_skills:
+            prompt_text = str(item.get("prompt_text") or "").strip()
+            if prompt_text and prompt_text not in seen_skill_texts:
+                prompt_skills.append(prompt_text)
+                seen_skill_texts.add(prompt_text)
+        prompt_resources: list[str] = []
+        seen_resources: set[str] = set()
+        for item in loaded_resources:
+            prompt_text = str(item.get("prompt_text") or "").strip()
+            if prompt_text and prompt_text not in seen_resources:
+                prompt_resources.append(prompt_text)
+                seen_resources.add(prompt_text)
+        return {
+            "available_skills": list(envelope.metadata.get("available_skills") or []),
+            "skill_instructions": prompt_skills,
+            "skill_resources": prompt_resources,
+        }
+
+    def _tool_specs_for_request(self, envelope: ContextEnvelope) -> list[dict[str, Any]]:
+        specs = list(self.tools.list_specs())
+        if envelope.metadata.get("allow_skill_auto_select") and envelope.metadata.get("available_skills"):
+            specs.extend(self._skill_tool_specs())
+        return specs
+
+    def _skill_tool_specs(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "load_skill",
+                    "description": (
+                        "Activate a skill from Available Skills so its SKILL.md instructions become available in the next model round."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Skill name from Available Skills."},
+                            "arguments": {
+                                "type": "object",
+                                "description": "Optional skill arguments with raw text, argv list, and structured input.",
+                                "properties": {
+                                    "raw": {"type": "string"},
+                                    "argv": {"type": "array", "items": {"type": "string"}},
+                                    "input": {"type": "object"},
+                                },
+                            },
+                        },
+                        "required": ["name"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "load_skill_resource",
+                    "description": "Load one referenced file from an already active skill, such as references/, scripts/, or assets/.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Skill name that has already been activated."},
+                            "path": {"type": "string", "description": "Relative file path under references/, scripts/, or assets/."},
+                        },
+                        "required": ["name", "path"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+        ]
+
+    def _serialize_loaded_skill(self, activation) -> dict[str, Any]:
+        return {
+            "skill_name": activation.skill_name,
+            "location": activation.location,
+            "content": activation.content,
+            "prompt_text": activation.prompt_text(),
+            "argument_bundle": activation.argument_bundle.model_dump(),
+            "structured_input": activation.structured_input,
+            "resource_hints": list(activation.resource_hints),
+            "allowed_tools": list(activation.allowed_tools),
+        }
+
+    def _serialize_loaded_skill_resource(self, resource_load) -> dict[str, Any]:
+        return {
+            "skill_name": resource_load.skill_name,
+            "location": resource_load.location,
+            "path": resource_load.path,
+            "content": resource_load.content,
+            "prompt_text": resource_load.prompt_text(),
+        }
+
+    def _upsert_loaded_skill_record(self, records: list[dict[str, Any]], record: dict[str, Any]) -> list[dict[str, Any]]:
+        filtered = [item for item in records if item.get("skill_name") != record.get("skill_name")]
+        filtered.append(record)
+        return filtered
+
+    def _upsert_loaded_skill_resource_record(self, records: list[dict[str, Any]], record: dict[str, Any]) -> list[dict[str, Any]]:
+        filtered = [
+            item
+            for item in records
+            if not (item.get("skill_name") == record.get("skill_name") and item.get("path") == record.get("path"))
+        ]
+        filtered.append(record)
+        return filtered
+
+    def _append_skill_selection_event(self, envelope: ContextEnvelope, *, event_type: str, payload: dict[str, Any]) -> None:
+        events = list(envelope.metadata.get("skill_selection_events") or [])
+        events.append({"type": event_type, **payload})
+        envelope.metadata["skill_selection_events"] = events
+
+    def _refresh_selected_skill_routes_compat(self, envelope: ContextEnvelope, preselected_routes: list[dict[str, Any]] | None = None) -> None:
+        route_map: dict[str, dict[str, Any]] = {}
+        for route in list(preselected_routes or []):
+            route_map[str(route.get("skill_name") or "")] = route
+        for record in envelope.metadata.get("loaded_skills", []):
+            skill_name = str(record.get("skill_name") or "")
+            if not skill_name:
+                continue
+            route_map[skill_name] = {
+                "skill_name": skill_name,
+                "score": 100.0,
+                "trigger_matches": [],
+                "disclosure_level": "full",
+                "content": record.get("prompt_text") or "",
+                "allowed_tools": list(record.get("allowed_tools") or []),
+                "descriptor": {
+                    "name": skill_name,
+                    "description": record.get("content") or "",
+                    "location": record.get("location") or "",
+                    "tags": [],
+                    "triggers": [],
+                    "allowed_tools": list(record.get("allowed_tools") or []),
+                    "compatibility": [],
+                },
+                "rationale": "loaded via runtime skill activation",
+            }
+        envelope.metadata["selected_skill_routes"] = list(route_map.values())
+
+    def _initialize_skill_state(
+        self,
+        *,
+        user_input: str,
+        thread_id: str,
+        envelope: ContextEnvelope,
+        metadata: dict[str, Any],
+    ) -> list[str]:
+        catalog_config = self._resolve_skill_catalog_config()
+        skill_request = self._resolve_skill_request(metadata)
+        resolved_routing = self._resolve_skill_routing(metadata)
+        selection_mode = self._skill_selection_mode(metadata)
+        allow_auto_select = self.config.auto_select_skills and skill_request.allow_auto_select
+        if catalog_config.activation_cache in {"run", "off"} or thread_id not in self._skill_thread_cache:
+            self._skill_thread_cache[thread_id] = {"loaded_skills": {}, "loaded_skill_resources": {}}
+        self._sync_skill_cache_to_envelope(thread_id, envelope)
+
+        available_skills = self.skills.available_descriptors(request=skill_request)
+        available_names = [item["name"] for item in available_skills]
+        envelope.metadata["skill_request"] = skill_request.model_dump()
+        envelope.metadata["skill_selection_mode"] = selection_mode
+        envelope.metadata["allow_skill_auto_select"] = allow_auto_select and selection_mode in {"model", "hybrid"}
+        envelope.metadata["available_skills"] = available_skills
+        envelope.metadata["resolved_skill_routing"] = resolved_routing.model_dump()
+        envelope.metadata["skill_catalog_config"] = catalog_config.model_dump()
+        envelope.metadata.setdefault("skill_selection_events", [])
+
+        for skill_name in skill_request.force_load:
+            if skill_name not in available_names:
+                self._append_skill_selection_event(
+                    envelope,
+                    event_type="force_load_rejected",
+                    payload={"skill_name": skill_name, "reason": "skill not available for this request"},
+                )
+                continue
+            activation = self.skills.activate(skill_name, arguments=skill_request.arguments.get(skill_name))
+            record = self._serialize_loaded_skill(activation)
+            envelope.metadata["loaded_skills"] = self._upsert_loaded_skill_record(
+                list(envelope.metadata.get("loaded_skills") or []),
+                record,
+            )
+            self._append_skill_selection_event(
+                envelope,
+                event_type="force_load",
+                payload={"skill_name": skill_name, "location": activation.location},
+            )
+
+        if catalog_config.activation_cache == "thread":
+            self._skill_thread_cache[thread_id]["loaded_skills"] = {
+                item["skill_name"]: item for item in envelope.metadata.get("loaded_skills", [])
+            }
+            self._skill_thread_cache[thread_id]["loaded_skill_resources"] = {
+                f"{item['skill_name']}::{item['path']}": item for item in envelope.metadata.get("loaded_skill_resources", [])
+            }
+
+        selected_skill_routes = []
+        if allow_auto_select and selection_mode in {"rule", "hybrid"}:
+            selected_skill_routes = self.skills.route_for(
+                user_input,
+                config=resolved_routing,
+                available_tools=[spec["function"]["name"] for spec in self.tools.list_specs()],
+                candidates=available_names,
+            )
+        self._refresh_selected_skill_routes_compat(
+            envelope,
+            preselected_routes=[route.model_dump() for route in selected_skill_routes],
+        )
+        selected_skills = [route.content for route in selected_skill_routes]
+        for record in envelope.metadata.get("loaded_skills", []):
+            prompt_text = str(record.get("prompt_text") or "").strip()
+            if prompt_text and prompt_text not in selected_skills:
+                selected_skills.append(prompt_text)
+        envelope.metadata["loaded_skills"] = list(envelope.metadata.get("loaded_skills") or [])
+        envelope.metadata["loaded_skill_resources"] = list(envelope.metadata.get("loaded_skill_resources") or [])
+        return selected_skills
+
     def run(
         self,
         user_input: str,
@@ -735,20 +1039,12 @@ class Runtime:
                 return hook_context.result or run_result
 
             conversation = await self.memory.get_context_window(thread_id)
-            selected_skill_routes = (
-                self.skills.route_for(
-                    user_input,
-                    config=metadata.get("skill_routing") or self.config.skill_routing or SkillRoutingConfig(),
-                    available_tools=[spec["function"]["name"] for spec in self.tools.list_specs()],
-                )
-                if self.config.auto_select_skills
-                else []
+            selected_skills = self._initialize_skill_state(
+                user_input=user_input,
+                thread_id=thread_id,
+                envelope=envelope,
+                metadata=metadata,
             )
-            selected_skills = [route.content for route in selected_skill_routes]
-            envelope.metadata["resolved_skill_routing"] = SkillRoutingConfig.from_any(
-                metadata.get("skill_routing") or self.config.skill_routing or SkillRoutingConfig()
-            ).model_dump()
-            envelope.metadata["selected_skill_routes"] = [route.model_dump() for route in selected_skill_routes]
             memory_summary = await self.memory.summarize_thread(thread_id)
             local_reasoning = self.reasoning_framework
             if metadata.get("reasoning_strategy") is not None:
@@ -831,6 +1127,14 @@ class Runtime:
                 "resolved_coordination_policy",
                 "resolved_memory_policy",
                 "resolved_skill_routing",
+                "skill_catalog_config",
+                "skill_request",
+                "skill_selection_mode",
+                "allow_skill_auto_select",
+                "available_skills",
+                "skill_selection_events",
+                "loaded_skills",
+                "loaded_skill_resources",
                 "selected_skill_routes",
                 "context_budget_report",
                 "memory_policy_report",
@@ -895,7 +1199,98 @@ class Runtime:
             if self.human_feedback is not None and feedback_token is not None:
                 self.human_feedback.reset_context(feedback_token)
 
+    async def _execute_skill_load_tool(self, arguments: dict[str, Any], envelope: ContextEnvelope):
+        from agentorch.tools.base import ToolResult
+
+        skill_name = str(arguments.get("name") or "").strip()
+        if not skill_name:
+            raise ToolError("load_skill requires a non-empty skill name.", tool_name="load_skill")
+        if skill_name not in self._available_skill_names(envelope):
+            raise ToolError(
+                f"Skill '{skill_name}' is not available in this run. Choose one of the advertised Available Skills.",
+                tool_name="load_skill",
+            )
+        raw_arguments = arguments.get("arguments")
+        if raw_arguments is None and any(key in arguments for key in ("raw", "argv", "input")):
+            raw_arguments = {key: arguments.get(key) for key in ("raw", "argv", "input") if key in arguments}
+        activation = self.skills.activate(skill_name, arguments=SkillArgumentBundle.from_any(raw_arguments))
+        record = self._serialize_loaded_skill(activation)
+        envelope.metadata["loaded_skills"] = self._upsert_loaded_skill_record(
+            list(envelope.metadata.get("loaded_skills") or []),
+            record,
+        )
+        self._append_skill_selection_event(
+            envelope,
+            event_type="load_skill",
+            payload={"skill_name": skill_name, "location": activation.location},
+        )
+        self._refresh_selected_skill_routes_compat(envelope, preselected_routes=list(envelope.metadata.get("selected_skill_routes") or []))
+        if envelope.metadata.get("skill_catalog_config", {}).get("activation_cache") == "thread":
+            cache = self._skill_thread_cache.setdefault(envelope.thread_id, {"loaded_skills": {}, "loaded_skill_resources": {}})
+            cache["loaded_skills"][skill_name] = record
+        return ToolResult(
+            tool_name="load_skill",
+            data={
+                "loaded": True,
+                "skill_name": skill_name,
+                "location": activation.location,
+                "resource_hints": list(activation.resource_hints),
+                "allowed_tools": list(activation.allowed_tools),
+            },
+        )
+
+    async def _execute_skill_resource_tool(self, arguments: dict[str, Any], envelope: ContextEnvelope):
+        from agentorch.tools.base import ToolResult
+
+        skill_name = str(arguments.get("name") or "").strip()
+        resource_path = str(arguments.get("path") or "").strip()
+        if not skill_name or not resource_path:
+            raise ToolError("load_skill_resource requires both skill name and path.", tool_name="load_skill_resource")
+        loaded_skills = {item.get("skill_name") for item in envelope.metadata.get("loaded_skills", [])}
+        if skill_name not in loaded_skills:
+            raise ToolError(
+                f"Skill '{skill_name}' is not active yet. Call load_skill first.",
+                tool_name="load_skill_resource",
+            )
+        resource_load = self.skills.load_resource(skill_name, resource_path)
+        record = self._serialize_loaded_skill_resource(resource_load)
+        envelope.metadata["loaded_skill_resources"] = self._upsert_loaded_skill_resource_record(
+            list(envelope.metadata.get("loaded_skill_resources") or []),
+            record,
+        )
+        self._append_skill_selection_event(
+            envelope,
+            event_type="load_skill_resource",
+            payload={"skill_name": skill_name, "path": resource_load.path},
+        )
+        if envelope.metadata.get("skill_catalog_config", {}).get("activation_cache") == "thread":
+            cache = self._skill_thread_cache.setdefault(envelope.thread_id, {"loaded_skills": {}, "loaded_skill_resources": {}})
+            cache["loaded_skill_resources"][f"{skill_name}::{resource_load.path}"] = record
+        return ToolResult(
+            tool_name="load_skill_resource",
+            data={
+                "loaded": True,
+                "skill_name": skill_name,
+                "path": resource_load.path,
+                "location": resource_load.location,
+            },
+        )
+
     async def _execute_tool(self, name: str, arguments: dict[str, Any], envelope: ContextEnvelope):
+        if name == "load_skill":
+            try:
+                return await self._execute_skill_load_tool(arguments, envelope)
+            except (ToolError, ValueError, KeyError, FileNotFoundError) as exc:
+                from agentorch.tools.base import ToolResult
+
+                return ToolResult(tool_name=name, data={}, success=False, error=str(exc))
+        if name == "load_skill_resource":
+            try:
+                return await self._execute_skill_resource_tool(arguments, envelope)
+            except (ToolError, ValueError, KeyError, FileNotFoundError) as exc:
+                from agentorch.tools.base import ToolResult
+
+                return ToolResult(tool_name=name, data={}, success=False, error=str(exc))
         tool = self.tools.get(name)
         try:
             if tool.spec.needs_sandbox:
@@ -1217,7 +1612,7 @@ class Runtime:
             )
         request = ModelRequest(
             messages=request_messages,
-            tools=self.tools.list_specs(),
+            tools=self._tool_specs_for_request(context.envelope),
             metadata={
                 "reasoning_kind": reasoning_kind,
                 "stage": stage,

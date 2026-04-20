@@ -131,6 +131,7 @@ class ContextKernel:
 
         task_context = (context.task_packet or {}).get("context", {})
         selected_skill_routes = list(context.envelope.metadata.get("selected_skill_routes") or [])
+        skill_prompt_payload = self.runtime._skill_prompt_payload(context.envelope, context.selected_skills)
         shared_memory_context = task_context.get("shared_memory_context") or task_context.get("collective_memory_context")
         shared_memory_evidence = task_context.get("shared_memory_evidence")
         if shared_memory_evidence is None:
@@ -153,8 +154,10 @@ class ContextKernel:
             collective_memory_citations=shared_memory_citations,
             retrieval_plan=context.retrieval_payload.get("plan"),
             knowledge_scope=context.retrieval_payload.get("knowledge_scope", []),
-            tool_descriptions=self.runtime.tools.list_specs(),
-            skill_instructions=context.selected_skills,
+            tool_descriptions=self.runtime._tool_specs_for_request(context.envelope),
+            available_skills=skill_prompt_payload["available_skills"],
+            skill_instructions=skill_prompt_payload["skill_instructions"],
+            skill_resources=skill_prompt_payload["skill_resources"],
             task_packet=context.task_packet,
             agent_role=context.agent_role,
             delegation_context=context.delegation_context,

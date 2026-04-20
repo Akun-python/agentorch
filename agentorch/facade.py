@@ -33,7 +33,7 @@ from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
 from agentorch.runtime._export_support import _safe_export
 from agentorch.sandbox import SandboxManager
-from agentorch.skills import SkillRegistry
+from agentorch.skills import SkillCatalog, SkillCatalogConfig, SkillRegistry, SkillRoutingConfig
 from agentorch.strategies import (
     ContextPolicy,
     CoordinationPolicy,
@@ -131,7 +131,9 @@ def create_agent(
     human_feedback: Any | None = None,
     observability: ObservabilityConfig | dict[str, Any] | None = None,
     extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
-    skills: SkillRegistry | None = None,
+    skills: SkillRegistry | SkillCatalog | str | Path | list[str | Path] | tuple[str | Path, ...] | None = None,
+    skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None,
+    skill_routing: SkillRoutingConfig | str | dict[str, Any] | None = None,
     context_policy: ContextPolicy | dict[str, Any] | None = None,
     state_policy: StatePolicy | dict[str, Any] | None = None,
     coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
@@ -164,6 +166,8 @@ def create_agent(
             observability,
             extensions,
             skills,
+            skill_catalog,
+            skill_routing,
             context_policy,
             state_policy,
             coordination_policy,
@@ -250,6 +254,8 @@ def create_agent(
         system_prompt=system_prompt,
         enable_streaming=enable_streaming,
         reasoning_strategy=resolved_reasoning,
+        skill_catalog=skill_catalog,
+        skill_routing=skill_routing,
         context_policy=context_policy,
         state_policy=state_policy,
         coordination_policy=coordination_policy,
@@ -300,6 +306,7 @@ def create_agent(
         "model_config": selected_model_config,
         "tools": selected_tools,
         "skills": skills,
+        "workspace_root": selected_workspace_root,
         "memory": memory if enable_memory else None,
         "knowledge_base": knowledge_base,
         "knowledge_paths": knowledge_paths,
@@ -511,7 +518,9 @@ def create_agent_evolution(
     human_feedback: Any | None = None,
     observability: ObservabilityConfig | dict[str, Any] | None = None,
     extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
-    skills: SkillRegistry | None = None,
+    skills: SkillRegistry | SkillCatalog | str | Path | list[str | Path] | tuple[str | Path, ...] | None = None,
+    skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None,
+    skill_routing: SkillRoutingConfig | str | dict[str, Any] | None = None,
     context_policy: ContextPolicy | dict[str, Any] | None = None,
     state_policy: StatePolicy | dict[str, Any] | None = None,
     coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
@@ -551,6 +560,8 @@ def create_agent_evolution(
             observability=observability,
             extensions=extensions,
             skills=skills,
+            skill_catalog=skill_catalog,
+            skill_routing=skill_routing,
             context_policy=context_policy,
             state_policy=state_policy,
             coordination_policy=coordination_policy,
