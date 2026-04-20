@@ -350,11 +350,7 @@ orchestrator = create_multi_agent(
 )
 ```
 
-### 8. Deep research recipe
-
-`DeepResearchAgentConfig` remains available as a preset/config recipe, but the recommended path is to build research systems with `create_agent(...)` and `create_multi_agent(...)`.
-
-### 9. Evolution search
+### 8. Evolution search
 
 ```python
 from agentorch import EvolutionConfig, EvolutionManager, SearchSpace
@@ -407,7 +403,6 @@ The current top-level API includes:
 from agentorch import (
     Agent,
     ChatPromptTemplate,
-    DeepResearchAgentConfig,
     IndexedKnowledgeBase,
     KnowledgeAsset,
     OpenAIModel,
@@ -452,7 +447,6 @@ agentorch/
 High-level examples:
 
 - [`examples/basic_agent.py`](examples/basic_agent.py)
-- [`examples/deep_research_agent.py`](examples/deep_research_agent.py)
 - [`examples/supervisor_agents.py`](examples/supervisor_agents.py)
 
 Core / advanced examples:

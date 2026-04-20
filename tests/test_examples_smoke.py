@@ -112,7 +112,6 @@ async def _run_example_main(module, **kwargs) -> str:
     [
         "basic_agent.py",
         "code_interpreter_agent.py",
-        "deep_research_agent.py",
         "rag_ready_runtime.py",
         "rag_mode_comparison.py",
         "supervisor_agents.py",
@@ -136,21 +135,6 @@ async def _test_openai_backed_examples_run_with_fake_model(monkeypatch: pytest.M
     output = await _run_example_main(module)
 
     assert "Example smoke response" in output
-
-
-def test_deep_research_example_stream_mode_runs_with_fake_model(monkeypatch: pytest.MonkeyPatch):
-    asyncio.run(_test_deep_research_example_stream_mode_runs_with_fake_model(monkeypatch))
-
-
-async def _test_deep_research_example_stream_mode_runs_with_fake_model(monkeypatch: pytest.MonkeyPatch):
-    module = _load_example_module("deep_research_agent.py")
-    monkeypatch.setattr(module, "OpenAIModel", ExampleFakeModel)
-
-    output = await _run_example_main(module, stream=True)
-
-    assert "Streaming event trace:" in output
-    assert "reasoning_kind: supervisor_aggregate" in output
-    assert "child_reasoning:" in output
 
 
 @pytest.mark.parametrize(

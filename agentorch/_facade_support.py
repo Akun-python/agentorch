@@ -340,19 +340,6 @@ def profile_defaults(profile: str, *, sandbox: SandboxManager | None) -> dict[st
             "coordination_policy": CoordinationPolicy(),
             "memory_policy": MemoryPolicy(),
         }
-    if normalized == "research":
-        from agentorch.presets import build_deep_research_system_prompt
-
-        return {
-            "system_prompt": build_deep_research_system_prompt(),
-            "reasoning": ReasoningStrategyConfig.plan_execute(config={"max_planning_steps": 5, "max_execution_steps": 8}),
-            "rag": RagStrategyConfig.for_hybrid(mount="inline", injection_policy="full_report", max_steps=4),
-            "context_policy": ContextPolicy.hybrid_budgeted(),
-            "state_policy": StatePolicy(retention_mode="state_plus_memory"),
-            "coordination_policy": CoordinationPolicy.hybrid(),
-            "memory_policy": MemoryPolicy.long_horizon(),
-            "enable_rag": True,
-        }
     if normalized == "coding":
         return {
             "system_prompt": (

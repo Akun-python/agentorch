@@ -210,7 +210,6 @@ from .reasoning import (
     register_reasoning_framework,
 )
 from .prompts import ChatPromptTemplate, FewShotExample, FewShotPromptCard, MessagesPlaceholderCard, PromptBuilder, PromptTemplate, TextPromptCard
-from .presets import DeepResearchAgent, DeepResearchAgentConfig, build_deep_research_system_prompt
 from .runtime import Agent, Runtime
 from .sandbox import ExecutionRequest, ExecutionResult, SandboxManager, SandboxPolicy
 from .core import CompactionDecision, ContextSegment, RunStreamEvent, SalienceReport, SegmentScore
@@ -279,8 +278,6 @@ __all__ = [
     "CapabilitySupervisorPolicy",
     "DeliberativeRetriever",
     "DeliberativeRagConfig",
-    "DeepResearchAgent",
-    "DeepResearchAgentConfig",
     "Document",
     "Coordinator",
     "Context",
@@ -509,7 +506,6 @@ __all__ = [
     "resolve_evolution_workflow_template",
     "runtime_config_from_genome",
     "summarize_evolution_candidate",
-    "build_deep_research_system_prompt",
     "compose_agent",
     "compose_team",
     "create_agent",

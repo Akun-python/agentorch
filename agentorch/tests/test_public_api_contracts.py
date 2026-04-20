@@ -157,10 +157,11 @@ def test_create_multi_agent_applies_shared_defaults_to_inline_members() -> None:
     system.close()
 
 
-def test_deep_research_agent_legacy_entrypoint_respects_secure_exports() -> None:
-    research = agentorch.DeepResearchAgent.create(model=DummyModel(), config={"include_web_search": False})
-    exported = research.export_blueprint()
+def test_research_profile_is_no_longer_supported() -> None:
+    with pytest.raises(ValueError, match="Unsupported create_agent profile 'research'"):
+        agentorch.create_agent(model=DummyModel(), profile="research")
 
-    assert "sk-dummy-contract" not in str(exported)
-    assert exported["kind"] == "single_agent"
-    research.close()
+
+def test_top_level_api_no_longer_exports_research_presets() -> None:
+    assert not hasattr(agentorch, "DeepResearchAgent")
+    assert not hasattr(agentorch, "DeepResearchAgentConfig")

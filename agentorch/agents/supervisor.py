@@ -66,7 +66,7 @@ class CapabilitySupervisorPolicy(SupervisorPolicy):
     def __init__(
         self,
         *,
-        guided_limit: int = 1,
+        guided_limit: int = 2,
         distributed_limit: int = 3,
         capability_weight: float = 4.0,
         tag_weight: float = 2.0,
@@ -172,10 +172,10 @@ class CapabilitySupervisorPolicy(SupervisorPolicy):
         if max_agents <= 0:
             max_agents = self.guided_limit if route_mode == "guided" else self.distributed_limit
 
+        positive = [item for item in ranked if item[0] > 0]
         if route_mode == "guided":
-            selected = ranked[: max(1, max_agents)]
+            selected = positive[:max_agents] if positive else ranked[:1]
         else:
-            positive = [item for item in ranked if item[0] > 0]
             selected = positive[:max_agents] if positive else ranked[:1]
 
         selected_names = [name for _, name, _ in selected]

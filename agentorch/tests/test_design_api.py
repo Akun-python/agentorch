@@ -41,7 +41,7 @@ class RecordingExtension(RuntimeExtension):
 def test_agent_design_chainable_helpers_build_agent_cleanly() -> None:
     extension = RecordingExtension()
     design = (
-        agentorch.AgentDesign.named("researcher", model=DummyModel(reply="ready"), profile="research")
+        agentorch.AgentDesign.named("researcher", model=DummyModel(reply="ready"), profile="default")
         .with_reasoning("react")
         .with_tool_bundles(include_filesystem=True, include_git=True)
         .with_rag(scope=["papers"], max_steps=2)

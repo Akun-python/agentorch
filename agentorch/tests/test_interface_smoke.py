@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import agentorch
 import pytest
@@ -33,7 +32,6 @@ def test_top_level_public_exports_include_high_level_entrypoints() -> None:
         "create_multi_agent",
         "create_agent_evolution",
         "create_multi_agent_evolution",
-        "DeepResearchAgent",
         "AgentDesign",
         "RoleDesign",
         "TeamDesign",
@@ -41,29 +39,6 @@ def test_top_level_public_exports_include_high_level_entrypoints() -> None:
         "compose_team",
     ):
         assert hasattr(agentorch, symbol)
-
-
-def test_deep_research_agent_config_and_entrypoint_support_workspace_tool_mode() -> None:
-    config = agentorch.DeepResearchAgentConfig.from_any(
-        {
-            "knowledge_scope": ["papers"],
-            "include_workspace_tools": True,
-            "include_web_search": False,
-            "workspace_root": Path.cwd(),
-        }
-    )
-
-    runtime_config = config.runtime_config()
-    assert runtime_config.default_knowledge_scope == ["papers"]
-    assert runtime_config.rag_strategy is not None
-    assert runtime_config.rag_strategy.knowledge_scope == ["papers"]
-
-    research = agentorch.DeepResearchAgent.create(model=DummyModel(reply="research-ready"), config=config)
-    blueprint = research.export_blueprint()
-
-    assert "read_file" in blueprint["runtime"]["tools"]
-    assert "brave_search" not in blueprint["runtime"]["tools"]
-    research.close()
 
 
 def test_create_agent_evolution_interface_builds_and_runs_candidates() -> None:
@@ -162,6 +137,12 @@ def test_create_agent_evolution_closes_candidate_when_evaluator_fails() -> None:
         assert model.closed is True
 
     asyncio.run(scenario())
+
+
+def test_top_level_public_exports_do_not_include_research_presets() -> None:
+    assert not hasattr(agentorch, "DeepResearchAgent")
+    assert not hasattr(agentorch, "DeepResearchAgentConfig")
+    assert not hasattr(agentorch, "build_deep_research_system_prompt")
 
 
 async def _agent_evaluator(genome, candidate, tasks):

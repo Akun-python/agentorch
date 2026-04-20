@@ -6,8 +6,6 @@ from pydantic import BaseModel
 from agentorch import (
     Agent,
     AgentCapability,
-    DeepResearchAgent,
-    DeepResearchAgentConfig,
     AgentRegistry,
     AgentSpec,
     Runtime,
@@ -20,10 +18,9 @@ from agentorch import (
 )
 from agentorch.config import RuntimeConfig
 from agentorch.core import Message, ModelRequest, ModelResponse, ToolCall, UsageInfo
-from agentorch.knowledge import Document
 from agentorch.models.base import BaseModelAdapter
 from agentorch.sandbox import SandboxManager, SandboxPolicy
-from agentorch.strategies import ContextPolicy, CoordinationPolicy
+from agentorch.strategies import ContextPolicy
 from agentorch.tools import register_default_agent_tools
 from agentorch.workflow import Edge, Node, Workflow
 
@@ -36,10 +33,6 @@ class SumInput(BaseModel):
 @tool(description="Add two integers and return the sum.")
 async def add_numbers(input: SumInput):
     return {"sum": input.a + input.b}
-
-
-class CustomSignalInput(BaseModel):
-    query: str
 
 
 class SkillAwareToolModel(BaseModelAdapter):
@@ -115,21 +108,6 @@ class AggregatorEchoModel(BaseModelAdapter):
         return ModelResponse(
             message=Message(role="assistant", content=f"Aggregate: {last_user}"),
             content=f"Aggregate: {last_user}",
-            finish_reason="stop",
-            usage=UsageInfo(total_tokens=1),
-        )
-
-
-class DeepResearchEchoModel(BaseModelAdapter):
-    def __init__(self) -> None:
-        self.system_prompts: list[str] = []
-
-    async def generate(self, request: ModelRequest) -> ModelResponse:
-        system_message = next(message.content for message in request.messages if message.role == "system")
-        self.system_prompts.append(system_message)
-        return ModelResponse(
-            message=Message(role="assistant", content=system_message[:160]),
-            content=system_message[:160],
             finish_reason="stop",
             usage=UsageInfo(total_tokens=1),
         )
@@ -264,89 +242,3 @@ async def _test_workflow_runs_default_tool_bundle_end_to_end(tmp_path: Path):
     assert (tmp_path / "logs" / "run.txt").read_text(encoding="utf-8") == "workflow-ok"
     assert "workflow-bundle" in result.output_text
 
-
-def test_deep_research_agent_preset_builds_research_ready_runtime():
-    asyncio.run(_test_deep_research_agent_preset_builds_research_ready_runtime())
-
-
-async def _test_deep_research_agent_preset_builds_research_ready_runtime():
-    model = DeepResearchEchoModel()
-    skill_dir = Path.cwd() / ".tmp-deep-research-skill-test"
-    skill_dir.mkdir(exist_ok=True)
-    (skill_dir / "SKILL.md").write_text(
-        (
-            "---\n"
-            "name: deep_research_protocol\n"
-            "description: Research guidance\n"
-            "triggers: research,evidence\n"
-            "allowed_tools: brave_search,deliberative_retrieve\n"
-            "---\n"
-            "Always gather evidence before concluding and cite uncertainty explicitly."
-        ),
-        encoding="utf-8",
-    )
-    skills = SkillRegistry()
-    skills.register(SkillLoader().load(skill_dir))
-
-    agent = await DeepResearchAgent.acreate(
-        model=model,
-        knowledge_documents=[
-            Document(
-                id="research-1",
-                text="Deep research agents should collect evidence and cite it clearly.",
-                metadata={"scopes": ["research"]},
-            )
-        ],
-        skills=skills,
-        config={"knowledge_scope": ["research"], "include_web_search": True},
-    )
-
-    assert "brave_search" in agent.runtime.tools
-    assert "deliberative_retrieve" in agent.runtime.tools
-    assert agent.runtime.reasoning_framework.config.kind.value == "plan_execute"
-    assert agent.runtime.config.rag_strategy is not None
-    assert agent.runtime.config.rag_strategy.mode == "hybrid"
-
-    result = await agent.run("Research how evidence quality should be handled.", thread_id="deep-research-test")
-    assert "deep research agent" in result.output_text.lower()
-    assert any("Skill Instructions:" in prompt for prompt in model.system_prompts)
-
-
-@tool(description="Return a custom signal for testing.")
-async def custom_signal(input: CustomSignalInput):
-    return {"query": input.query, "result": "custom"}
-
-
-def test_deep_research_agent_accepts_web_search_config_and_custom_tools():
-    asyncio.run(_test_deep_research_agent_accepts_web_search_config_and_custom_tools())
-
-
-async def _test_deep_research_agent_accepts_web_search_config_and_custom_tools():
-    model = DeepResearchEchoModel()
-    agent = await DeepResearchAgent.acreate(
-        model=model,
-        knowledge_documents=[
-            Document(
-                id="research-1",
-                text="Deep research agents should collect evidence and cite it clearly.",
-                metadata={"scopes": ["research"]},
-            )
-        ],
-        custom_tools=[custom_signal],
-        config={
-            "knowledge_scope": ["research"],
-            "web_search": {"provider": "brave", "enabled": True, "api_key": "test-key"},
-        },
-    )
-
-    assert "brave_search" in agent.runtime.tools
-    assert "custom_signal" in agent.runtime.tools
-
-
-def test_deep_research_config_exposes_policy_overrides():
-    config = DeepResearchAgentConfig(
-        coordination_policy=CoordinationPolicy.distributed(),
-    )
-    runtime_config = config.runtime_config()
-    assert runtime_config.coordination_policy is not None
-    assert runtime_config.coordination_policy.route_mode == "distributed"

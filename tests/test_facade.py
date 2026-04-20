@@ -1,5 +1,6 @@
 import asyncio
 
+import pytest
 from pydantic import BaseModel
 
 from agentorch import (
@@ -111,12 +112,6 @@ def test_create_agent_supports_tools_rag_workflow_and_feedback():
 
 
 def test_create_agent_profile_and_runtime_config_precedence():
-    agent = create_agent(
-        model=EchoModel(),
-        profile="research",
-        runtime_config={"system_prompt": "Pinned by runtime config."},
-        name="researcher",
-    )
     coding_agent = create_agent(
         model=EchoModel(),
         profile="coding",
@@ -124,20 +119,9 @@ def test_create_agent_profile_and_runtime_config_precedence():
         name="coder",
     )
 
-    research_blueprint = agent.export_blueprint()
     coding_blueprint = coding_agent.export_blueprint()
-    research_policies = research_blueprint["runtime"]["resolved_policies"]
     coding_policies = coding_blueprint["runtime"]["resolved_policies"]
 
-    assert research_blueprint["profile"] == "research"
-    assert research_blueprint["runtime"]["config"]["system_prompt"] == "Pinned by runtime config."
-    assert research_blueprint["resolved_defaults"]["enable_rag"] is True
-    assert research_policies["context"]["selection_mode"] == "hybrid"
-    assert research_policies["context"]["char_budget"] == 22000
-    assert research_policies["context"]["sources"]["retrieval_evidence"]["enabled"] is True
-    assert research_policies["state"]["retention_mode"] == "state_plus_memory"
-    assert research_policies["coordination"]["route_mode"] == "hybrid"
-    assert research_policies["memory"]["recall_mode"] == "hybrid"
     assert coding_blueprint["resolved_defaults"]["tool_bundles"]["include_git"] is True
     assert "replace_in_file" in coding_blueprint["runtime"]["tools"]
     assert coding_blueprint["runtime"]["config"]["context_policy"]["char_budget"] == 12000
@@ -148,6 +132,11 @@ def test_create_agent_profile_and_runtime_config_precedence():
     assert coding_policies["state"]["retention_mode"] == "window_plus_summary"
     assert coding_policies["coordination"]["route_mode"] == "guided"
     assert coding_policies["memory"]["recall_mode"] == "scene"
+
+
+def test_create_agent_rejects_removed_research_profile():
+    with pytest.raises(ValueError, match="Unsupported create_agent profile 'research'"):
+        create_agent(model=EchoModel(), profile="research", name="researcher")
 
 
 def test_create_multi_agent_accepts_inline_blueprints_and_existing_agents():
