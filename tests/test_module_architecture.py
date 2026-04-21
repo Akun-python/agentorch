@@ -6,11 +6,11 @@ import textwrap
 from pathlib import Path
 
 import agentorch
-from experiments.architecture_audit.collect_agentorch_architecture_metrics import collect_metrics
 from agentorch.evolution import bootstrap_evolution_defaults, list_evolution_algorithms
 from agentorch.memory import bootstrap_memory_defaults, list_memory_backends, list_memory_governance
 from agentorch.models import list_model_providers
 from agentorch.reasoning import bootstrap_reasoning_defaults, list_reasoning_frameworks
+from tools.architecture_audit.collect_agentorch_architecture_metrics import collect_metrics
 
 
 def _run_fresh_interpreter(script: str) -> dict[str, object]:
