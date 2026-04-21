@@ -35,6 +35,8 @@ class ContextPolicyLike(Protocol):
     salience_mode: str
     salience_rerank_top_k: int
     segment_min_keep: int
+    use_builtin_stage_profiles: bool
+    redundancy_inhibition_enabled: bool
 
 
 class StatePolicyLike(Protocol):
@@ -277,20 +279,27 @@ def build_handoff_capsule(task_packet: dict[str, Any] | None, handoff: dict[str,
 
 def resolve_attention_profile(context_policy: ContextPolicyLike, *, stage: str, agent_role: str | None) -> dict[str, float]:
     defaults = {"retrieval_evidence": 1.15, "citation": 0.65, "retrieval_report": 0.7, "skill_catalog": 0.92, "skill": 0.95, "skill_resource": 0.9, "collective_memory": 0.9, "delegation_context": 0.92, "conversation": 0.86, "tool_observation": 0.88, "task_packet": 1.0}
-    if stage.startswith("execute"):
-        stage_profile = {"tool_observation": 1.2, "retrieval_evidence": 1.1, "delegation_context": 1.0, "skill": 0.82}
-    elif stage == "plan":
-        stage_profile = {"task_packet": 1.18, "skill": 1.1, "retrieval_evidence": 1.08, "tool_observation": 0.72}
+    if context_policy.use_builtin_stage_profiles:
+        if stage.startswith("execute"):
+            stage_profile = {"tool_observation": 1.2, "retrieval_evidence": 1.1, "delegation_context": 1.0, "skill": 0.82}
+        elif stage == "plan":
+            stage_profile = {"task_packet": 1.18, "skill": 1.1, "retrieval_evidence": 1.08, "tool_observation": 0.72}
+        else:
+            stage_profile = {}
+        role_profile: dict[str, float] = {}
+        if agent_role == "evidence_scout":
+            role_profile = {"retrieval_evidence": 1.18, "citation": 0.8}
+        elif agent_role == "synthesis_analyst":
+            role_profile = {"retrieval_report": 1.08, "conversation": 0.9}
+        elif agent_role == "supervisor":
+            role_profile = {"delegation_context": 1.18, "task_packet": 1.12}
     else:
         stage_profile = {}
-    role_profile: dict[str, float] = {}
-    if agent_role == "evidence_scout":
-        role_profile = {"retrieval_evidence": 1.18, "citation": 0.8}
-    elif agent_role == "synthesis_analyst":
-        role_profile = {"retrieval_report": 1.08, "conversation": 0.9}
-    elif agent_role == "supervisor":
-        role_profile = {"delegation_context": 1.18, "task_packet": 1.12}
+        role_profile = {}
     configured = dict(context_policy.stage_attention_profiles.get("default", {}))
+    for key, value in context_policy.stage_attention_profiles.items():
+        if key.endswith("*") and stage.startswith(key[:-1]):
+            configured.update(value)
     configured.update(context_policy.stage_attention_profiles.get(stage, {}))
     if agent_role:
         configured.update(context_policy.stage_attention_profiles.get(f"agent:{agent_role}", {}))
@@ -323,7 +332,8 @@ def segment_prompt_context(prompt_context: PromptContext, *, user_input: str, th
             reliability = 0.54
         elif segment_type == "task_packet":
             reliability = 0.76
-        segments.append(ContextSegment(segment_id=segment_id, segment_type=segment_type, source=source, content=content, display_content=serialized, char_count=len(serialized), agent_scope=agent_role, thread_scope=thread_id, recency=recency, reliability=reliability, task_relevance=relevance, delegation_depth=delegation_depth, novelty=1.0, redundancy_group=f"{segment_type}:{hashlib.sha1(serialized.encode('utf-8')).hexdigest()[:12]}", metadata=metadata))
+        redundancy_group = str(metadata.get("redundancy_group") or f"{segment_type}:{hashlib.sha1(serialized.encode('utf-8')).hexdigest()[:12]}")
+        segments.append(ContextSegment(segment_id=segment_id, segment_type=segment_type, source=source, content=content, display_content=serialized, char_count=len(serialized), agent_scope=agent_role, thread_scope=thread_id, recency=recency, reliability=reliability, task_relevance=relevance, delegation_depth=delegation_depth, novelty=1.0, redundancy_group=redundancy_group, metadata=metadata))
 
     total_messages = max(1, len(prompt_context.conversation))
     for idx, message in enumerate(prompt_context.conversation):
@@ -383,7 +393,9 @@ async def apply_budget_aware_compaction(
         counts_by_group[segment.redundancy_group] = counts_by_group.get(segment.redundancy_group, 0) + 1
     scores: dict[str, SegmentScore] = {}
     for segment in segments:
-        redundancy_penalty = max(0.0, (counts_by_group.get(segment.redundancy_group, 1) - 1) * 0.2)
+        redundancy_penalty = 0.0
+        if context_policy.redundancy_inhibition_enabled:
+            redundancy_penalty = max(0.0, (counts_by_group.get(segment.redundancy_group, 1) - 1) * 0.2)
         handoff_priority = 0.2 if segment.segment_type in {"delegation_context", "task_packet"} else 0.0
         rule_score = (segment.task_relevance * 4.0 + segment.reliability * 2.5 + segment.recency * 1.5 + segment.novelty + handoff_priority) * attention_profile.get(segment.segment_type, 1.0)
         scores[segment.segment_id] = SegmentScore(segment_id=segment.segment_id, rule_score=rule_score, redundancy_penalty=redundancy_penalty, salience_score=rule_score - redundancy_penalty, keep_reason="rule_score", score_breakdown={"relevance": segment.task_relevance, "reliability": segment.reliability, "recency": segment.recency, "attention_weight": attention_profile.get(segment.segment_type, 1.0), "handoff_priority": handoff_priority})
@@ -405,6 +417,7 @@ async def apply_budget_aware_compaction(
     decisions: list[CompactionDecision] = []
     min_keep = min(max(1, context_policy.segment_min_keep), len(ranked_segments))
     selected_group: dict[str, str] = {}
+    compact_representations = context_policy.overflow_action != "drop_low_priority"
     selected_chars = before_budget["estimated_total_chars"] - (
         before_budget["conversation_chars"]
         + before_budget["evidence_chars"]
@@ -418,16 +431,20 @@ async def apply_budget_aware_compaction(
         + before_budget["skill_resource_chars"]
     )
     for segment in ranked_segments:
-        selected_content, representation = select_segment_representation(segment, compact=(selected_chars > (char_budget * 0.8)))
+        selected_content, representation = select_segment_representation(
+            segment,
+            compact=compact_representations and (selected_chars > (char_budget * 0.8)),
+        )
         segment_chars = len(_serialize(selected_content))
-        if segment.redundancy_group in selected_group:
+        if context_policy.redundancy_inhibition_enabled and segment.redundancy_group in selected_group:
             dropped_segments.append(segment)
             inhibition_events.append({"segment_id": segment.segment_id, "inhibition_source": selected_group[segment.redundancy_group], "kind": "lateral_inhibition"})
             decisions.append(CompactionDecision(segment_id=segment.segment_id, selected=False, reason="lateral_inhibition", inhibition_source=selected_group[segment.redundancy_group]))
             continue
         if len(selected_segments) < min_keep or selected_chars + segment_chars <= char_budget:
             selected_segments.append(segment)
-            selected_group[segment.redundancy_group] = segment.segment_id
+            if context_policy.redundancy_inhibition_enabled:
+                selected_group[segment.redundancy_group] = segment.segment_id
             selected_chars += segment_chars
             decisions.append(CompactionDecision(segment_id=segment.segment_id, selected=True, selected_representation=representation, selected_char_count=segment_chars, reason="selected_by_salience"))
         else:
@@ -445,7 +462,7 @@ async def apply_budget_aware_compaction(
     selected_task_packet = None
     selected_delegation_context: dict[str, Any] = {}
     for segment in selected_segments:
-        selected_content, _ = select_segment_representation(segment, compact=True)
+        selected_content, _ = select_segment_representation(segment, compact=compact_representations)
         if segment.segment_type in {"conversation", "tool_observation"}:
             selected_messages.append((int(segment.metadata.get("index", 0)), Message.model_validate(segment.content)))
         elif segment.segment_type == "retrieval_evidence":

@@ -254,6 +254,14 @@ class ContextPolicy(BaseModel):
     def stage_attention_profiles(self) -> dict[str, dict[str, float]]:
         return {}
 
+    @property
+    def use_builtin_stage_profiles(self) -> bool:
+        return True
+
+    @property
+    def redundancy_inhibition_enabled(self) -> bool:
+        return True
+
 
 class StatePolicy(BaseModel):
     """Neutral state-retention and refresh policy."""

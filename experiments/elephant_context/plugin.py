@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
+
+from pydantic import Field
 
 from agentorch.agents import AgentCapability
 from agentorch.config import RuntimeConfig
@@ -13,6 +16,37 @@ from agentorch.strategies import (
     MemoryPolicy,
     StatePolicy,
 )
+
+from .models import ElephantChapterConfig
+from .variants import get_elephant_variant
+
+
+class ElephantContextPolicy(ContextPolicy):
+    elephant_stage_attention_profiles: dict[str, dict[str, float]] = Field(default_factory=dict)
+    elephant_use_builtin_stage_profiles: bool = False
+    elephant_redundancy_inhibition_enabled: bool = True
+    elephant_salience_rerank_top_k: int = 8
+    elephant_segment_min_keep: int = 6
+
+    @property
+    def stage_attention_profiles(self) -> dict[str, dict[str, float]]:
+        return deepcopy(self.elephant_stage_attention_profiles)
+
+    @property
+    def use_builtin_stage_profiles(self) -> bool:
+        return self.elephant_use_builtin_stage_profiles
+
+    @property
+    def redundancy_inhibition_enabled(self) -> bool:
+        return self.elephant_redundancy_inhibition_enabled
+
+    @property
+    def salience_rerank_top_k(self) -> int:
+        return self.elephant_salience_rerank_top_k
+
+    @property
+    def segment_min_keep(self) -> int:
+        return self.elephant_segment_min_keep
 
 
 class ElephantContextSelector(DefaultContextSelector):
@@ -66,35 +100,74 @@ class MatriarchRoutePlanner(DefaultRoutePlanner):
 class ElephantMemoryEvaluator(DefaultMemoryEvaluator):
     """Evaluator tuned for validated collective promotion in elephant-context studies."""
 
+    def __init__(self, *, validation_threshold: float = 0.65, collective_promotion_threshold: float = 2.4) -> None:
+        self.validation_threshold = validation_threshold
+        self.collective_promotion_threshold = collective_promotion_threshold
+
     def resolved_runtime_config(self, policy: MemoryPolicy) -> dict[str, Any]:
         resolved = super().resolved_runtime_config(policy)
         if policy.validation_mode == "threshold":
-            resolved["validation_threshold"] = min(float(resolved.get("validation_threshold", 0.7)), 0.65)
+            resolved["validation_threshold"] = min(float(resolved.get("validation_threshold", 0.7)), self.validation_threshold)
         if policy.promotion_mode in {"hybrid", "validated"}:
-            resolved["collective_promotion_threshold"] = min(float(resolved.get("collective_promotion_threshold", 2.8)), 2.4)
+            resolved["collective_promotion_threshold"] = min(
+                float(resolved.get("collective_promotion_threshold", 2.8)),
+                self.collective_promotion_threshold,
+            )
         return resolved
 
 
-def elephant_context_policy(*, hybrid_selection: bool = False, char_budget: int = 18000) -> ContextPolicy:
+def _elephant_sources(chapter_config: ElephantChapterConfig) -> dict[str, Any]:
+    return {
+        "memory_summary": True,
+        "retrieval_summary": True,
+        "retrieval_evidence": {"enabled": True, "max_items": chapter_config.retrieval_evidence_max_items},
+        "retrieval_citations": {"enabled": True, "max_items": chapter_config.retrieval_citation_max_items},
+        "retrieval_report": True,
+        "retrieval_plan": False,
+        "tool_descriptions": False,
+        "skill_catalog": True,
+        "skill_instructions": True,
+        "skill_resources": {"enabled": True, "max_items": 4},
+        "task_packet": {"enabled": True, "representation": "capsule"},
+        "delegation_context": {"enabled": True, "representation": "capsule"},
+        "shared_memory": {"enabled": True, "max_items": chapter_config.shared_memory_max_items},
+    }
+
+
+def elephant_context_policy(
+    *,
+    chapter_config: ElephantChapterConfig | None = None,
+    hybrid_selection: bool = False,
+    char_budget: int | None = None,
+) -> ElephantContextPolicy:
+    resolved = (chapter_config or ElephantChapterConfig()).model_copy(deep=True)
+    if hybrid_selection:
+        resolved = resolved.merged(selection_mode="hybrid")
+    if char_budget is not None and char_budget != resolved.char_budget:
+        resolved = resolved.merged(char_budget=char_budget)
+    return ElephantContextPolicy(
+        sources=_elephant_sources(resolved),
+        conversation_window=resolved.conversation_window,
+        char_budget=resolved.char_budget,
+        tool_observation_mode=resolved.tool_observation_mode,
+        selection_mode=resolved.selection_mode,
+        overflow_action=resolved.overflow_action,
+        elephant_stage_attention_profiles=resolved.stage_attention_profiles,
+        elephant_use_builtin_stage_profiles=resolved.use_builtin_stage_profiles,
+        elephant_redundancy_inhibition_enabled=resolved.redundancy_inhibition_enabled,
+        elephant_salience_rerank_top_k=resolved.salience_rerank_top_k,
+        elephant_segment_min_keep=resolved.segment_min_keep,
+    )
+
+
+def baseline_context_policy(*, chapter_config: ElephantChapterConfig) -> ContextPolicy:
     return ContextPolicy(
-        sources={
-            "memory_summary": True,
-            "retrieval_summary": True,
-            "retrieval_evidence": {"enabled": True, "max_items": 5},
-            "retrieval_citations": {"enabled": True, "max_items": 6},
-            "retrieval_report": True,
-            "retrieval_plan": False,
-            "tool_descriptions": False,
-            "skill_instructions": True,
-            "task_packet": {"enabled": True, "representation": "capsule"},
-            "delegation_context": {"enabled": True, "representation": "capsule"},
-            "shared_memory": {"enabled": True, "max_items": 6},
-        },
-        conversation_window=6,
-        char_budget=char_budget,
-        tool_observation_mode="summary",
-        selection_mode="hybrid" if hybrid_selection else "rule",
-        overflow_action="compress",
+        sources=_elephant_sources(chapter_config),
+        conversation_window=chapter_config.conversation_window,
+        char_budget=chapter_config.char_budget,
+        tool_observation_mode=chapter_config.tool_observation_mode,
+        selection_mode=chapter_config.selection_mode,
+        overflow_action=chapter_config.overflow_action,
     )
 
 
@@ -120,15 +193,16 @@ def distributed_coordination_policy() -> CoordinationPolicy:
     return CoordinationPolicy.distributed(workspace_mode="balanced")
 
 
-def matriarch_memory_policy() -> MemoryPolicy:
+def matriarch_memory_policy(*, chapter_config: ElephantChapterConfig | None = None) -> MemoryPolicy:
+    resolved = chapter_config or ElephantChapterConfig()
     return MemoryPolicy.long_horizon(
         promotion_mode="validated",
         validation_mode="threshold",
         thresholds_and_weights={
-            "validation_threshold": 0.65,
+            "validation_threshold": resolved.validation_threshold,
             "allow_cross_thread_recall": True,
             "recall_top_k": 6,
-            "collective_promotion_threshold": 2.4,
+            "collective_promotion_threshold": resolved.collective_promotion_threshold,
             "trail_knowledge_enabled": True,
         },
     )
@@ -136,18 +210,50 @@ def matriarch_memory_policy() -> MemoryPolicy:
 
 def build_elephant_runtime_config(
     *,
+    variant: str = "elephant_full",
+    chapter_config: ElephantChapterConfig | None = None,
     hybrid_selection: bool = False,
     distributed: bool = False,
-    char_budget: int = 18000,
+    char_budget: int | None = None,
     **kwargs: Any,
 ) -> RuntimeConfig:
+    spec = get_elephant_variant(variant)
+    resolved_chapter = spec.chapter_config.model_copy(deep=True)
+    if chapter_config is not None:
+        resolved_chapter = resolved_chapter.model_copy(update=chapter_config.model_dump(exclude_unset=True), deep=True)
+    if variant == "elephant_full":
+        if hybrid_selection:
+            resolved_chapter = resolved_chapter.merged(selection_mode="hybrid")
+        if distributed:
+            resolved_chapter = resolved_chapter.merged(route_mode="distributed")
+    if char_budget is not None and char_budget != spec.chapter_config.char_budget:
+        resolved_chapter = resolved_chapter.merged(char_budget=char_budget)
+
+    context_policy: ContextPolicy
+    if spec.use_elephant_selector:
+        context_policy = elephant_context_policy(chapter_config=resolved_chapter)
+    else:
+        context_policy = baseline_context_policy(chapter_config=resolved_chapter)
+    coordination_policy = distributed_coordination_policy() if resolved_chapter.route_mode == "distributed" else matriarch_coordination_policy()
+
+    default_scope = kwargs.pop("default_knowledge_scope", spec.default_knowledge_scope or resolved_chapter.default_knowledge_scope)
+    enable_parallel_tasks = kwargs.pop("enable_parallel_tasks", resolved_chapter.route_mode == "distributed")
     return RuntimeConfig.agent(
-        context_policy=elephant_context_policy(hybrid_selection=hybrid_selection, char_budget=char_budget),
+        context_policy=context_policy,
         state_policy=collective_state_policy(),
-        coordination_policy=distributed_coordination_policy() if distributed else matriarch_coordination_policy(),
-        memory_policy=matriarch_memory_policy(),
-        context_selector=ElephantContextSelector(),
-        route_planner=MatriarchRoutePlanner(),
-        memory_evaluator=ElephantMemoryEvaluator(),
+        coordination_policy=coordination_policy,
+        memory_policy=matriarch_memory_policy(chapter_config=resolved_chapter),
+        context_selector=ElephantContextSelector() if spec.use_elephant_selector else None,
+        route_planner=MatriarchRoutePlanner() if spec.use_elephant_route_planner else None,
+        memory_evaluator=(
+            ElephantMemoryEvaluator(
+                validation_threshold=resolved_chapter.validation_threshold,
+                collective_promotion_threshold=resolved_chapter.collective_promotion_threshold,
+            )
+            if spec.use_elephant_memory_evaluator
+            else None
+        ),
+        default_knowledge_scope=list(default_scope),
+        enable_parallel_tasks=enable_parallel_tasks,
         **kwargs,
     )
