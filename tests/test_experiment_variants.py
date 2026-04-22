@@ -6,6 +6,7 @@ from experiments.elephant_context import (
     ElephantMemoryEvaluator,
     MatriarchRoutePlanner,
     build_elephant_runtime_config,
+    get_elephant_variant,
     distributed_coordination_policy,
     matriarch_coordination_policy,
 )
@@ -78,3 +79,24 @@ async def _test_matriarch_route_planner_reorders_guided_plan_but_not_distributed
         coordination_policy=distributed_coordination_policy(),
     )
     assert [invocation.agent_name for invocation in distributed_plan.invocations] == ["reviewer", "planner"]
+
+
+def test_strict_baselines_disable_elephant_collective_memory_and_mgcm_policy():
+    multi_agent = build_elephant_runtime_config(variant="multi_agent_default_context", char_budget=12000)
+    single_agent = build_elephant_runtime_config(variant="single_agent_long_context", char_budget=18000)
+
+    assert multi_agent.context_selector is None
+    assert multi_agent.route_planner is None
+    assert multi_agent.memory_evaluator is None
+    assert multi_agent.context_policy.source_enabled("shared_memory") is False
+    assert multi_agent.memory_policy.recall_mode == "off"
+    assert multi_agent.memory_policy.promotion_mode == "off"
+    assert multi_agent.memory_policy.validation_mode == "off"
+
+    assert single_agent.context_policy.source_enabled("shared_memory") is False
+    assert single_agent.context_policy.source_enabled("delegation_context") is False
+    assert single_agent.memory_policy.recall_mode == "off"
+    assert single_agent.memory_policy.promotion_mode == "off"
+
+    assert get_elephant_variant("multi_agent_default_context").use_mgcm_memory_policy is False
+    assert get_elephant_variant("single_agent_long_context").use_mgcm_memory_policy is False

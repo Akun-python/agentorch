@@ -368,7 +368,7 @@ def _evaluate_run(case: ElephantBenchmarkCase, spec_name: str, category: str, mu
     for report in budget_reports:
         after = float(report.get("estimated_total_chars_after") or 0.0)
         before = float(report.get("estimated_total_chars_before") or 0.0)
-        utilizations.append(after / max(1.0, float(budget)))
+        utilizations.append(min(after / max(1.0, float(budget)), 1.0))
         gains.append(max(0.0, before - after) / max(1.0, before))
 
     return BenchmarkRunRecord(

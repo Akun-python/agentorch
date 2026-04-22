@@ -5,7 +5,7 @@
 ## Active experiments
 
 - `experiments/elephant_context/`
-  - Elephant-context governance and collective routing policies.
+  - MGCM chapter package with elephant-context governance, lifecycle validation, and local baseline/ablation benchmarks.
 - `experiments/long_term_memory_graph/`
   - Long-term memory graph experiment package, tools, and benchmarks.
 

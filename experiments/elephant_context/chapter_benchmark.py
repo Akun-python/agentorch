@@ -60,6 +60,8 @@ def run_elephant_benchmark_sync(
         f"- Run ID: `{run_dir.name}`",
         f"- Suite: `{suite}`",
         f"- Output Dir: `{run_dir.resolve()}`",
+        "- Context artifacts: `context/`",
+        "- Lifecycle artifacts: `lifecycle/`",
         "",
     ]
     combined_runs_path = run_dir / "runs.jsonl"
