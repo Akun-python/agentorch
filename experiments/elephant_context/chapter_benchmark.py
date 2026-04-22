@@ -24,7 +24,7 @@ def _split_variants(variants: list[str] | None) -> tuple[list[str] | None, list[
         return None, None
     context_variants = [item for item in variants if item.startswith("elephant_") or item in {"multi_agent_default_context", "single_agent_long_context", "full_framework", "multi_agent_no_elephant"}]
     lifecycle_variants = [item for item in variants if item.startswith("mgcm_")]
-    return (context_variants or None, lifecycle_variants or None)
+    return context_variants, lifecycle_variants
 
 
 def _split_cases(case_ids: list[str] | None) -> tuple[list[str] | None, list[str] | None]:
@@ -32,7 +32,25 @@ def _split_cases(case_ids: list[str] | None) -> tuple[list[str] | None, list[str
         return None, None
     context_cases = [item for item in case_ids if not item.startswith(("succession_", "cross_thread_", "promotion_validation_", "conflict_", "temporal_decay_"))]
     lifecycle_cases = [item for item in case_ids if item.startswith(("succession_", "cross_thread_", "promotion_validation_", "conflict_", "temporal_decay_"))]
-    return (context_cases or None, lifecycle_cases or None)
+    return context_cases, lifecycle_cases
+
+
+def _should_run_split_suite(
+    *,
+    suite: str,
+    target: str,
+    variants: list[str] | None,
+    cases: list[str] | None,
+) -> bool:
+    if suite == target:
+        return True
+    if suite != "full":
+        return False
+    if variants is not None and not variants:
+        return False
+    if cases is not None and not cases:
+        return False
+    return True
 
 
 def run_elephant_benchmark_sync(
@@ -48,6 +66,20 @@ def run_elephant_benchmark_sync(
     run_dir.mkdir(parents=True, exist_ok=True)
     context_variants, lifecycle_variants = _split_variants(variants)
     context_cases, lifecycle_cases = _split_cases(case_ids)
+    run_context = _should_run_split_suite(
+        suite=suite,
+        target="context",
+        variants=context_variants if variants is not None else None,
+        cases=context_cases if case_ids is not None else None,
+    )
+    run_lifecycle = _should_run_split_suite(
+        suite=suite,
+        target="lifecycle",
+        variants=lifecycle_variants if variants is not None else None,
+        cases=lifecycle_cases if case_ids is not None else None,
+    )
+    if suite == "full" and not (run_context or run_lifecycle):
+        raise ValueError("No benchmark suites matched the provided full-suite variant/case filters.")
     manifest: dict[str, Any] = {
         "run_id": run_dir.name,
         "suite": suite,
@@ -67,7 +99,7 @@ def run_elephant_benchmark_sync(
     combined_runs_path = run_dir / "runs.jsonl"
     combined_runs: list[str] = []
 
-    if suite in {"full", "context"}:
+    if run_context:
         context_dir = run_dir / "context"
         context_manifest = run_elephant_context_benchmark_sync(
             quick=quick,
@@ -89,7 +121,7 @@ def run_elephant_benchmark_sync(
             ]
         )
 
-    if suite in {"full", "lifecycle"}:
+    if run_lifecycle:
         lifecycle_dir = run_dir / "lifecycle"
         lifecycle_manifest = run_lifecycle_benchmark_sync(
             quick=quick,

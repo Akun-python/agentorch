@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from experiments.elephant_context.chapter_benchmark import inspect_elephant_case_sync, run_elephant_benchmark_sync
 
 
@@ -67,3 +69,43 @@ def test_full_quick_benchmark_writes_context_and_lifecycle_artifacts(tmp_path: P
         lifecycle_dir / "summary.md",
     ):
         assert required.exists(), required
+
+
+def test_full_suite_variant_filter_does_not_fall_back_to_other_suite_defaults(tmp_path: Path):
+    output_dir = tmp_path / "context_only_benchmark"
+    manifest = run_elephant_benchmark_sync(
+        suite="full",
+        quick=True,
+        output_dir=output_dir,
+        variants=["elephant_full"],
+    )
+
+    assert "context" in manifest
+    assert "lifecycle" not in manifest
+    assert (output_dir / "context" / "summary.md").exists()
+    assert not (output_dir / "lifecycle").exists()
+
+
+def test_full_suite_case_filter_can_run_lifecycle_only(tmp_path: Path):
+    output_dir = tmp_path / "lifecycle_only_benchmark"
+    manifest = run_elephant_benchmark_sync(
+        suite="full",
+        quick=True,
+        output_dir=output_dir,
+        case_ids=["succession_01"],
+    )
+
+    assert "context" not in manifest
+    assert "lifecycle" in manifest
+    assert (output_dir / "lifecycle" / "summary.md").exists()
+    assert not (output_dir / "context").exists()
+
+
+def test_full_suite_raises_when_filters_match_no_subsuite(tmp_path: Path):
+    with pytest.raises(ValueError, match="No benchmark suites matched"):
+        run_elephant_benchmark_sync(
+            suite="full",
+            quick=True,
+            output_dir=tmp_path / "invalid_filters",
+            variants=["unknown_variant"],
+        )
