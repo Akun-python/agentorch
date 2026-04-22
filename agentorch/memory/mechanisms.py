@@ -187,6 +187,7 @@ class CollectiveMemoryMechanism(MemoryMechanism):
         "promote_collective_memory",
         "validate_collective_memory",
         "deprecate_collective_memory",
+        "resolve_conflict",
         "collect_candidate_notes",
     }
     depends_on: tuple[str, ...] = ("record_memory", "shared_note_memory")
@@ -203,6 +204,14 @@ class CollectiveMemoryMechanism(MemoryMechanism):
             return await manager.governance.validate_collective_memory(manager, kwargs["record_id"])
         if operation == "deprecate_collective_memory":
             return await manager.governance.deprecate_collective_memory(manager, kwargs["record_id"])
+        if operation == "resolve_conflict":
+            return await manager.governance.resolve_conflict(
+                manager,
+                kwargs["record_a_id"],
+                kwargs["record_b_id"],
+                kwargs["resolution"],
+                reason=kwargs.get("reason"),
+            )
         if operation == "collect_candidate_notes":
             return await manager.governance.collect_candidate_notes(
                 manager,

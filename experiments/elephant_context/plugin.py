@@ -134,6 +134,25 @@ def _elephant_sources(chapter_config: ElephantChapterConfig) -> dict[str, Any]:
     }
 
 
+def _baseline_sources(chapter_config: ElephantChapterConfig, *, multi_agent: bool) -> dict[str, Any]:
+    return {
+        "memory_summary": True,
+        "retrieval_summary": True,
+        "retrieval_evidence": {"enabled": True, "max_items": chapter_config.retrieval_evidence_max_items},
+        "retrieval_citations": {"enabled": True, "max_items": chapter_config.retrieval_citation_max_items},
+        "retrieval_report": True,
+        "retrieval_plan": False,
+        "tool_descriptions": False,
+        "skill_catalog": True,
+        "skill_instructions": True,
+        "skill_resources": {"enabled": True, "max_items": 4},
+        "task_packet": {"enabled": True, "representation": "capsule"},
+        "delegation_context": {"enabled": multi_agent, "representation": "capsule"},
+        # Strict baselines must not receive elephant collective-memory injection.
+        "shared_memory": {"enabled": False, "max_items": 0},
+    }
+
+
 def elephant_context_policy(
     *,
     chapter_config: ElephantChapterConfig | None = None,
@@ -160,13 +179,13 @@ def elephant_context_policy(
     )
 
 
-def baseline_context_policy(*, chapter_config: ElephantChapterConfig) -> ContextPolicy:
+def baseline_context_policy(*, chapter_config: ElephantChapterConfig, multi_agent: bool = True) -> ContextPolicy:
     return ContextPolicy(
-        sources=_elephant_sources(chapter_config),
+        sources=_baseline_sources(chapter_config, multi_agent=multi_agent),
         conversation_window=chapter_config.conversation_window,
         char_budget=chapter_config.char_budget,
         tool_observation_mode=chapter_config.tool_observation_mode,
-        selection_mode=chapter_config.selection_mode,
+        selection_mode="rule",
         overflow_action=chapter_config.overflow_action,
     )
 
@@ -208,6 +227,21 @@ def matriarch_memory_policy(*, chapter_config: ElephantChapterConfig | None = No
     )
 
 
+def baseline_memory_policy() -> MemoryPolicy:
+    default_thresholds = MemoryPolicy().thresholds_and_weights
+    return MemoryPolicy(
+        recall_mode="off",
+        promotion_mode="off",
+        validation_mode="off",
+        thresholds_and_weights={
+            **default_thresholds,
+            "allow_cross_thread_recall": False,
+            "trail_knowledge_enabled": False,
+            "recency_weight": 0.0,
+        },
+    )
+
+
 def build_elephant_runtime_config(
     *,
     variant: str = "elephant_full",
@@ -233,8 +267,16 @@ def build_elephant_runtime_config(
     if spec.use_elephant_selector:
         context_policy = elephant_context_policy(chapter_config=resolved_chapter)
     else:
-        context_policy = baseline_context_policy(chapter_config=resolved_chapter)
+        context_policy = baseline_context_policy(
+            chapter_config=resolved_chapter,
+            multi_agent=spec.multi_agent,
+        )
     coordination_policy = distributed_coordination_policy() if resolved_chapter.route_mode == "distributed" else matriarch_coordination_policy()
+    memory_policy = (
+        matriarch_memory_policy(chapter_config=resolved_chapter)
+        if spec.use_mgcm_memory_policy
+        else baseline_memory_policy()
+    )
 
     default_scope = kwargs.pop("default_knowledge_scope", spec.default_knowledge_scope or resolved_chapter.default_knowledge_scope)
     enable_parallel_tasks = kwargs.pop("enable_parallel_tasks", resolved_chapter.route_mode == "distributed")
@@ -242,7 +284,7 @@ def build_elephant_runtime_config(
         context_policy=context_policy,
         state_policy=collective_state_policy(),
         coordination_policy=coordination_policy,
-        memory_policy=matriarch_memory_policy(chapter_config=resolved_chapter),
+        memory_policy=memory_policy,
         context_selector=ElephantContextSelector() if spec.use_elephant_selector else None,
         route_planner=MatriarchRoutePlanner() if spec.use_elephant_route_planner else None,
         memory_evaluator=(

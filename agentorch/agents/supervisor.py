@@ -266,6 +266,14 @@ class SequentialTaskPlanner(AdaptiveTaskPlanner):
 
 
 class Supervisor:
+    """Supervisor acts as the matriarch governor in MGCM framework.
+
+    Responsibilities:
+    - Task coordination and agent routing
+    - Collective memory retrieval and injection
+    - Candidate knowledge governance and promotion
+    """
+
     def __init__(
         self,
         registry: AgentRegistry,
@@ -275,6 +283,118 @@ class Supervisor:
         self.registry = registry
         self.policy = policy or CapabilitySupervisorPolicy()
         self.planner = planner or AdaptiveTaskPlanner()
+
+    async def retrieve_collective_knowledge(
+        self,
+        task: TaskPacket,
+        memory: Any,
+        *,
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Retrieve validated collective memory as matriarch governor.
+
+        Args:
+            task: Task packet containing goal and context
+            memory: MemoryManager instance
+            limit: Maximum number of records to retrieve
+
+        Returns:
+            List of collective memory records
+        """
+        task_metadata = dict(task.metadata or {})
+        task_context = dict(task.context or {})
+        allow_cross_thread = bool(
+            task_metadata.get("allow_cross_thread_recall")
+            or task_context.get("allow_cross_thread_recall")
+        )
+        resolved_thread_id = None
+        if not allow_cross_thread:
+            resolved_thread_id = (
+                task_metadata.get("thread_id")
+                or task_context.get("thread_id")
+                or task.parent_task_id
+                or task.task_id
+            )
+
+        return await memory.search_collective_memory(
+            query=task.goal,
+            thread_id=resolved_thread_id,
+            memory_role="matriarch",
+            status="validated",
+            limit=limit,
+        )
+
+    async def govern_collective_memory(
+        self,
+        thread_id: str,
+        candidates: list[Any],
+        memory: Any,
+        *,
+        promotion_threshold: float = 2.0,
+    ) -> list[int]:
+        """Govern candidate knowledge and promote to collective memory.
+
+        Args:
+            thread_id: Thread identifier
+            candidates: List of SharedNote candidates
+            memory: MemoryManager instance
+            promotion_threshold: Minimum confidence threshold for promotion
+
+        Returns:
+            List of promoted record IDs
+        """
+        promoted_ids: list[int] = []
+        for candidate in candidates:
+            metadata = dict(candidate.metadata or {})
+            if not metadata.get("collective_candidate", True):
+                continue
+
+            source_agents = metadata.get("source_agents", [])
+            confidence = self._calculate_promotion_confidence(candidate, source_agents)
+
+            if confidence < promotion_threshold:
+                continue
+
+            kind = metadata.get("memory_kind", "lesson_learned")
+            content = candidate.content.strip()
+            if not content:
+                continue
+
+            existing = await memory.search_collective_memory(
+                query=content,
+                thread_id=thread_id,
+                status=None,
+                limit=10,
+            )
+            normalized = content.lower().strip()
+            if any(item["content"].lower().strip() == normalized for item in existing):
+                continue
+
+            record_id = await memory.promote_collective_memory(
+                thread_id=thread_id,
+                kind=kind,
+                content=content,
+                tags=metadata.get("tags", []),
+                source_agents=source_agents,
+                confidence=confidence,
+                scope=metadata.get("scope"),
+                status="validated",
+            )
+            promoted_ids.append(record_id)
+
+        return promoted_ids
+
+    def _calculate_promotion_confidence(
+        self,
+        candidate: Any,
+        source_agents: list[str],
+    ) -> float:
+        """Calculate confidence score for memory promotion."""
+        base_confidence = 0.6
+        agent_diversity_bonus = min(0.2, 0.1 * len(set(source_agents)))
+        metadata = dict(candidate.metadata or {})
+        evidence_bonus = 0.1 if metadata.get("has_evidence") else 0.0
+        return min(0.95, base_confidence + agent_diversity_bonus + evidence_bonus)
 
     async def create_plan(self, task: TaskPacket) -> DelegationPlan:
         decision = await self.policy.select_agents(task, self.registry)

@@ -21,6 +21,7 @@ def _build_variants() -> OrderedDict[str, ElephantVariantSpec]:
         use_elephant_selector=True,
         use_elephant_route_planner=True,
         use_elephant_memory_evaluator=True,
+        use_mgcm_memory_policy=True,
         chapter_config=ElephantChapterConfig(
             selection_mode="hybrid",
             overflow_action="compress",
@@ -49,6 +50,7 @@ def _build_variants() -> OrderedDict[str, ElephantVariantSpec]:
                     use_elephant_selector=False,
                     use_elephant_route_planner=False,
                     use_elephant_memory_evaluator=False,
+                    use_mgcm_memory_policy=False,
                     chapter_config=ElephantChapterConfig(
                         selection_mode="rule",
                         overflow_action="compress",
@@ -72,6 +74,7 @@ def _build_variants() -> OrderedDict[str, ElephantVariantSpec]:
                     use_elephant_selector=False,
                     use_elephant_route_planner=False,
                     use_elephant_memory_evaluator=False,
+                    use_mgcm_memory_policy=False,
                     chapter_config=ElephantChapterConfig(
                         char_budget=22000,
                         conversation_window=10,

@@ -99,6 +99,7 @@ class ElephantVariantSpec(BaseModel):
     use_elephant_selector: bool = True
     use_elephant_route_planner: bool = True
     use_elephant_memory_evaluator: bool = True
+    use_mgcm_memory_policy: bool = True
     chapter_config: ElephantChapterConfig = Field(default_factory=ElephantChapterConfig)
     default_knowledge_scope: list[str] = Field(default_factory=lambda: ["planning"])
 
@@ -121,12 +122,17 @@ class BenchmarkKnowledgeDocument(BaseModel):
 
 
 class BenchmarkCollectiveMemory(BaseModel):
+    record_key: str | None = None
     kind: str
     content: str
     tags: list[str] = Field(default_factory=list)
     source_agents: list[str] = Field(default_factory=lambda: ["elder"])
     confidence: float = 0.85
     scope: str | None = None
+    status: Literal["candidate", "validated", "deprecated"] = "validated"
+    reuse_count: int = 0
+    last_validated_at: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ElephantBenchmarkCase(BaseModel):

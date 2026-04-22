@@ -29,6 +29,7 @@ class MemoryManager:
         "promote_collective_memory",
         "validate_collective_memory",
         "deprecate_collective_memory",
+        "resolve_conflict",
         "append_agent_memory",
         "get_agent_memory",
         "write_workspace_record",
@@ -303,6 +304,33 @@ class MemoryManager:
 
     async def deprecate_collective_memory(self, record_id: int) -> dict[str, Any] | None:
         return await self._invoke_first("deprecate_collective_memory", record_id=record_id)
+
+    async def resolve_conflict(
+        self,
+        record_a_id: int,
+        record_b_id: int,
+        resolution: str,
+        *,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Resolve conflicts between two collective memories.
+
+        Args:
+            record_a_id: ID of first conflicting record
+            record_b_id: ID of second conflicting record
+            resolution: Resolution strategy ("supersede", "merge", "keep_both")
+            reason: Optional reason for the resolution
+
+        Returns:
+            Resolution result with status and affected record IDs
+        """
+        return await self._invoke_first(
+            "resolve_conflict",
+            record_a_id=record_a_id,
+            record_b_id=record_b_id,
+            resolution=resolution,
+            reason=reason,
+        )
 
     async def append_agent_memory(self, thread_id: str, agent_name: str, payload: dict[str, Any]) -> None:
         await self._invoke_first("append_agent_memory", thread_id=thread_id, agent_name=agent_name, payload=payload)

@@ -223,9 +223,10 @@ class ContextKernel:
                 1,
                 int(recall_config.get("recall_top_k", self.runtime.config.max_retrieved_chunks) or self.runtime.config.max_retrieved_chunks),
             )
+            resolved_thread_id = None if recall_config.get("allow_cross_thread_recall") else thread_id
             shared_records = await self.runtime.memory.search_collective_memory(
                 query=user_input,
-                thread_id=thread_id,
+                thread_id=resolved_thread_id,
                 limit=recall_limit,
             )
         payload = self.runtime._collective_memory_payload(shared_records)
