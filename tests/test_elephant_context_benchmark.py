@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 import pytest
@@ -103,6 +104,13 @@ def test_context_real_task_dataset_and_seeded_run(tmp_path: Path):
     assert manifest["suite"] == "context"
     assert manifest["context"]["dataset"] == "real_task_x"
     assert manifest["context"]["seeds"] == [0, 1]
+    runs_path = output_dir / "context" / "runs.jsonl"
+    first = json.loads(runs_path.read_text(encoding="utf-8").splitlines()[0])
+    assert "cost_metrics" in first
+    assert "latency_ms" in first["cost_metrics"]
+    assert "total_tokens" in first["cost_metrics"]
+    assert "retrieval_trace" in first
+    assert "rejection_trace" in first
 
 
 def test_full_real_task_dataset_runs_context_and_lifecycle(tmp_path: Path):
@@ -142,6 +150,15 @@ def test_lifecycle_cross_thread_regains_signal_when_cross_thread_enabled(tmp_pat
     }
     assert float(by_variant["mgcm_full"]["task_success"]) == 1.0
     assert float(by_variant["mgcm_no_cross_thread"]["task_success"]) == 0.0
+    inspection = inspect_elephant_case_sync(
+        suite="lifecycle",
+        case_id="cross_thread_01",
+        variant="mgcm_full",
+        output_dir=tmp_path / "cross_thread_diag",
+    )
+    diagnostics = inspection["record"]["detail"]["diagnostics"]
+    assert "candidate_count_collective_memory" in diagnostics
+    assert "candidate_count_record_store" in diagnostics
 
 
 def test_lifecycle_temporal_decay_differs_by_recency_weight(tmp_path: Path):
@@ -203,3 +220,25 @@ def test_full_suite_raises_when_filters_match_no_subsuite(tmp_path: Path):
             output_dir=tmp_path / "invalid_filters",
             variants=["unknown_variant"],
         )
+
+
+def test_significance_rows_include_tie_aware_columns(tmp_path: Path):
+    output_dir = tmp_path / "significance_columns"
+    run_elephant_benchmark_sync(
+        suite="full",
+        quick=True,
+        output_dir=output_dir,
+        seeds=[0, 1],
+    )
+    for path in (
+        output_dir / "context" / "paired_significance.csv",
+        output_dir / "lifecycle" / "paired_significance.csv",
+    ):
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        assert rows
+        sample = rows[0]
+        assert "effective_pair_count" in sample
+        assert "positive_count" in sample
+        assert "negative_count" in sample
+        assert "tie_count" in sample

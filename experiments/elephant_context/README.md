@@ -54,6 +54,7 @@ experiments/elephant_context/
   - `cost_metrics`
 - 新增统计文件 `metric_stats.csv`，按指标输出 `mean/std/ci95`。
 - 新增 `paired_significance.csv`，输出与主 baseline 的配对差值和 sign-test `p-value`。
+  - 包含 `effective_pair_count/positive_count/negative_count/tie_count`，平局样本不计入 sign-test 有效样本。
 
 ## 兼容策略
 

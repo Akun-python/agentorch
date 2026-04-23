@@ -825,6 +825,17 @@ def _binomial_two_sided_pvalue(k_success: int, n_total: int) -> float:
     return min(1.0, 2.0 * cumulative)
 
 
+def _sign_test_stats(deltas: list[float], *, eps: float = 1e-12) -> tuple[int, int, int, int, float]:
+    positive = sum(1 for value in deltas if value > eps)
+    negative = sum(1 for value in deltas if value < -eps)
+    tie = len(deltas) - positive - negative
+    effective = positive + negative
+    if effective <= 0:
+        return positive, negative, tie, effective, 1.0
+    p_value = _binomial_two_sided_pvalue(min(positive, negative), effective)
+    return positive, negative, tie, effective, p_value
+
+
 def _paired_significance_rows(records: list[BenchmarkRunRecord]) -> list[dict[str, Any]]:
     baseline_index = {
         (record.case_id, record.budget, record.seed): record
@@ -848,14 +859,17 @@ def _paired_significance_rows(records: list[BenchmarkRunRecord]) -> list[dict[st
                 deltas.append(float(getattr(item, metric)) - float(getattr(baseline, metric)))
             if not deltas:
                 continue
-            non_negative = sum(1 for value in deltas if value >= 0)
-            p_value = _binomial_two_sided_pvalue(non_negative, len(deltas))
+            positive, negative, tie, effective, p_value = _sign_test_stats(deltas)
             rows.append(
                 {
                     "variant": variant,
                     "budget": budget,
                     "metric": metric,
                     "pair_count": len(deltas),
+                    "effective_pair_count": effective,
+                    "positive_count": positive,
+                    "negative_count": negative,
+                    "tie_count": tie,
                     "mean_delta": round(_average(deltas), 6),
                     "std_delta": round(_std(deltas), 6),
                     "ci95_delta": round(_ci95(deltas), 6),

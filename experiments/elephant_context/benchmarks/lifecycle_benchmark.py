@@ -254,23 +254,83 @@ async def _collect_recall_diagnostics(
     kinds = ["thread_message", "episodic_capsule", "semantic_memory"]
     scope_filter = set(case.knowledge_scope)
     search_thread = None if variant.allow_cross_thread_recall else thread_id
-    all_records = await memory.record_store.search(
+    raw_all_records = await memory.record_store.search(
         thread_id=search_thread,
         query=None,
         kinds=kinds,
         order_desc=True,
         limit=40,
     )
-    query_records = await memory.record_store.search(
+    raw_query_records = await memory.record_store.search(
         thread_id=search_thread,
         query=query if query else None,
         kinds=kinds,
         order_desc=True,
         limit=40,
     )
-    query_record_ids = {item["id"] for item in query_records}
+    collective_all = await memory.search_collective_memory(
+        query=None,
+        thread_id=search_thread,
+        status=None,
+        limit=40,
+    )
+    collective_query = await memory.search_collective_memory(
+        query=query if query else None,
+        thread_id=search_thread,
+        status=None,
+        limit=40,
+    )
+
+    def _from_collective(item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": item.get("id"),
+            "thread_id": item.get("thread_id"),
+            "kind": item.get("kind"),
+            "content": item.get("content"),
+            "metadata": dict(item.get("metadata") or {}),
+            "source": "collective_memory",
+        }
+
+    def _from_record_store(item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": item.get("id"),
+            "thread_id": item.get("thread_id"),
+            "kind": item.get("kind"),
+            "content": item.get("content"),
+            "metadata": dict(item.get("metadata") or {}),
+            "source": "record_store",
+        }
+
+    all_records_map: dict[int, dict[str, Any]] = {}
+    for item in raw_all_records:
+        record = _from_record_store(item)
+        if record.get("id") is not None:
+            all_records_map[int(record["id"])] = record
+    for item in collective_all:
+        record = _from_collective(item)
+        record_id = record.get("id")
+        if record_id is None:
+            continue
+        existing = all_records_map.get(int(record_id))
+        if existing is None:
+            all_records_map[int(record_id)] = record
+        else:
+            existing["source"] = "record_store+collective_memory"
+            existing["metadata"] = {**dict(existing.get("metadata") or {}), **dict(record.get("metadata") or {})}
+
+    query_record_ids = {
+        int(item["id"])
+        for item in raw_query_records
+        if item.get("id") is not None
+    }
+    query_record_ids.update(
+        int(item["id"])
+        for item in collective_query
+        if item.get("id") is not None
+    )
     rejection_trace: list[dict[str, Any]] = []
     candidate_trace: list[dict[str, Any]] = []
+    all_records = list(all_records_map.values())
     for row in all_records:
         metadata = dict(row.get("metadata") or {})
         record_scope = metadata.get("knowledge_scope") or metadata.get("scope")
@@ -278,7 +338,7 @@ async def _collect_recall_diagnostics(
             record_scope = [item for item in record_scope.split(",") if item]
         scope_overlap = bool(set(record_scope or []).intersection(scope_filter)) if scope_filter else True
         reasons: list[str] = []
-        if query and row["id"] not in query_record_ids:
+        if query and int(row["id"]) not in query_record_ids:
             reasons.append("query_like_miss")
         if not scope_overlap:
             reasons.append("scope_mismatch")
@@ -286,6 +346,7 @@ async def _collect_recall_diagnostics(
             "record_id": row["id"],
             "thread_id": row.get("thread_id"),
             "kind": row.get("kind"),
+            "source": row.get("source"),
             "query_overlap": _query_overlap(query, row.get("content", "")),
             "scope_overlap": scope_overlap,
             "preview": (row.get("content") or "")[:160],
@@ -296,7 +357,9 @@ async def _collect_recall_diagnostics(
     return {
         "query": query,
         "candidate_count": len(all_records),
-        "query_match_count": len(query_records),
+        "query_match_count": len(query_record_ids),
+        "candidate_count_record_store": len(raw_all_records),
+        "candidate_count_collective_memory": len(collective_all),
         "candidate_trace": candidate_trace,
         "rejection_trace": rejection_trace,
     }
@@ -850,6 +913,17 @@ def _binomial_two_sided_pvalue(k_success: int, n_total: int) -> float:
     return min(1.0, 2.0 * cumulative)
 
 
+def _sign_test_stats(deltas: list[float], *, eps: float = 1e-12) -> tuple[int, int, int, int, float]:
+    positive = sum(1 for value in deltas if value > eps)
+    negative = sum(1 for value in deltas if value < -eps)
+    tie = len(deltas) - positive - negative
+    effective = positive + negative
+    if effective <= 0:
+        return positive, negative, tie, effective, 1.0
+    p_value = _binomial_two_sided_pvalue(min(positive, negative), effective)
+    return positive, negative, tie, effective, p_value
+
+
 def _paired_significance_rows(records: list[LifecycleRunRecord]) -> list[dict[str, Any]]:
     baseline_index = {
         (record.case_id, record.seed): record
@@ -872,13 +946,16 @@ def _paired_significance_rows(records: list[LifecycleRunRecord]) -> list[dict[st
                 deltas.append(float(getattr(item, metric)) - float(getattr(baseline, metric)))
             if not deltas:
                 continue
-            non_negative = sum(1 for value in deltas if value >= 0)
-            p_value = _binomial_two_sided_pvalue(non_negative, len(deltas))
+            positive, negative, tie, effective, p_value = _sign_test_stats(deltas)
             rows.append(
                 {
                     "variant": variant,
                     "metric": metric,
                     "pair_count": len(deltas),
+                    "effective_pair_count": effective,
+                    "positive_count": positive,
+                    "negative_count": negative,
+                    "tie_count": tie,
                     "mean_delta": round(_safe_avg(deltas), 6),
                     "std_delta": round(_std(deltas), 6),
                     "ci95_delta": round(_ci95(deltas), 6),
