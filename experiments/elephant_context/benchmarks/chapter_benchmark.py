@@ -38,10 +38,12 @@ def _split_cases(case_ids: list[str] | None) -> tuple[list[str] | None, list[str
 def _split_dataset(dataset: str | None) -> tuple[str | None, str | None]:
     if dataset is None:
         return None, None
-    if dataset in {"context_synth", "real_task_x"}:
+    if dataset in {"context_synth"}:
         return dataset, None
     if dataset in {"lifecycle_synth"}:
         return None, dataset
+    if dataset in {"real_task_x"}:
+        return "real_task_x", "real_task_x"
     if dataset in {"full_synth"}:
         return "context_synth", "lifecycle_synth"
     raise ValueError(

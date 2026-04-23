@@ -73,6 +73,7 @@ def test_full_quick_benchmark_writes_context_and_lifecycle_artifacts(tmp_path: P
         context_dir / "ablation_summary.csv",
         context_dir / "scenario_breakdown.csv",
         context_dir / "paired_deltas.csv",
+        context_dir / "paired_significance.csv",
         context_dir / "summary.md",
         lifecycle_dir / "manifest.json",
         lifecycle_dir / "runs.jsonl",
@@ -80,6 +81,7 @@ def test_full_quick_benchmark_writes_context_and_lifecycle_artifacts(tmp_path: P
         lifecycle_dir / "ablation_summary.csv",
         lifecycle_dir / "scenario_breakdown.csv",
         lifecycle_dir / "paired_deltas.csv",
+        lifecycle_dir / "paired_significance.csv",
         lifecycle_dir / "summary.md",
     ):
         assert required.exists(), required
@@ -101,6 +103,23 @@ def test_context_real_task_dataset_and_seeded_run(tmp_path: Path):
     assert manifest["suite"] == "context"
     assert manifest["context"]["dataset"] == "real_task_x"
     assert manifest["context"]["seeds"] == [0, 1]
+
+
+def test_full_real_task_dataset_runs_context_and_lifecycle(tmp_path: Path):
+    output_dir = tmp_path / "full_real_task"
+    manifest = run_elephant_benchmark_sync(
+        suite="full",
+        quick=True,
+        output_dir=output_dir,
+        dataset="real_task_x",
+        model_backend="probe",
+        seeds=[0],
+    )
+    assert "context" in manifest
+    assert "lifecycle" in manifest
+    assert manifest["context"]["dataset"] == "real_task_x"
+    assert manifest["lifecycle"]["dataset"] == "real_task_x"
+    assert "cross_thread_real_01" in manifest["lifecycle"]["case_ids"]
 
 
 def test_lifecycle_cross_thread_regains_signal_when_cross_thread_enabled(tmp_path: Path):

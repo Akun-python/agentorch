@@ -39,6 +39,7 @@ experiments/elephant_context/
 
 - `--model-backend`: `probe` / `openai` / `local-llm`
 - `--dataset`: `context_synth` / `lifecycle_synth` / `real_task_x` / `full_synth`
+  - `suite=full` + `real_task_x` 会同时运行 context + lifecycle 的真实任务子集。
 - `--seeds`: 多 seed 重复运行（例如 `--seeds 0 1 2`）
 - `--report-level`: `brief` / `full`
 
@@ -52,6 +53,7 @@ experiments/elephant_context/
   - `rejection_trace`
   - `cost_metrics`
 - 新增统计文件 `metric_stats.csv`，按指标输出 `mean/std/ci95`。
+- 新增 `paired_significance.csv`，输出与主 baseline 的配对差值和 sign-test `p-value`。
 
 ## 兼容策略
 

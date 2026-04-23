@@ -26,8 +26,8 @@ from .lifecycle_cases import (
     get_lifecycle_variant,
     list_lifecycle_cases,
     list_lifecycle_variants,
-    quick_lifecycle_case_ids,
 )
+from .lifecycle_real_cases import get_real_lifecycle_case, list_real_lifecycle_cases
 from ..core.models import BenchmarkCollectiveMemory
 
 LIFECYCLE_METRIC_FIELDS = (
@@ -65,6 +65,33 @@ def _resolve_model_backend(model_backend: str | None) -> str:
         options = ", ".join(sorted(SUPPORTED_MODEL_BACKENDS))
         raise ValueError(f"Unsupported model backend '{model_backend}'. Use one of: {options}.")
     return resolved
+
+
+def _list_lifecycle_cases_for_dataset(dataset_id: str) -> list[LifecycleBenchmarkCase]:
+    if dataset_id == "lifecycle_synth":
+        return list_lifecycle_cases()
+    if dataset_id == "real_task_x":
+        return list_real_lifecycle_cases()
+    raise ValueError(f"Unsupported lifecycle dataset '{dataset_id}'.")
+
+
+def _get_lifecycle_case_for_dataset(dataset_id: str, case_id: str) -> LifecycleBenchmarkCase:
+    if dataset_id == "lifecycle_synth":
+        return get_lifecycle_case(case_id)
+    if dataset_id == "real_task_x":
+        return get_real_lifecycle_case(case_id)
+    raise ValueError(f"Unsupported lifecycle dataset '{dataset_id}'.")
+
+
+def _quick_case_ids(cases: list[LifecycleBenchmarkCase]) -> list[str]:
+    seen: set[str] = set()
+    selected: list[str] = []
+    for case in cases:
+        if case.family in seen:
+            continue
+        seen.add(case.family)
+        selected.append(case.case_id)
+    return selected
 
 
 def _std(values: list[float]) -> float:
@@ -811,6 +838,56 @@ def _metric_stats_rows(records: list[LifecycleRunRecord], *, keys: tuple[str, ..
     return rows
 
 
+def _binomial_two_sided_pvalue(k_success: int, n_total: int) -> float:
+    if n_total <= 0:
+        return 1.0
+    from math import comb
+
+    threshold = min(k_success, n_total - k_success)
+    cumulative = 0.0
+    for i in range(0, threshold + 1):
+        cumulative += comb(n_total, i) * (0.5 ** n_total)
+    return min(1.0, 2.0 * cumulative)
+
+
+def _paired_significance_rows(records: list[LifecycleRunRecord]) -> list[dict[str, Any]]:
+    baseline_index = {
+        (record.case_id, record.seed): record
+        for record in records
+        if record.variant == "mgcm_full" and record.status == "completed"
+    }
+    grouped: dict[str, list[LifecycleRunRecord]] = defaultdict(list)
+    for record in records:
+        if record.variant == "mgcm_full" or record.status != "completed":
+            continue
+        grouped[record.variant].append(record)
+    rows: list[dict[str, Any]] = []
+    for variant, items in sorted(grouped.items()):
+        for metric in LIFECYCLE_METRIC_FIELDS:
+            deltas: list[float] = []
+            for item in items:
+                baseline = baseline_index.get((item.case_id, item.seed))
+                if baseline is None:
+                    continue
+                deltas.append(float(getattr(item, metric)) - float(getattr(baseline, metric)))
+            if not deltas:
+                continue
+            non_negative = sum(1 for value in deltas if value >= 0)
+            p_value = _binomial_two_sided_pvalue(non_negative, len(deltas))
+            rows.append(
+                {
+                    "variant": variant,
+                    "metric": metric,
+                    "pair_count": len(deltas),
+                    "mean_delta": round(_safe_avg(deltas), 6),
+                    "std_delta": round(_std(deltas), 6),
+                    "ci95_delta": round(_ci95(deltas), 6),
+                    "sign_test_pvalue": round(float(p_value), 6),
+                }
+            )
+    return rows
+
+
 def _paired_delta_rows(records: list[LifecycleRunRecord]) -> list[dict[str, Any]]:
     baseline_index = {
         (record.case_id, record.seed): record
@@ -914,9 +991,10 @@ async def run_lifecycle_benchmark(
     resolved_backend = _resolve_model_backend(model_backend)
     resolved_seeds = list(seeds or list(DEFAULT_SEEDS))
     resolved_report_level = "brief" if str(report_level).strip().lower() == "brief" else "full"
+    all_cases = _list_lifecycle_cases_for_dataset(resolved_dataset)
     selected_variants = list(variants or (["mgcm_full", "mgcm_thread_local_memory"] if quick else [item.name for item in list_lifecycle_variants()]))
-    selected_case_ids = list(case_ids or (quick_lifecycle_case_ids() if quick else [case.case_id for case in list_lifecycle_cases()]))
-    cases = [get_lifecycle_case(case_id) for case_id in selected_case_ids]
+    selected_case_ids = list(case_ids or (_quick_case_ids(all_cases) if quick else [case.case_id for case in all_cases]))
+    cases = [_get_lifecycle_case_for_dataset(resolved_dataset, case_id) for case_id in selected_case_ids]
     records: list[LifecycleRunRecord] = []
     for seed in resolved_seeds:
         options = _LifecycleRunOptions(
@@ -934,6 +1012,7 @@ async def run_lifecycle_benchmark(
     scenario_rows = _group_rows(records, keys=("family", "variant"))
     delta_rows = _paired_delta_rows(records)
     stats_rows = _metric_stats_rows(records, keys=("variant",))
+    significance_rows = _paired_significance_rows(records)
     manifest = {
         "run_id": run_dir.name,
         "quick": quick,
@@ -954,6 +1033,7 @@ async def run_lifecycle_benchmark(
     _write_csv(run_dir / "scenario_breakdown.csv", scenario_rows)
     _write_csv(run_dir / "paired_deltas.csv", delta_rows)
     _write_csv(run_dir / "metric_stats.csv", stats_rows)
+    _write_csv(run_dir / "paired_significance.csv", significance_rows)
     summary_md = _build_summary_markdown(
         run_id=run_dir.name,
         records=records,
@@ -1003,9 +1083,10 @@ async def inspect_lifecycle_case(
     run_dir = _artifact_dir(output_dir)
     runtime_dir = run_dir / "runtime_state"
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    case = get_lifecycle_case(case_id)
+    resolved_dataset = _resolve_lifecycle_dataset(dataset)
+    case = _get_lifecycle_case_for_dataset(resolved_dataset, case_id)
     options = _LifecycleRunOptions(
-        dataset_id=_resolve_lifecycle_dataset(dataset),
+        dataset_id=resolved_dataset,
         model_backend=_resolve_model_backend(model_backend),
         seed=int(seed),
         report_level="brief" if str(report_level).strip().lower() == "brief" else "full",

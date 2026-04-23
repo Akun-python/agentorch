@@ -9,6 +9,7 @@ from .lifecycle_cases import (
     list_lifecycle_cases,
     list_lifecycle_variants,
 )
+from .lifecycle_real_cases import get_real_lifecycle_case, list_real_lifecycle_cases
 from .probe_model import ChapterProbeModel
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "get_elephant_benchmark_case",
     "get_real_task_case",
     "get_lifecycle_case",
+    "get_real_lifecycle_case",
     "get_lifecycle_variant",
     "inspect_elephant_case_sync",
     "inspect_elephant_context_case_sync",
@@ -23,6 +25,7 @@ __all__ = [
     "list_elephant_benchmark_cases",
     "list_real_task_cases",
     "list_lifecycle_cases",
+    "list_real_lifecycle_cases",
     "list_lifecycle_variants",
     "run_elephant_benchmark_sync",
     "run_elephant_context_benchmark_sync",

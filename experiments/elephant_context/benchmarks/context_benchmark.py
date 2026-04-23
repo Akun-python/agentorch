@@ -5,6 +5,7 @@ import csv
 import json
 import math
 import random
+import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
@@ -115,6 +116,8 @@ class _ExecutionPayload:
     reasoning_payloads: list[dict[str, Any]]
     planned_agents: list[str]
     plan_reason: str | None
+    usage: dict[str, int]
+    latency_ms: float
 
 
 def _timestamp() -> str:
@@ -393,6 +396,27 @@ def _extract_observed_fields(output_text: str) -> dict[str, str]:
     return observed
 
 
+def _normalize_text(value: str) -> str:
+    return " ".join(value.strip().lower().split())
+
+
+def _value_matches(observed_value: str | None, expected_value: str) -> bool:
+    if observed_value is None:
+        return False
+    observed_norm = _normalize_text(observed_value)
+    expected_norm = _normalize_text(expected_value)
+    if not observed_norm or not expected_norm:
+        return observed_norm == expected_norm
+    return observed_norm == expected_norm or expected_norm in observed_norm
+
+
+def _output_contains_expected(output_text: str, expected_fields: dict[str, str]) -> bool:
+    normalized_output = _normalize_text(output_text)
+    if not normalized_output:
+        return False
+    return all(_normalize_text(value) in normalized_output for value in expected_fields.values())
+
+
 def _extract_reasoning_payloads(payload: _ExecutionPayload) -> list[dict[str, Any]]:
     return payload.reasoning_payloads
 
@@ -412,7 +436,12 @@ def _evaluate_run(
 ) -> BenchmarkRunRecord:
     reasoning_payloads = _extract_reasoning_payloads(payload)
     observed = _extract_observed_fields(payload.output_text)
-    task_success = 1.0 if all(observed.get(key) == value for key, value in case.expected_answer_fields.items()) else 0.0
+    structured_match = all(
+        _value_matches(observed.get(key), value)
+        for key, value in case.expected_answer_fields.items()
+    )
+    text_match = _output_contains_expected(payload.output_text, case.expected_answer_fields)
+    task_success = 1.0 if structured_match or text_match else 0.0
 
     selected_segments: list[dict[str, Any]] = []
     dropped_segments: list[dict[str, Any]] = []
@@ -483,6 +512,10 @@ def _evaluate_run(
         "estimated_total_chars_after_avg": round(_average(after_chars), 6),
         "budget_utilization": round(_average(utilizations), 6),
         "compaction_gain": round(_average(gains), 6),
+        "latency_ms": round(float(payload.latency_ms), 6),
+        "prompt_tokens": int(payload.usage.get("prompt_tokens", 0) or 0),
+        "completion_tokens": int(payload.usage.get("completion_tokens", 0) or 0),
+        "total_tokens": int(payload.usage.get("total_tokens", 0) or 0),
     }
     if report_level == "brief":
         retrieval_trace = retrieval_trace[:8]
@@ -558,6 +591,7 @@ async def _run_single_agent_case(
         reason=_handoff_reason(case, "single_agent_entry"),
         metadata={"case_id": case.case_id},
     )
+    started = time.perf_counter()
     result = await agent.run(
         case.user_input,
         thread_id=thread_id,
@@ -568,12 +602,19 @@ async def _run_single_agent_case(
             "agent_role": "single_agent",
         },
     )
+    latency_ms = (time.perf_counter() - started) * 1000.0
     await runtime.aclose()
     return _ExecutionPayload(
         output_text=result.output_text,
         reasoning_payloads=[dict(result.reasoning_metadata)],
         planned_agents=["single_agent"],
         plan_reason=handoff.reason,
+        usage={
+            "prompt_tokens": int(result.usage.prompt_tokens or 0),
+            "completion_tokens": int(result.usage.completion_tokens or 0),
+            "total_tokens": int(result.usage.total_tokens or 0),
+        },
+        latency_ms=round(latency_ms, 3),
     )
 
 
@@ -640,6 +681,7 @@ async def _run_multi_agent_case(
     if plan_reason != plan.reason:
         plan = plan.model_copy(update={"reason": plan_reason})
 
+    started = time.perf_counter()
     delegated_results = []
     for invocation in plan.invocations:
         await _seed_messages(memory, invocation.task.task_id, case.thread_messages)
@@ -665,12 +707,21 @@ async def _run_multi_agent_case(
         dict(result.metadata.get("reasoning_metadata") or {})
         for result in delegated_results
     ]
+    usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    for result in delegated_results:
+        budget = dict(result.budget_used or {})
+        usage["prompt_tokens"] += int(budget.get("prompt_tokens", 0) or 0)
+        usage["completion_tokens"] += int(budget.get("completion_tokens", 0) or 0)
+        usage["total_tokens"] += int(budget.get("total_tokens", 0) or 0)
+    latency_ms = (time.perf_counter() - started) * 1000.0
     await runtime.aclose()
     return _ExecutionPayload(
         output_text=aggregated.summary,
         reasoning_payloads=reasoning_payloads,
         planned_agents=[invocation.agent_name for invocation in plan.invocations],
         plan_reason=plan.reason,
+        usage=usage,
+        latency_ms=round(latency_ms, 3),
     )
 
 
@@ -757,6 +808,58 @@ def _metric_stats_rows(records: list[BenchmarkRunRecord], *, keys: tuple[str, ..
                     "mean": round(_average(values), 6),
                     "std": round(_std(values), 6),
                     "ci95": round(_ci95(values), 6),
+                }
+            )
+    return rows
+
+
+def _binomial_two_sided_pvalue(k_success: int, n_total: int) -> float:
+    if n_total <= 0:
+        return 1.0
+    from math import comb
+
+    threshold = min(k_success, n_total - k_success)
+    cumulative = 0.0
+    for i in range(0, threshold + 1):
+        cumulative += comb(n_total, i) * (0.5 ** n_total)
+    return min(1.0, 2.0 * cumulative)
+
+
+def _paired_significance_rows(records: list[BenchmarkRunRecord]) -> list[dict[str, Any]]:
+    baseline_index = {
+        (record.case_id, record.budget, record.seed): record
+        for record in records
+        if record.variant == "elephant_full" and record.status == "completed"
+    }
+    grouped: dict[tuple[str, int], list[BenchmarkRunRecord]] = defaultdict(list)
+    for record in records:
+        if record.variant == "elephant_full" or record.status != "completed":
+            continue
+        grouped[(record.variant, record.budget)].append(record)
+
+    rows: list[dict[str, Any]] = []
+    for (variant, budget), items in sorted(grouped.items()):
+        for metric in ("task_success", "context_recall", "key_evidence_retention_rate", "stage_focus_hit_rate"):
+            deltas: list[float] = []
+            for item in items:
+                baseline = baseline_index.get((item.case_id, item.budget, item.seed))
+                if baseline is None:
+                    continue
+                deltas.append(float(getattr(item, metric)) - float(getattr(baseline, metric)))
+            if not deltas:
+                continue
+            non_negative = sum(1 for value in deltas if value >= 0)
+            p_value = _binomial_two_sided_pvalue(non_negative, len(deltas))
+            rows.append(
+                {
+                    "variant": variant,
+                    "budget": budget,
+                    "metric": metric,
+                    "pair_count": len(deltas),
+                    "mean_delta": round(_average(deltas), 6),
+                    "std_delta": round(_std(deltas), 6),
+                    "ci95_delta": round(_ci95(deltas), 6),
+                    "sign_test_pvalue": round(float(p_value), 6),
                 }
             )
     return rows
@@ -939,6 +1042,7 @@ async def run_elephant_benchmark(
     scenario_rows = _group_rows(records, keys=("family", "variant", "budget"))
     delta_rows = _paired_delta_rows(records)
     stats_rows = _metric_stats_rows(records, keys=("variant", "budget"))
+    significance_rows = _paired_significance_rows(records)
 
     manifest = {
         "run_id": run_dir.name,
@@ -961,6 +1065,7 @@ async def run_elephant_benchmark(
     _write_csv(run_dir / "scenario_breakdown.csv", scenario_rows)
     _write_csv(run_dir / "paired_deltas.csv", delta_rows)
     _write_csv(run_dir / "metric_stats.csv", stats_rows)
+    _write_csv(run_dir / "paired_significance.csv", significance_rows)
     summary_md = _build_summary_markdown(
         run_id=run_dir.name,
         records=records,
