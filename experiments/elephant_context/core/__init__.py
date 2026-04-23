@@ -1,9 +1,14 @@
-"""Compatibility shim for historical imports.
-
-Canonical location: ``experiments.elephant_context.core.plugin``.
-"""
-
-from .core.plugin import (
+from .models import (
+    BenchmarkCollectiveMemory,
+    BenchmarkKnowledgeDocument,
+    BenchmarkMessageSeed,
+    ElephantBenchmarkCase,
+    ElephantChapterConfig,
+    ElephantVariantSpec,
+    default_stage_attention_profiles,
+    flatten_stage_attention_profiles,
+)
+from .plugin import (
     ElephantContextPolicy,
     ElephantContextSelector,
     ElephantMemoryEvaluator,
@@ -17,8 +22,15 @@ from .core.plugin import (
     matriarch_coordination_policy,
     matriarch_memory_policy,
 )
+from .variants import get_elephant_variant, list_elephant_variants
 
 __all__ = [
+    "BenchmarkCollectiveMemory",
+    "BenchmarkKnowledgeDocument",
+    "BenchmarkMessageSeed",
+    "ElephantBenchmarkCase",
+    "ElephantChapterConfig",
+    "ElephantVariantSpec",
     "ElephantContextPolicy",
     "ElephantContextSelector",
     "ElephantMemoryEvaluator",
@@ -27,8 +39,12 @@ __all__ = [
     "baseline_memory_policy",
     "build_elephant_runtime_config",
     "collective_state_policy",
+    "default_stage_attention_profiles",
     "distributed_coordination_policy",
     "elephant_context_policy",
+    "flatten_stage_attention_profiles",
+    "get_elephant_variant",
+    "list_elephant_variants",
     "matriarch_coordination_policy",
     "matriarch_memory_policy",
 ]

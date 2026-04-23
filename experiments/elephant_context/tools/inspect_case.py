@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from ..chapter_benchmark import inspect_elephant_case_sync
+from ..benchmarks.chapter_benchmark import inspect_elephant_case_sync
 
 
 def build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

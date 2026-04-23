@@ -1,4 +1,4 @@
-from .models import (
+from .core.models import (
     BenchmarkCollectiveMemory,
     BenchmarkKnowledgeDocument,
     BenchmarkMessageSeed,
@@ -6,7 +6,7 @@ from .models import (
     ElephantChapterConfig,
     ElephantVariantSpec,
 )
-from .plugin import (
+from .core.plugin import (
     ElephantContextSelector,
     ElephantContextPolicy,
     ElephantMemoryEvaluator,
@@ -19,9 +19,9 @@ from .plugin import (
     matriarch_coordination_policy,
     matriarch_memory_policy,
 )
-from .chapter_benchmark import inspect_elephant_case_sync, run_elephant_benchmark_sync
-from .lifecycle_cases import get_lifecycle_case, get_lifecycle_variant, list_lifecycle_cases, list_lifecycle_variants
-from .variants import get_elephant_variant, list_elephant_variants
+from .benchmarks.chapter_benchmark import inspect_elephant_case_sync, run_elephant_benchmark_sync
+from .benchmarks.lifecycle_cases import get_lifecycle_case, get_lifecycle_variant, list_lifecycle_cases, list_lifecycle_variants
+from .core.variants import get_elephant_variant, list_elephant_variants
 
 __all__ = [
     "BenchmarkCollectiveMemory",
