@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
 import pytest
@@ -37,6 +38,19 @@ def test_lifecycle_inspect_case_emits_mechanism_result(tmp_path: Path):
     assert "SUCCESSION_ALPHA_01" in record["observed_markers"]
 
 
+def test_lifecycle_thread_local_succession_does_not_count_hidden_primary_rows(tmp_path: Path):
+    payload = inspect_elephant_case_sync(
+        suite="lifecycle",
+        case_id="succession_01",
+        variant="mgcm_thread_local_memory",
+        output_dir=tmp_path / "lifecycle_thread_local",
+    )
+    record = payload["record"]
+    assert record["status"] == "completed"
+    assert record["retrieval_success"] == 0.0
+    assert "SUCCESSION_ALPHA_01" not in record["observed_markers"]
+
+
 def test_full_quick_benchmark_writes_context_and_lifecycle_artifacts(tmp_path: Path):
     output_dir = tmp_path / "chapter_benchmark"
     manifest = run_elephant_benchmark_sync(
@@ -69,6 +83,67 @@ def test_full_quick_benchmark_writes_context_and_lifecycle_artifacts(tmp_path: P
         lifecycle_dir / "summary.md",
     ):
         assert required.exists(), required
+    assert (context_dir / "metric_stats.csv").exists()
+    assert (lifecycle_dir / "metric_stats.csv").exists()
+
+
+def test_context_real_task_dataset_and_seeded_run(tmp_path: Path):
+    output_dir = tmp_path / "context_real_task"
+    manifest = run_elephant_benchmark_sync(
+        suite="context",
+        quick=True,
+        output_dir=output_dir,
+        dataset="real_task_x",
+        model_backend="probe",
+        seeds=[0, 1],
+        report_level="brief",
+    )
+    assert manifest["suite"] == "context"
+    assert manifest["context"]["dataset"] == "real_task_x"
+    assert manifest["context"]["seeds"] == [0, 1]
+
+
+def test_lifecycle_cross_thread_regains_signal_when_cross_thread_enabled(tmp_path: Path):
+    output_dir = tmp_path / "lifecycle_cross_thread_signal"
+    manifest = run_elephant_benchmark_sync(
+        suite="lifecycle",
+        quick=False,
+        output_dir=output_dir,
+        variants=["mgcm_full", "mgcm_no_cross_thread"],
+        case_ids=["cross_thread_01"],
+        seeds=[0],
+    )
+    assert manifest["suite"] == "lifecycle"
+    with (output_dir / "lifecycle" / "scenario_breakdown.csv").open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    by_variant = {
+        row["variant"]: row
+        for row in rows
+        if row["family"] == "cross_thread"
+    }
+    assert float(by_variant["mgcm_full"]["task_success"]) == 1.0
+    assert float(by_variant["mgcm_no_cross_thread"]["task_success"]) == 0.0
+
+
+def test_lifecycle_temporal_decay_differs_by_recency_weight(tmp_path: Path):
+    output_dir = tmp_path / "lifecycle_temporal_signal"
+    run_elephant_benchmark_sync(
+        suite="lifecycle",
+        quick=False,
+        output_dir=output_dir,
+        variants=["mgcm_full", "mgcm_no_temporal_decay"],
+        case_ids=["temporal_decay_01"],
+        seeds=[0],
+    )
+    with (output_dir / "lifecycle" / "scenario_breakdown.csv").open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    by_variant = {
+        row["variant"]: row
+        for row in rows
+        if row["family"] == "temporal_decay"
+    }
+    assert float(by_variant["mgcm_full"]["ordering_success"]) == 1.0
+    assert float(by_variant["mgcm_no_temporal_decay"]["ordering_success"]) == 0.0
 
 
 def test_full_suite_variant_filter_does_not_fall_back_to_other_suite_defaults(tmp_path: Path):

@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
+import math
+import random
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
@@ -17,9 +19,11 @@ from agentorch.agents.types import Handoff, TaskPacket
 from agentorch.config import MemoryConfig
 from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
 from agentorch.models.base import BaseModelAdapter
+from agentorch.models.registry import create_model_adapter
 from agentorch.observability import EventBus, Tracer
 
 from .context_cases import get_elephant_benchmark_case, list_elephant_benchmark_cases
+from .context_real_cases import get_real_task_case, list_real_task_cases
 from ..core.models import BenchmarkCollectiveMemory, BenchmarkKnowledgeDocument, BenchmarkMessageSeed, ElephantBenchmarkCase
 from ..core.plugin import build_elephant_runtime_config
 from .probe_model import ChapterProbeModel
@@ -30,6 +34,10 @@ ARTIFACT_ROOT = Path("artifacts") / "elephant_context_benchmark"
 DEFAULT_BUDGETS = (6000, 12000, 18000)
 DEFAULT_VARIANTS = tuple(spec.name for spec in list_elephant_variants())
 QUICK_VARIANTS = ("elephant_full", "multi_agent_default_context")
+DEFAULT_SEEDS = (0,)
+DEFAULT_DATASET = "context_synth"
+SUPPORTED_DATASETS = {"context_synth", "real_task_x"}
+SUPPORTED_MODEL_BACKENDS = {"probe", "openai", "local-llm"}
 METRIC_FIELDS = (
     "task_success",
     "context_precision",
@@ -55,8 +63,12 @@ class _UnusedSupervisorModel(BaseModelAdapter):
 
 
 class BenchmarkRunRecord(BaseModel):
+    suite: str = "context"
     status: str = "completed"
     error_message: str | None = None
+    dataset_id: str = DEFAULT_DATASET
+    model_backend: str = "probe"
+    seed: int = 0
     case_id: str
     family: str
     variant: str
@@ -80,6 +92,9 @@ class BenchmarkRunRecord(BaseModel):
     dropped_context_segments: list[dict[str, Any]] = Field(default_factory=list)
     context_budget_reports: list[dict[str, Any]] = Field(default_factory=list)
     attention_profiles: list[dict[str, float]] = Field(default_factory=list)
+    retrieval_trace: list[dict[str, Any]] = Field(default_factory=list)
+    rejection_trace: list[dict[str, Any]] = Field(default_factory=list)
+    cost_metrics: dict[str, Any] = Field(default_factory=dict)
 
     def summary_row(self) -> dict[str, Any]:
         return {
@@ -116,10 +131,42 @@ def _artifact_dir(output_dir: str | Path | None = None) -> Path:
     return ARTIFACT_ROOT / _timestamp()
 
 
-def _quick_case_ids() -> list[str]:
+def _resolve_model_backend(model_backend: str) -> str:
+    resolved = (model_backend or "probe").strip().lower()
+    if resolved not in SUPPORTED_MODEL_BACKENDS:
+        options = ", ".join(sorted(SUPPORTED_MODEL_BACKENDS))
+        raise ValueError(f"Unsupported model backend '{model_backend}'. Use one of: {options}.")
+    return resolved
+
+
+def _resolve_dataset(dataset: str | None) -> str:
+    resolved = (dataset or DEFAULT_DATASET).strip().lower()
+    if resolved not in SUPPORTED_DATASETS:
+        options = ", ".join(sorted(SUPPORTED_DATASETS))
+        raise ValueError(f"Unsupported context dataset '{dataset}'. Use one of: {options}.")
+    return resolved
+
+
+def _list_cases_for_dataset(dataset_id: str) -> list[ElephantBenchmarkCase]:
+    if dataset_id == "context_synth":
+        return list_elephant_benchmark_cases()
+    if dataset_id == "real_task_x":
+        return list_real_task_cases()
+    raise ValueError(f"Unsupported context dataset '{dataset_id}'.")
+
+
+def _get_case_for_dataset(dataset_id: str, case_id: str) -> ElephantBenchmarkCase:
+    if dataset_id == "context_synth":
+        return get_elephant_benchmark_case(case_id)
+    if dataset_id == "real_task_x":
+        return get_real_task_case(case_id)
+    raise ValueError(f"Unsupported context dataset '{dataset_id}'.")
+
+
+def _quick_case_ids(cases: list[ElephantBenchmarkCase]) -> list[str]:
     seen: set[str] = set()
     selected: list[str] = []
-    for case in list_elephant_benchmark_cases():
+    for case in cases:
         if case.family in seen:
             continue
         seen.add(case.family)
@@ -142,6 +189,30 @@ def _average(values: list[float]) -> float:
     if not values:
         return 0.0
     return round(sum(values) / len(values), 6)
+
+
+def _std(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean = sum(values) / len(values)
+    variance = sum((value - mean) ** 2 for value in values) / (len(values) - 1)
+    return math.sqrt(max(0.0, variance))
+
+
+def _ci95(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    return 1.96 * _std(values) / math.sqrt(len(values))
+
+
+def _build_model(case: ElephantBenchmarkCase, model_backend: str) -> BaseModelAdapter:
+    if model_backend == "probe":
+        return ChapterProbeModel(case)
+    if model_backend == "openai":
+        return create_model_adapter({"provider": "openai"})
+    if model_backend == "local-llm":
+        return create_model_adapter({"provider": "openai_http"})
+    raise ValueError(f"Unsupported model backend '{model_backend}'.")
 
 
 def _build_reasoning_strategy() -> ReasoningStrategyConfig:
@@ -267,7 +338,7 @@ def _make_child_runtime_config(case: ElephantBenchmarkCase, variant: str, budget
     )
 
 
-def _build_registry(case: ElephantBenchmarkCase, variant: str, budget: int) -> AgentRegistry:
+def _build_registry(case: ElephantBenchmarkCase, variant: str, budget: int, *, model_backend: str) -> AgentRegistry:
     registry = AgentRegistry()
     agent_specs = [
         (
@@ -291,7 +362,7 @@ def _build_registry(case: ElephantBenchmarkCase, variant: str, budget: int) -> A
     ]
     for name, description, tags, capabilities in agent_specs:
         child_runtime = Runtime(
-            model=ChapterProbeModel(case),
+            model=_build_model(case, model_backend),
             tracer=Tracer(EventBus()),
             config=_make_child_runtime_config(case, variant, budget),
         )
@@ -326,7 +397,19 @@ def _extract_reasoning_payloads(payload: _ExecutionPayload) -> list[dict[str, An
     return payload.reasoning_payloads
 
 
-def _evaluate_run(case: ElephantBenchmarkCase, spec_name: str, category: str, multi_agent: bool, budget: int, payload: _ExecutionPayload) -> BenchmarkRunRecord:
+def _evaluate_run(
+    case: ElephantBenchmarkCase,
+    spec_name: str,
+    category: str,
+    multi_agent: bool,
+    budget: int,
+    payload: _ExecutionPayload,
+    *,
+    dataset_id: str,
+    model_backend: str,
+    seed: int,
+    report_level: str,
+) -> BenchmarkRunRecord:
     reasoning_payloads = _extract_reasoning_payloads(payload)
     observed = _extract_observed_fields(payload.output_text)
     task_success = 1.0 if all(observed.get(key) == value for key, value in case.expected_answer_fields.items()) else 0.0
@@ -365,13 +448,54 @@ def _evaluate_run(case: ElephantBenchmarkCase, spec_name: str, category: str, mu
 
     utilizations: list[float] = []
     gains: list[float] = []
+    before_chars: list[float] = []
+    after_chars: list[float] = []
     for report in budget_reports:
         after = float(report.get("estimated_total_chars_after") or 0.0)
         before = float(report.get("estimated_total_chars_before") or 0.0)
+        before_chars.append(before)
+        after_chars.append(after)
         utilizations.append(min(after / max(1.0, float(budget)), 1.0))
         gains.append(max(0.0, before - after) / max(1.0, before))
 
+    retrieval_trace = [
+        {
+            "segment_id": segment.get("segment_id"),
+            "source_type": segment.get("source_type"),
+            "rank": segment.get("rank"),
+            "score": segment.get("score"),
+            "stage": segment.get("stage"),
+        }
+        for segment in selected_segments
+    ]
+    rejection_trace = [
+        {
+            "segment_id": segment.get("segment_id"),
+            "source_type": segment.get("source_type"),
+            "reason": segment.get("drop_reason") or segment.get("reason") or "compaction_drop",
+            "score": segment.get("score"),
+        }
+        for segment in dropped_segments
+    ]
+    cost_metrics = {
+        "char_budget": budget,
+        "estimated_total_chars_before_avg": round(_average(before_chars), 6),
+        "estimated_total_chars_after_avg": round(_average(after_chars), 6),
+        "budget_utilization": round(_average(utilizations), 6),
+        "compaction_gain": round(_average(gains), 6),
+    }
+    if report_level == "brief":
+        retrieval_trace = retrieval_trace[:8]
+        rejection_trace = rejection_trace[:8]
+        selected_segments = selected_segments[:8]
+        dropped_segments = dropped_segments[:8]
+        budget_reports = budget_reports[:4]
+        attention_profiles = attention_profiles[:4]
+
     return BenchmarkRunRecord(
+        dataset_id=dataset_id,
+        model_backend=model_backend,
+        seed=seed,
         case_id=case.case_id,
         family=case.family,
         variant=spec_name,
@@ -395,10 +519,20 @@ def _evaluate_run(case: ElephantBenchmarkCase, spec_name: str, category: str, mu
         dropped_context_segments=dropped_segments,
         context_budget_reports=budget_reports,
         attention_profiles=attention_profiles,
+        retrieval_trace=retrieval_trace,
+        rejection_trace=rejection_trace,
+        cost_metrics=cost_metrics,
     )
 
 
-async def _run_single_agent_case(case: ElephantBenchmarkCase, variant: str, budget: int, runtime_dir: Path) -> _ExecutionPayload:
+async def _run_single_agent_case(
+    case: ElephantBenchmarkCase,
+    variant: str,
+    budget: int,
+    runtime_dir: Path,
+    *,
+    model_backend: str,
+) -> _ExecutionPayload:
     prefix = _record_prefix(case, variant, budget)
     thread_id = f"{prefix}:thread"
     task_id = f"{prefix}:task"
@@ -409,7 +543,7 @@ async def _run_single_agent_case(case: ElephantBenchmarkCase, variant: str, budg
     await _seed_collective_memory(memory, thread_id, case.collective_memories)
 
     runtime = Runtime(
-        model=ChapterProbeModel(case),
+        model=_build_model(case, model_backend),
         memory=memory,
         knowledge_base=knowledge_base,
         tracer=Tracer(EventBus()),
@@ -443,7 +577,14 @@ async def _run_single_agent_case(case: ElephantBenchmarkCase, variant: str, budg
     )
 
 
-async def _run_multi_agent_case(case: ElephantBenchmarkCase, variant: str, budget: int, runtime_dir: Path) -> _ExecutionPayload:
+async def _run_multi_agent_case(
+    case: ElephantBenchmarkCase,
+    variant: str,
+    budget: int,
+    runtime_dir: Path,
+    *,
+    model_backend: str,
+) -> _ExecutionPayload:
     prefix = _record_prefix(case, variant, budget)
     parent_thread_id = f"{prefix}:parent"
     memory = MemoryManager(config=_build_memory_config(runtime_dir, prefix))
@@ -451,7 +592,7 @@ async def _run_multi_agent_case(case: ElephantBenchmarkCase, variant: str, budge
     await _seed_knowledge_base(knowledge_base, case.knowledge_documents)
     await _seed_collective_memory(memory, parent_thread_id, case.collective_memories)
 
-    registry = _build_registry(case, variant, budget)
+    registry = _build_registry(case, variant, budget, model_backend=model_backend)
     supervisor = Supervisor(registry=registry)
     runtime = Runtime(
         model=_UnusedSupervisorModel(),
@@ -533,18 +674,43 @@ async def _run_multi_agent_case(case: ElephantBenchmarkCase, variant: str, budge
     )
 
 
-async def _run_case(case: ElephantBenchmarkCase, variant: str, budget: int, runtime_dir: Path) -> BenchmarkRunRecord:
+async def _run_case(
+    case: ElephantBenchmarkCase,
+    variant: str,
+    budget: int,
+    runtime_dir: Path,
+    *,
+    dataset_id: str,
+    model_backend: str,
+    seed: int,
+    report_level: str,
+) -> BenchmarkRunRecord:
     spec = get_elephant_variant(variant)
     try:
+        random.seed(seed)
         if spec.multi_agent:
-            payload = await _run_multi_agent_case(case, variant, budget, runtime_dir)
+            payload = await _run_multi_agent_case(case, variant, budget, runtime_dir, model_backend=model_backend)
         else:
-            payload = await _run_single_agent_case(case, variant, budget, runtime_dir)
-        return _evaluate_run(case, spec.name, spec.category, spec.multi_agent, budget, payload)
+            payload = await _run_single_agent_case(case, variant, budget, runtime_dir, model_backend=model_backend)
+        return _evaluate_run(
+            case,
+            spec.name,
+            spec.category,
+            spec.multi_agent,
+            budget,
+            payload,
+            dataset_id=dataset_id,
+            model_backend=model_backend,
+            seed=seed,
+            report_level=report_level,
+        )
     except Exception as exc:  # pragma: no cover - kept for artifact completeness
         return BenchmarkRunRecord(
             status="failed",
             error_message=str(exc),
+            dataset_id=dataset_id,
+            model_backend=model_backend,
+            seed=seed,
             case_id=case.case_id,
             family=case.family,
             variant=spec.name,
@@ -571,9 +737,34 @@ def _group_rows(records: list[BenchmarkRunRecord], *, keys: tuple[str, ...]) -> 
     return rows
 
 
+def _metric_stats_rows(records: list[BenchmarkRunRecord], *, keys: tuple[str, ...]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[Any, ...], list[BenchmarkRunRecord]] = defaultdict(list)
+    for record in records:
+        if record.status != "completed":
+            continue
+        grouped[tuple(getattr(record, key) for key in keys)].append(record)
+
+    rows: list[dict[str, Any]] = []
+    for group_key, items in sorted(grouped.items()):
+        base = {key: value for key, value in zip(keys, group_key)}
+        for metric in METRIC_FIELDS:
+            values = [float(getattr(item, metric)) for item in items]
+            rows.append(
+                {
+                    **base,
+                    "metric": metric,
+                    "count": len(values),
+                    "mean": round(_average(values), 6),
+                    "std": round(_std(values), 6),
+                    "ci95": round(_ci95(values), 6),
+                }
+            )
+    return rows
+
+
 def _paired_delta_rows(records: list[BenchmarkRunRecord]) -> list[dict[str, Any]]:
     baseline_index = {
-        (record.case_id, record.budget): record
+        (record.case_id, record.budget, record.seed): record
         for record in records
         if record.variant == "elephant_full" and record.status == "completed"
     }
@@ -586,7 +777,7 @@ def _paired_delta_rows(records: list[BenchmarkRunRecord]) -> list[dict[str, Any]
     for (variant, budget), items in sorted(grouped.items()):
         deltas: dict[str, list[float]] = {metric: [] for metric in METRIC_FIELDS}
         for item in items:
-            baseline = baseline_index.get((item.case_id, item.budget))
+            baseline = baseline_index.get((item.case_id, item.budget, item.seed))
             if baseline is None:
                 continue
             for metric in METRIC_FIELDS:
@@ -706,30 +897,56 @@ async def run_elephant_benchmark(
     variants: list[str] | None = None,
     budgets: list[int] | None = None,
     case_ids: list[str] | None = None,
+    model_backend: str = "probe",
+    dataset: str | None = None,
+    seeds: list[int] | None = None,
+    report_level: str = "full",
 ) -> dict[str, Any]:
     run_dir = _artifact_dir(output_dir)
     runtime_dir = run_dir / "runtime_state"
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
+    resolved_backend = _resolve_model_backend(model_backend)
+    resolved_dataset = _resolve_dataset(dataset)
+    resolved_seeds = list(seeds or list(DEFAULT_SEEDS))
+    resolved_report_level = "brief" if str(report_level).strip().lower() == "brief" else "full"
+    all_cases = _list_cases_for_dataset(resolved_dataset)
     selected_variants = list(variants or (QUICK_VARIANTS if quick else DEFAULT_VARIANTS))
     selected_budgets = list(budgets or ([12000] if quick else list(DEFAULT_BUDGETS)))
-    selected_case_ids = list(case_ids or (_quick_case_ids() if quick else [case.case_id for case in list_elephant_benchmark_cases()]))
-    cases = [get_elephant_benchmark_case(case_id) for case_id in selected_case_ids]
+    selected_case_ids = list(case_ids or (_quick_case_ids(all_cases) if quick else [case.case_id for case in all_cases]))
+    cases = [_get_case_for_dataset(resolved_dataset, case_id) for case_id in selected_case_ids]
 
     records: list[BenchmarkRunRecord] = []
-    for case in cases:
-        for variant in selected_variants:
-            for budget in selected_budgets:
-                records.append(await _run_case(case, variant, budget, runtime_dir))
+    for seed in resolved_seeds:
+        for case in cases:
+            for variant in selected_variants:
+                for budget in selected_budgets:
+                    records.append(
+                        await _run_case(
+                            case,
+                            variant,
+                            budget,
+                            runtime_dir,
+                            dataset_id=resolved_dataset,
+                            model_backend=resolved_backend,
+                            seed=seed,
+                            report_level=resolved_report_level,
+                        )
+                    )
 
     baseline_rows = _group_rows([record for record in records if record.category == "baseline"], keys=("variant", "budget"))
     ablation_rows = _group_rows([record for record in records if record.category == "ablation"], keys=("variant", "budget"))
     scenario_rows = _group_rows(records, keys=("family", "variant", "budget"))
     delta_rows = _paired_delta_rows(records)
+    stats_rows = _metric_stats_rows(records, keys=("variant", "budget"))
 
     manifest = {
         "run_id": run_dir.name,
         "quick": quick,
+        "dataset": resolved_dataset,
+        "model_backend": resolved_backend,
+        "seeds": resolved_seeds,
+        "report_level": resolved_report_level,
         "variants": selected_variants,
         "budgets": selected_budgets,
         "case_ids": selected_case_ids,
@@ -743,6 +960,7 @@ async def run_elephant_benchmark(
     _write_csv(run_dir / "ablation_summary.csv", ablation_rows)
     _write_csv(run_dir / "scenario_breakdown.csv", scenario_rows)
     _write_csv(run_dir / "paired_deltas.csv", delta_rows)
+    _write_csv(run_dir / "metric_stats.csv", stats_rows)
     summary_md = _build_summary_markdown(
         run_id=run_dir.name,
         records=records,
@@ -761,6 +979,10 @@ def run_elephant_benchmark_sync(
     variants: list[str] | None = None,
     budgets: list[int] | None = None,
     case_ids: list[str] | None = None,
+    model_backend: str = "probe",
+    dataset: str | None = None,
+    seeds: list[int] | None = None,
+    report_level: str = "full",
 ) -> dict[str, Any]:
     return asyncio.run(
         run_elephant_benchmark(
@@ -769,6 +991,10 @@ def run_elephant_benchmark_sync(
             variants=variants,
             budgets=budgets,
             case_ids=case_ids,
+            model_backend=model_backend,
+            dataset=dataset,
+            seeds=seeds,
+            report_level=report_level,
         )
     )
 
@@ -778,13 +1004,27 @@ async def inspect_elephant_case(
     case_id: str,
     variant: str = "elephant_full",
     budget: int = 12000,
+    model_backend: str = "probe",
+    dataset: str | None = None,
+    seed: int = 0,
+    report_level: str = "full",
     output_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     run_dir = _artifact_dir(output_dir)
     runtime_dir = run_dir / "runtime_state"
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    case = get_elephant_benchmark_case(case_id)
-    record = await _run_case(case, variant, budget, runtime_dir)
+    resolved_dataset = _resolve_dataset(dataset)
+    case = _get_case_for_dataset(resolved_dataset, case_id)
+    record = await _run_case(
+        case,
+        variant,
+        budget,
+        runtime_dir,
+        dataset_id=resolved_dataset,
+        model_backend=_resolve_model_backend(model_backend),
+        seed=int(seed),
+        report_level="brief" if str(report_level).strip().lower() == "brief" else "full",
+    )
     payload = {
         "run_id": run_dir.name,
         "output_dir": str(run_dir.resolve()),
@@ -799,6 +1039,10 @@ def inspect_elephant_case_sync(
     case_id: str,
     variant: str = "elephant_full",
     budget: int = 12000,
+    model_backend: str = "probe",
+    dataset: str | None = None,
+    seed: int = 0,
+    report_level: str = "full",
     output_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     return asyncio.run(
@@ -806,6 +1050,10 @@ def inspect_elephant_case_sync(
             case_id=case_id,
             variant=variant,
             budget=budget,
+            model_backend=model_backend,
+            dataset=dataset,
+            seed=seed,
+            report_level=report_level,
             output_dir=output_dir,
         )
     )

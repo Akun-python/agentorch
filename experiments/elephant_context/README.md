@@ -33,6 +33,25 @@ experiments/elephant_context/
 - CLI:
   - `python -m experiments.elephant_context benchmark --suite full --quick`
   - `python -m experiments.elephant_context inspect-case --suite context --case-id rule_preservation_01`
+  - `python -m experiments.elephant_context benchmark --suite context --dataset real_task_x --model-backend probe --seeds 0 1 --report-level brief`
+
+## Benchmark CLI 扩展参数
+
+- `--model-backend`: `probe` / `openai` / `local-llm`
+- `--dataset`: `context_synth` / `lifecycle_synth` / `real_task_x` / `full_synth`
+- `--seeds`: 多 seed 重复运行（例如 `--seeds 0 1 2`）
+- `--report-level`: `brief` / `full`
+
+## 产物字段扩展
+
+- `runs.jsonl` 已新增字段：
+  - `dataset_id`
+  - `model_backend`
+  - `seed`
+  - `retrieval_trace`
+  - `rejection_trace`
+  - `cost_metrics`
+- 新增统计文件 `metric_stats.csv`，按指标输出 `mean/std/ci95`。
 
 ## 兼容策略
 

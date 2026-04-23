@@ -178,7 +178,7 @@ def _succession_case(index: int) -> LifecycleBenchmarkCase:
 
 def _cross_thread_case(index: int) -> LifecycleBenchmarkCase:
     marker = f"CROSS_THREAD_SIGMA_{index:02d}"
-    goal = f"cross thread planning relay {index:02d}"
+    goal = f"planning relay {index:02d}"
     output = (
         f"validated cross thread relay marker {marker} for planning relay {index:02d}. "
         f"validated cross thread relay marker {marker} for planning relay {index:02d}. "
@@ -320,10 +320,10 @@ def _temporal_decay_case(index: int) -> LifecycleBenchmarkCase:
             BenchmarkCollectiveMemory(
                 record_key="recent",
                 kind="lesson_learned",
-                content=f"temporal priority audit marker {recent}",
+                content=f"temporal priority audit {index:02d} marker {recent}",
                 tags=["temporal", "recent"],
                 source_agents=["planner", "reviewer"],
-                confidence=0.84,
+                confidence=0.9,
                 scope="planning",
                 reuse_count=1,
                 last_validated_at=_days_ago_iso(2),
@@ -331,12 +331,12 @@ def _temporal_decay_case(index: int) -> LifecycleBenchmarkCase:
             BenchmarkCollectiveMemory(
                 record_key="stale",
                 kind="lesson_learned",
-                content=f"temporal priority audit marker {stale}",
+                content=f"temporal priority audit {index:02d} marker {stale}",
                 tags=["temporal", "stale"],
                 source_agents=["planner", "reviewer"],
-                confidence=0.94,
+                confidence=0.9,
                 scope="planning",
-                reuse_count=4,
+                reuse_count=1,
                 last_validated_at=_days_ago_iso(90 + (index * 15)),
             ),
         ],

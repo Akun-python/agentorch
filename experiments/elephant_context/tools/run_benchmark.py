@@ -22,6 +22,31 @@ def build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     parser.add_argument("--variants", nargs="*", default=None, help="Variant names to run.")
     parser.add_argument("--budgets", nargs="*", type=int, default=None, help="Character budgets to run.")
     parser.add_argument("--cases", nargs="*", default=None, help="Specific benchmark case IDs to run.")
+    parser.add_argument(
+        "--model-backend",
+        choices=["probe", "openai", "local-llm"],
+        default="probe",
+        help="Model backend for benchmark runs. probe is deterministic local baseline.",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        help="Dataset identifier. Examples: context_synth, lifecycle_synth, real_task_x.",
+    )
+    parser.add_argument(
+        "--seeds",
+        nargs="*",
+        type=int,
+        default=None,
+        help="Random seeds for repeated runs and confidence estimates.",
+    )
+    parser.add_argument(
+        "--report-level",
+        choices=["brief", "full"],
+        default="full",
+        help="Artifact verbosity. brief keeps compact traces; full keeps detailed traces.",
+    )
     parser.set_defaults(handler=_handle)
 
 
@@ -33,4 +58,8 @@ def _handle(args: argparse.Namespace):
         variants=args.variants,
         budgets=args.budgets,
         case_ids=args.cases,
+        model_backend=str(args.model_backend),
+        dataset=args.dataset,
+        seeds=args.seeds,
+        report_level=str(args.report_level),
     )

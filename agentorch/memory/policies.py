@@ -240,7 +240,7 @@ class SceneFirstRecallPolicy(MemoryRecallPolicy):
             order_desc=True,
             limit=max(top_k * 8, 12),
         )
-        if strategy_kind in {"mgcm", "nutcracker_memory", "semantic_only", "hybrid_long_memory", "custom"}:
+        if strategy_kind in {"mgcm", "memory_policy", "nutcracker_memory", "semantic_only", "hybrid_long_memory", "custom"}:
             collective_records = await manager.search_collective_memory(
                 query=query,
                 thread_id=None if allow_cross_thread else thread_id,

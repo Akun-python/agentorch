@@ -35,6 +35,20 @@ def _split_cases(case_ids: list[str] | None) -> tuple[list[str] | None, list[str
     return context_cases, lifecycle_cases
 
 
+def _split_dataset(dataset: str | None) -> tuple[str | None, str | None]:
+    if dataset is None:
+        return None, None
+    if dataset in {"context_synth", "real_task_x"}:
+        return dataset, None
+    if dataset in {"lifecycle_synth"}:
+        return None, dataset
+    if dataset in {"full_synth"}:
+        return "context_synth", "lifecycle_synth"
+    raise ValueError(
+        "Unsupported dataset. Use one of: context_synth, lifecycle_synth, real_task_x, full_synth."
+    )
+
+
 def _should_run_split_suite(
     *,
     suite: str,
@@ -61,11 +75,16 @@ def run_elephant_benchmark_sync(
     variants: list[str] | None = None,
     budgets: list[int] | None = None,
     case_ids: list[str] | None = None,
+    model_backend: str = "probe",
+    dataset: str | None = None,
+    seeds: list[int] | None = None,
+    report_level: str = "full",
 ) -> dict[str, Any]:
     run_dir = Path(output_dir) if output_dir is not None else (Path("artifacts") / "elephant_context_benchmark" / __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S"))
     run_dir.mkdir(parents=True, exist_ok=True)
     context_variants, lifecycle_variants = _split_variants(variants)
     context_cases, lifecycle_cases = _split_cases(case_ids)
+    context_dataset, lifecycle_dataset = _split_dataset(dataset)
     run_context = _should_run_split_suite(
         suite=suite,
         target="context",
@@ -78,12 +97,23 @@ def run_elephant_benchmark_sync(
         variants=lifecycle_variants if variants is not None else None,
         cases=lifecycle_cases if case_ids is not None else None,
     )
+    if dataset is not None:
+        run_context = run_context and context_dataset is not None
+        run_lifecycle = run_lifecycle and lifecycle_dataset is not None
+    if suite == "context" and not run_context:
+        raise ValueError("Selected dataset does not provide context-suite cases.")
+    if suite == "lifecycle" and not run_lifecycle:
+        raise ValueError("Selected dataset does not provide lifecycle-suite cases.")
     if suite == "full" and not (run_context or run_lifecycle):
         raise ValueError("No benchmark suites matched the provided full-suite variant/case filters.")
     manifest: dict[str, Any] = {
         "run_id": run_dir.name,
         "suite": suite,
         "quick": quick,
+        "model_backend": model_backend,
+        "dataset": dataset,
+        "seeds": list(seeds or [0]),
+        "report_level": report_level,
         "output_dir": str(run_dir.resolve()),
     }
     summary_sections = [
@@ -107,6 +137,10 @@ def run_elephant_benchmark_sync(
             variants=context_variants if suite == "full" else variants,
             budgets=budgets,
             case_ids=context_cases if suite == "full" else case_ids,
+            model_backend=model_backend,
+            dataset=context_dataset,
+            seeds=seeds,
+            report_level=report_level,
         )
         manifest["context"] = context_manifest
         context_runs = _read_text(context_dir / "runs.jsonl")
@@ -128,6 +162,10 @@ def run_elephant_benchmark_sync(
             output_dir=lifecycle_dir,
             variants=lifecycle_variants if suite == "full" else variants,
             case_ids=lifecycle_cases if suite == "full" else case_ids,
+            model_backend=model_backend,
+            dataset=lifecycle_dataset,
+            seeds=seeds,
+            report_level=report_level,
         )
         manifest["lifecycle"] = lifecycle_manifest
         lifecycle_runs = _read_text(lifecycle_dir / "runs.jsonl")
@@ -156,6 +194,10 @@ def inspect_elephant_case_sync(
     case_id: str,
     variant: str | None = None,
     budget: int = 12000,
+    model_backend: str = "probe",
+    dataset: str | None = None,
+    seed: int = 0,
+    report_level: str = "full",
     output_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     if suite == "context":
@@ -163,12 +205,20 @@ def inspect_elephant_case_sync(
             case_id=case_id,
             variant=variant or "elephant_full",
             budget=budget,
+            model_backend=model_backend,
+            dataset=dataset,
+            seed=seed,
+            report_level=report_level,
             output_dir=output_dir,
         )
     if suite == "lifecycle":
         return inspect_lifecycle_case_sync(
             case_id=case_id,
             variant=variant or "mgcm_full",
+            model_backend=model_backend,
+            dataset=dataset,
+            seed=seed,
+            report_level=report_level,
             output_dir=output_dir,
         )
     raise ValueError("inspect-case only supports suite='context' or suite='lifecycle'.")
