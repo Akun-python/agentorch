@@ -9,6 +9,15 @@
 \usepackage{graphicx}
 \usepackage{hyperref}
 
+\newcommand{\reportassetspath}{archive/paper_benchmark_suite/report_assets}
+\IfFileExists{archive/paper_benchmark_suite/report_assets/paper_tables.tex}{}{
+  \IfFileExists{experiments/report_assets/paper_tables.tex}{
+    \renewcommand{\reportassetspath}{experiments/report_assets}
+  }{
+    \typeout{[cas-sc-template-zh] warning: report assets not found in archive/paper_benchmark_suite/report_assets or experiments/report_assets}
+  }
+}
+
 \begin{document}
 \begin{CJK*}{UTF8}{gbsn}
 \let\WriteBookmarks\relax
@@ -310,13 +319,13 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 除公开 benchmark 外，本文还对克拉克星鸦长时记忆图谱模块进行了两类实现级评测。一类是本地 Neo4j 工程效率测试，报告 \texttt{recall()} 与 \texttt{fetch\_capsule\_details()} 的时延分布，用于验证模块的可插拔部署可行性；另一类是上文给出的离线强基线 benchmark，用于在受控首屏预算下比较不同长期记忆返回策略的记忆质量。这两类结果共同服务于机制验证，但都不替代公开 benchmark 所承担的系统级主证据角色。
 
-\input{experiments/report_assets/paper_tables.tex}
-\input{experiments/report_assets/elephant_context_tables.tex}
-\input{experiments/report_assets/long_term_memory_graph_tables.tex}
+\input{\reportassetspath/paper_tables.tex}
+\input{\reportassetspath/elephant_context_tables.tex}
+\input{\reportassetspath/long_term_memory_graph_tables.tex}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.98\linewidth]{experiments/report_assets/formal_coverage_map.pdf}
+\includegraphics[width=0.98\linewidth]{\reportassetspath/formal_coverage_map.pdf}
 \caption{公开 benchmark 的覆盖密度与证据强度概览。左侧气泡大小表示 runs，颜色深浅表示真实模型数量；右侧汇总条形图展示各研究问题的总运行密度。}
 \label{fig:coverage-map}
 \end{figure}
@@ -325,7 +334,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.98\linewidth]{experiments/report_assets/formal_main_results.pdf}
+\includegraphics[width=0.98\linewidth]{\reportassetspath/formal_main_results.pdf}
 \caption{公开 benchmark 主结果。左侧展示本文实现对齐切片上的 \texttt{full\_framework} 与关键基线的绝对主指标均值，右侧展示对应的配对差值。}
 \label{fig:main-results}
 \end{figure}
@@ -334,7 +343,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.98\linewidth]{experiments/report_assets/formal_reference_profile.pdf}
+\includegraphics[width=0.98\linewidth]{\reportassetspath/formal_reference_profile.pdf}
 \caption{参考模型的实验剖面图。每个子图展示 \texttt{gpt-4o} 在对应研究问题上的绝对主指标、置信区间与 token 开销，用于观察“高分是否伴随更高成本”以及“哪些任务已接近饱和”。}
 \label{fig:reference-profile}
 \end{figure}
@@ -343,7 +352,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.94\linewidth]{experiments/report_assets/formal_cheap_model_results.pdf}
+\includegraphics[width=0.94\linewidth]{\reportassetspath/formal_cheap_model_results.pdf}
 \caption{低成本真实模型聚合结果。该图用于检验收益方向是否跨模型保持，而不是证明低成本模型的绝对上限。}
 \label{fig:cheap-results}
 \end{figure}
@@ -352,7 +361,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.90\linewidth]{experiments/report_assets/formal_rq3_memory.pdf}
+\includegraphics[width=0.90\linewidth]{\reportassetspath/formal_rq3_memory.pdf}
 \caption{RQ3 记忆诊断图。关键观察是 recall、reuse 与 stale memory 是否同时改善，而不是单一指标的局部升高。}
 \label{fig:memory-diagnostics}
 \end{figure}
@@ -361,7 +370,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.94\linewidth]{experiments/report_assets/formal_rq4_robustness.pdf}
+\includegraphics[width=0.94\linewidth]{\reportassetspath/formal_rq4_robustness.pdf}
 \caption{RQ4 预算鲁棒性曲线。主文关注的是预算收缩时的退化趋势，而不是某个预算点的单次高低。}
 \label{fig:budget-robustness}
 \end{figure}
@@ -372,7 +381,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.86\linewidth]{experiments/report_assets/formal_scaling_curve.pdf}
+\includegraphics[width=0.86\linewidth]{\reportassetspath/formal_scaling_curve.pdf}
 \caption{补充性的扩展性结果。更多 agent 并不自动带来更强性能，因此该图只作为机制补充证据。}
 \label{fig:scaling}
 \end{figure}
@@ -385,7 +394,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.98\linewidth]{experiments/report_assets/formal_gap_consistency.pdf}
+\includegraphics[width=0.98\linewidth]{\reportassetspath/formal_gap_consistency.pdf}
 \caption{配对差值与跨模型一致性联合图。左侧报告完整框架相对于关键基线的配对差值及其 bootstrap 区间，右侧报告在真实模型集合中的方向一致性。}
 \label{fig:gap-consistency}
 \end{figure}
@@ -398,7 +407,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.90\linewidth]{experiments/report_assets/formal_failure_breakdown.pdf}
+\includegraphics[width=0.90\linewidth]{\reportassetspath/formal_failure_breakdown.pdf}
 \caption{补充性的 RQ5 诊断结果。可观测性图用于解释轨迹覆盖与故障定位能力，不承担公开 benchmark 级主结论。}
 \label{fig:failure-breakdown}
 \end{figure}
@@ -411,7 +420,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.94\linewidth]{experiments/report_assets/formal_multiturn_results.pdf}
+\includegraphics[width=0.94\linewidth]{\reportassetspath/formal_multiturn_results.pdf}
 \caption{补充性的多轮对话结果。该图用于说明跨轮连续性与委派保持，而非主文核心 benchmark 结论。}
 \label{fig:multiturn}
 \end{figure}
