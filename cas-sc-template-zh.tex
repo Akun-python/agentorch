@@ -30,18 +30,18 @@
 \maketitle
 
 \begin{abstract}
-随着大语言模型智能体逐步从单轮问答工具演化为能够规划、检索、工具调用、跨轮协作并持续保持状态的长时程系统，研究焦点已经不再只是“模型能否回答”，而是“系统如何在有限提示预算下稳定运行”。本研究据此将问题正式拆解为两个可独立建模、又可系统集成的研究单元：其一是受象群族长记忆启发的多智能体上下文治理方法，用于决定当前运行中哪些上下文应被保留、压缩或舍弃；其二是受克拉克星鸦空间记忆与藏食回收行为启发的长时记忆图谱机制，用于决定哪些执行经验应被提升为长期记忆、如何组织为记忆胶囊节点与关系边，以及未来如何按线索召回相关子图。
+随着大语言模型智能体逐步从单轮问答工具演化为能够规划、检索、工具调用、跨轮协作并持续保持状态的长时程系统，研究焦点已经从回答质量扩展到系统在有限提示预算下的稳定运行能力。本研究据此将问题正式拆解为两个可独立建模、又可系统集成的研究单元：其一是受象群族长记忆启发的多智能体上下文治理方法，用于决定当前运行中哪些上下文应被保留、压缩或舍弃；其二是受克拉克星鸦空间记忆与藏食回收行为启发的长时记忆图谱机制，用于决定哪些执行经验应被提升为长期记忆、如何组织为记忆胶囊节点与关系边，以及未来如何按线索召回相关子图。
 
-围绕这一目标，本文将统一框架重写为“象群-星鸦框架”（Elephant-Nutcracker Framework）。其中，象群上下文管理策略负责运行内显著性治理与预算约束下的上下文管理；克拉克星鸦长时记忆图谱机制负责跨运行长期记忆的表示、组织与检索返回；MGCM 继续承担治理层角色，负责记忆候选的提升、验证、降级与废弃，而不直接承担图谱表示；长时程注意力、上下文压缩与事件中心可观测性则共同支持系统连续执行、提示构造与机制解释。与原有“图谱化长期记忆”叙述不同，本文强调长期记忆应作为即插即用模块存在：它可以独立接入现有 AgentOrch 运行时，通过标准接口接收候选记忆胶囊，并返回可注入提示的局部子图或子图摘要。
+围绕这一目标，本文将统一框架重写为象群-星鸦框架（Elephant-Nutcracker Framework）。其中，象群上下文管理策略负责运行内显著性治理与预算约束下的上下文管理；克拉克星鸦长时记忆图谱机制负责跨运行长期记忆的表示、组织与检索返回；MGCM 继续承担治理层角色，负责记忆候选的提升、验证、降级与废弃，而不直接承担图谱表示；长时程注意力、上下文压缩与事件中心可观测性则共同支持系统连续执行、提示构造与机制解释。与原有图谱化长期记忆叙述不同，本文强调长期记忆应作为即插即用模块存在：它可以独立接入现有 AgentOrch 运行时，通过标准接口接收候选记忆胶囊，并返回可注入提示的局部子图或子图摘要。
 
-在论文组织上，本文不再将统一稿件视为单篇方法文章，而是将其重构为一个大论文总论与两篇章节论文：第三章聚焦象群启发的上下文管理，第四章聚焦克拉克星鸦长时记忆图谱机制，第五章再对两者进行系统融合与综合实验验证。本文实现中的 \texttt{elephant\_attention}、\texttt{rq2\_elephant\_attention}、\texttt{seagull\_memory}、\texttt{rq3\_seagull\_memory} 等命名仅作为历史实现别名保留，用于对齐既有实验资产；主文中的理论命名统一采用“象群上下文管理策略”与“克拉克星鸦长时记忆图谱机制”。
+在论文组织上，本文不再将统一稿件视为单篇方法文章，而是将其重构为一个大论文总论与两篇章节论文：第三章聚焦象群启发的上下文管理，第四章聚焦克拉克星鸦长时记忆图谱机制，第五章再对两者进行系统融合与综合实验验证。本文实现中的 \texttt{elephant\_attention}、\texttt{rq2\_elephant\_attention}、\texttt{seagull\_memory}、\texttt{rq3\_seagull\_memory} 等命名仅作为历史实现别名保留，用于对齐既有实验资产；主文中的理论命名统一采用象群上下文管理策略与克拉克星鸦长时记忆图谱机制。
 \end{abstract}
 
 \noindent\textbf{关键词：} 大语言模型智能体；多智能体系统；象群上下文管理策略；克拉克星鸦长时记忆图谱；上下文治理；长时程推理；MGCM；事件中心可观测性。
 
 \section{引言}
 
-大语言模型正迅速从单轮文本生成器演化为能够规划、检索、调用工具、与外部软件协同并在长时间跨度内维持任务状态的自主系统。关于自主智能体与大语言模型多智能体系统的正式综述表明，这类系统的实际能力已不再仅仅取决于底层模型本身，还取决于其外围的智能体栈如何组织角色分工、通信、记忆、工具使用与环境交互 \citep{wang2024survey,guo2024llmmas,li2024masworkflow}。在近年的研究演化中，这一转变在 2023 年之后尤其明显：系统逐步从单智能体闭环执行扩展为由多个具备角色、记忆与工具接口的智能体组成的协作系统，并在软件开发、社会模拟与交互环境评测等方向形成了较成熟的工程范式 \citep{hong2024metagpt,qian2024chatdev,liu2024agentbench,zhou2024sotopia}。当任务超出一次提示-响应循环时，这种变化尤为明显。长篇研究、编码、分析或多阶段执行都要求系统在大量决策、工具调用、子任务交接与延迟反馈中保持稳定。在这种场景下，单智能体提示和朴素的长上下文累积会变得愈发脆弱。
+大语言模型正迅速从单轮文本生成器演化为能够规划、检索、调用工具、与外部软件协同并在长时间跨度内维持任务状态的自主系统。关于自主智能体与大语言模型多智能体系统的正式综述表明，这类系统的实际能力已不再仅仅取决于底层模型本身，还取决于其外围的智能体栈如何组织角色分工、通信、记忆、工具使用与环境交互 \citep{wang2024survey,guo2024llmmas,li2024masworkflow}。这一演化也建立在基础模型能力的持续提升之上，从 Transformer、BERT 到 GPT-3、InstructGPT、GPT-4 与 LLaMA 系列，模型的语言理解、泛化推理与指令遵循能力不断增强 \citep{vaswani2017attention,devlin2019bert,brown2020gpt3,ouyang2022instructgpt,openai2023gpt4,touvron2023llama,touvron2023llama2}。在近年的研究演化中，这一转变在 2023 年之后尤其明显：系统逐步从单智能体闭环执行扩展为由多个具备角色、记忆与工具接口的智能体组成的协作系统，并在软件开发、社会模拟与交互环境评测等方向形成了较成熟的工程范式 \citep{hong2024metagpt,qian2024chatdev,liu2024agentbench,zhou2024sotopia}。当任务超出一次提示-响应循环时，这种变化尤为明显。长篇研究、编码、分析或多阶段执行都要求系统在大量决策、工具调用、子任务交接与延迟反馈中保持稳定。在这种场景下，单智能体提示和朴素长上下文累积会变得愈发脆弱。
 
 其核心困难并不仅仅来自规模，而是来自耦合治理。长时程多智能体系统至少面临四类相互依赖的挑战。第一，协作会带来协调压力：系统必须决定由哪个智能体执行、应交接哪些上下文，以及专业化输出如何影响集体行为。第二，长期运行会带来记忆压力：系统必须决定哪些内容应保持短暂、哪些应提升为共享记忆，以及哪些值得跨运行持久保存。第三，有限提示预算会带来压缩压力：候选上下文几乎总是超过可用提示容量。第四，扩展执行会带来可观测性压力：如果没有结构化轨迹，便很难诊断失败、估计成本，甚至难以重建一次运行中究竟发生了什么。
 
@@ -51,26 +51,27 @@
 
 本文的主要贡献体现在四个彼此衔接的方面。首先，我们提出 \textbf{象群上下文管理策略}，把多智能体执行中的上下文保留从单纯的新近性偏好重新分配到已验证、可复用且具有社会性意义的信息上。其次，我们提出 \textbf{克拉克星鸦长时记忆图谱机制}，将跨运行、跨线程的记忆提升、图谱化表示与子图返回过程形式化，而不再把长期记忆视为简单的对话累积。再次，我们给出一个 \textbf{统一的长时程方法框架}，在预算感知的统一表述下把象群上下文管理策略、克拉克星鸦长时记忆图谱机制、长时程注意力与上下文压缩纳入同一体系。最后，我们定义一个 \textbf{事件中心可观测性与评估框架}，把 MGCM、运行事件与 todo 投影连接起来，使调试、可解释分析与后续经验验证可以建立在同一套结构化证据之上。
 从论文组织上看，当前统一框架将被进一步拆解为两个可独立成文、又能在系统层整合的研究单元：一是象群族长记忆启发的多智能体上下文管理方法，二是克拉克星鸦长时记忆图谱机制。这一拆解既服务于硕士论文的章节化结构，也使每个模块能够拥有独立研究问题、实验协议与结论边界。
+据此，全文叙事遵循同一条逻辑链：先交代能力演化带来的治理压力，再给出双机制分解及其协同关系，最后以分层实验验证机制有效性并严格约束结论边界。
 
 \section{相关工作}
 
-本文所讨论的问题并不属于单一研究方向，而是位于五条技术与理论谱系的交叉点：自主智能体闭环执行、多智能体协作组织、长上下文建模与实际利用、长期记忆架构，以及系统级评测与可观测性。现有工作通常沿其中某一条主线推进，因此能够为本文提供重要构件，却难以直接回答本文的核心问题，即在有限提示预算下，系统应如何统一治理跨角色上下文、跨运行记忆与长轨迹连续性。基于这一判断，本文从以下几个维度回顾相关研究，并据此界定本研究的理论位置。
+本文所讨论的问题并不属于单一研究方向，而是位于五条技术与理论谱系的交叉点：自主智能体闭环执行、多智能体协作组织、长上下文建模与实际利用、长期记忆架构，以及系统级评测与可观测性。现有工作通常沿其中某一条主线推进，因此能够为本文提供重要构件，却难以直接回答本文的核心问题，即在有限提示预算下，系统应如何统一治理跨角色上下文、跨运行记忆与长轨迹连续性。基于这一判断，本文从以下几个维度回顾相关研究，并据此界定本研究的理论位置。回顾顺序与后文方法章节保持一致，避免文献综述与方法设计出现叙事断裂。
 
 \subsection{大语言模型自主智能体}
 
-大语言模型自主智能体通常被建模为在推理、行动与环境反馈之间交替循环的系统，而非一次性文本生成器。综述工作已经较系统地总结了规划、工具调用、外部状态、记忆与自我反思在自主执行中的作用 \citep{wang2024survey}。其中，ReAct 展示了将显式推理轨迹与工具行动耦合的价值，使模型能够在“思考--行动--观察”的闭环中逐步推进任务 \citep{yao2023react}；Reflexion 则进一步把执行反馈转化为语言式自我改进信号，说明失败经验可以被重新注入后续决策过程 \citep{shinn2023reflexion}。这一路线的重要意义在于，它把 LLM 从静态生成器转化为面向任务闭环的执行体。
+大语言模型自主智能体通常被建模为在推理、行动与环境反馈之间交替循环的系统，而非一次性文本生成器。综述工作已经较系统地总结了规划、工具调用、外部状态、记忆与自我反思在自主执行中的作用 \citep{wang2024survey}。其中，ReAct 展示了将显式推理轨迹与工具行动耦合的价值，使模型能够在思考--行动--观察闭环中逐步推进任务 \citep{yao2023react}；Reflexion 则进一步把执行反馈转化为语言式自我改进信号，说明失败经验可以被重新注入后续决策过程 \citep{shinn2023reflexion}。这一路线的重要意义在于，它把 LLM 从静态生成器转化为面向任务闭环的执行体。
 
-然而，单智能体闭环研究主要回答的是“一个智能体如何更好地行动与反思”，而非“多个智能体在长时间跨度中如何共享有限上下文”。在这些工作中，记忆往往表现为局部工作草稿空间、反思日志或任务历史，它们通常服务于单个执行主体的行为改进，而未显式区分运行内共享上下文治理、跨运行长期记忆沉淀以及面向提示预算的压缩选择。因此，这一方向为本文提供了闭环执行的基本范式，却不足以直接解释长时程多智能体系统中的上下文协同问题。
+然而，单智能体闭环研究主要回答的是单个智能体如何更好地行动与反思，而非多个智能体在长时间跨度中如何共享有限上下文。在这些工作中，记忆往往表现为局部工作草稿空间、反思日志或任务历史，它们通常服务于单个执行主体的行为改进，而未显式区分运行内共享上下文治理、跨运行长期记忆沉淀以及面向提示预算的压缩选择。因此，这一方向为本文提供了闭环执行的基本范式，却不足以直接解释长时程多智能体系统中的上下文协同问题。
 
 \subsection{基于大语言模型的多智能体系统}
 
-作为经典基础背景，Wooldridge 对多智能体系统中的协作、协调、组织结构与通信协议给出了非 LLM 时代的系统框架 \citep{wooldridge2009}。在 LLM 语境下，正式综述则把研究重点推进到基于角色画像、通信模式、环境接口和能力获取机制的系统设计 \citep{guo2024llmmas,li2024masworkflow}。这说明多智能体问题并非简单地“多放几个模型”，而是涉及组织、路由与知识流动的系统性问题。
+作为经典基础背景，Wooldridge 对多智能体系统中的协作、协调、组织结构与通信协议给出了非 LLM 时代的系统框架 \citep{wooldridge2009}。在 LLM 语境下，正式综述则把研究重点推进到基于角色画像、通信模式、环境接口和能力获取机制的系统设计 \citep{guo2024llmmas,li2024masworkflow}。这说明多智能体问题并非简单地多放几个模型，而是涉及组织、路由与知识流动的系统性问题。
 
-代表性系统方面，CAMEL 通过角色扮演机制展示了多智能体协作与数据生成的可行性 \citep{li2023camel}；AutoGen 将可对话智能体与群聊编排抽象为通用框架，是少数仍值得保留的高影响预印本代表 \citep{wu2023autogen}；MetaGPT 和 ChatDev 分别将 SOP、结构化消息与软件开发流水线纳入协作骨架，推动了软件工程场景中的多智能体系统化设计 \citep{hong2024metagpt,qian2024chatdev}。进一步地，MASTER 通过面向专业化角色的 MCTS 机制组织招募与通信，MegaAgent 探索了无预定义 SOP 的大规模自治协作，Scaling Large Language Model-based Multi-Agent Collaboration 研究了多智能体协作的规模扩展规律，而 Cross-Team Orchestration 则把多团队并行探索与阶段性交叉协作正式化 \citep{gan2025master,wang2025megaagent,qian2025macnet,du2025crossteam}。这些工作极大丰富了协作范式，但其优化目标仍多集中在任务分解、角色编排或团队扩展上。相比之下，本文更关心的是另一层问题：当这些角色与团队已经存在之后，系统究竟该如何决定哪些上下文应在角色之间传播、哪些经验应被提升为共享知识，以及如何在有限预算下保持协作连续性。
+代表性系统方面，CAMEL 通过角色扮演机制展示了多智能体协作与数据生成的可行性 \citep{li2023camel}；AutoGen 将可对话智能体与群聊编排抽象为通用框架，是少数仍值得保留的高影响预印本代表 \citep{wu2023autogen}；MetaGPT 和 ChatDev 分别将 SOP、结构化消息与软件开发流水线纳入协作骨架，推动了软件工程场景中的多智能体系统化设计 \citep{hong2024metagpt,qian2024chatdev}。进一步地，MASTER 通过面向专业化角色的 MCTS 机制组织招募与通信，MegaAgent 探索了无预定义 SOP 的大规模自治协作，Scaling Large Language Model-based Multi-Agent Collaboration 研究了多智能体协作的规模扩展规律，而 Cross-Team Orchestration 则把多团队并行探索与阶段性交叉协作正式化 \citep{gan2025master,wang2025megaagent,qian2025macnet,du2025crossteam}。在应用层，LLM 驱动的多智能体仿真已扩展到群体智能与舆情扩散场景 \citep{jimenezromero2025swarm,lan2026publicopinion}。这些工作极大丰富了协作范式，但其优化目标仍多集中在任务分解、角色编排或团队扩展上。相比之下，本文更关心的是另一层问题：当这些角色与团队已经存在之后，系统究竟该如何决定哪些上下文应在角色之间传播、哪些经验应被提升为共享知识，以及如何在有限预算下保持协作连续性。
 
 \subsection{长上下文利用局限与位置偏置}
 
-扩展上下文长度已成为重要研究方向，因为许多真实任务超出了朴素提示累积所能稳定处理的范围。围绕旋转位置编码变体等长上下文技术的研究，提升了模型在更大窗口下的表示鲁棒性 \citep{li2024sbarope}。然而，后续研究表明，拥有更长的窗口并不意味着模型能够稳定利用更长的上下文。Lost in the Middle 揭示了长上下文模型对位置信息的使用存在明显偏置：关键信息位于上下文中段时，模型性能往往显著下降 \citep{liu2024lostmiddle}。这说明“可容纳更多 token”与“可正确利用更多证据”是两个不同层面的能力。
+扩展上下文长度已成为重要研究方向，因为许多真实任务超出了朴素提示累积所能稳定处理的范围。围绕旋转位置编码变体等长上下文技术的研究，提升了模型在更大窗口下的表示鲁棒性 \citep{li2024sbarope}。然而，后续研究表明，拥有更长的窗口并不意味着模型能够稳定利用更长的上下文。Lost in the Middle 揭示了长上下文模型对位置信息的使用存在明显偏置：关键信息位于上下文中段时，模型性能往往显著下降 \citep{liu2024lostmiddle}。这说明可容纳更多 token与可正确利用更多证据是两个不同层面的能力。
 
 这一发现对本文具有直接启发意义。长时程多智能体系统所面临的困难，并不只是上下文长度不够，而是候选上下文异质、位置分布不利、历史噪声累积和角色间信息竞争同时存在。换言之，长上下文能力更多是底层条件，而不是高层治理策略。本文因此将长时程推理理解为一个运行时治理问题，而不仅仅是模型容量或位置编码问题。
 
@@ -82,9 +83,9 @@
 
 \subsection{长期记忆架构与记忆分层}
 
-检索增强生成表明，访问外部知识能够显著改善知识密集型任务 \citep{lewis2020rag}。在此基础上，越来越多的工作开始把记忆作为独立于参数权重之外的外部系统来设计。Generative Agents 将记忆、反思与计划显式结合，展示了记忆架构对群体行为与长期连续性的决定性作用 \citep{park2023generative}。MemoryBank 进一步引入带有遗忘曲线的长期记忆更新机制，强调长期交互中“保留什么、忘记什么”本身就是系统设计问题 \citep{zhong2023memorybank}。MemGPT 则借鉴操作系统中的分层存储思想，把上下文窗口、外部存储和控制流管理组织为类似虚拟内存的层级系统 \citep{packer2023memgpt}。这些研究清楚表明，长时程智能体并不能仅依赖单个上下文窗口工作，而需要外部分层记忆体系来维持连续行为。
+检索增强生成表明，访问外部知识能够显著改善知识密集型任务 \citep{lewis2020rag}。随着 AIGC 应用范围扩大，RAG 也逐步从单一问答范式扩展到多模态与多任务增强范式 \citep{zhao2026ragaigc}。在此基础上，越来越多的工作开始把记忆作为独立于参数权重之外的外部系统来设计。Generative Agents 将记忆、反思与计划显式结合，展示了记忆架构对群体行为与长期连续性的决定性作用 \citep{park2023generative}。MemoryBank 进一步引入带有遗忘曲线的长期记忆更新机制，强调长期交互中保留与遗忘本身就是系统设计问题 \citep{zhong2023memorybank}。MemGPT 则借鉴操作系统中的分层存储思想，把上下文窗口、外部存储和控制流管理组织为类似虚拟内存的层级系统 \citep{packer2023memgpt}。最新研究进一步把 RAG 推向非参数持续学习视角，强调记忆结构化组织与关联检索的协同收益 \citep{gutierrez2025ragtomemory}。这些研究清楚表明，长时程智能体并不能仅依赖单个上下文窗口工作，而需要外部分层记忆体系来维持连续行为。
 
-但现有长期记忆研究仍存在两个局限。其一，它们多数面向单智能体对话、陪伴系统或文档分析，重点在于“如何让单个主体记住更多”；其二，即便引入了记忆分层，也往往没有把运行内共享上下文治理与跨运行长期记忆治理严格分开。本文正是在这一点上作进一步划分：运行内上下文的显著性排序与保留由象群机制负责，而跨运行长期记忆的提升、表示与返回由克拉克星鸦机制负责，两者通过治理接口衔接，而非混为单一“记忆模块”。
+但现有长期记忆研究仍存在两个局限。其一，它们多数面向单智能体对话、陪伴系统或文档分析，重点在于提升单个主体的记忆容量；其二，即便引入了记忆分层，也往往没有把运行内共享上下文治理与跨运行长期记忆治理严格分开。来自动物认知建模的研究也提示了这一点：缓存鸟类的 episodic-like memory 涉及事件编码、检索策略与时序更新的协同机制 \citep{brea2023episodic}。本文正是在这一点上作进一步划分：运行内上下文的显著性排序与保留由象群机制负责，而跨运行长期记忆的提升、表示与返回由克拉克星鸦机制负责，两者通过治理接口衔接，而非混为单一记忆模块。
 
 \subsection{图结构检索与关系化记忆}
 
@@ -96,13 +97,13 @@
 
 系统级评测正在从静态任务分数转向交互行为、社会智能与鲁棒性。AgentBench 将评测对象从单步回答扩展到多环境交互，强调长程决策与行动能力 \citep{liu2024agentbench}。ChatEval 通过多智能体辩论式评审模拟多人裁决过程，推动了 LLM-as-a-judge 从单评委到多评委机制的演进 \citep{chan2024chateval}。在社会交互场景中，SOTOPIA 构造了开放式社会情境来评估语言智能体的社会目标完成能力 \citep{zhou2024sotopia}，而 SOTOPIA-$\pi$ 进一步把交互式学习引入社会智能训练，并揭示了基于 LLM 的评审信号可能高估针对性训练模型的问题 \citep{wang2024sotopiapi}。最新的 PEAR 则把 planner--executor 架构的效用与脆弱性放到统一基准中考察，突出说明了多智能体系统不仅要比较最终任务结果，还要评估记忆配置、攻击面与鲁棒性权衡 \citep{dong2026pear}。
 
-这些评测工作带来的理论变化是，研究目标已不再只是“谁的分数更高”，而是“谁在更真实的交互条件下更可靠、更安全、更可解释”。这与本文强调的事件中心可观测性和治理证据链高度一致。也就是说，本文并不把观测性视为纯工程附属物，而是将其视为评估长时程协作、记忆提升与失败分析所必需的方法学基础设施。
+这些评测工作带来的理论变化是，研究目标已不再只是分数高低，而是系统在更真实交互条件下的可靠性、安全性与可解释性。这与本文强调的事件中心可观测性和治理证据链高度一致。也就是说，本文并不把观测性视为纯工程附属物，而是将其视为评估长时程协作、记忆提升与失败分析所必需的方法学基础设施。
 
 \subsection{本文工作的定位}
 
-综合以上文献可以看到，现有研究已经分别触及本文问题的若干关键侧面，但仍缺少一个治理导向的统一视角。第一，单智能体与多智能体研究已经说明闭环执行和角色协作的重要性，但尚未把“跨角色上下文保留”提升为独立机制问题。第二，长上下文与压缩研究已经说明窗口扩展与预算控制的重要性，但尚未充分处理多智能体场景中的异质上下文竞争。第三，长期记忆与图检索研究已经说明外部记忆和关系化表示的价值，但尚未明确区分治理层与表示层，也未充分讨论长期记忆返回对当前运行的污染控制问题。第四，系统级评测虽然越来越强调交互性、鲁棒性与行为证据，但观测性仍常被放在工程实现层，而非方法论核心位置。
+综合以上文献可以看到，现有研究已经分别触及本文问题的若干关键侧面，但仍缺少一个治理导向的统一视角。第一，单智能体与多智能体研究已经说明闭环执行和角色协作的重要性，但尚未把跨角色上下文保留提升为独立机制问题。第二，长上下文与压缩研究已经说明窗口扩展与预算控制的重要性，但尚未充分处理多智能体场景中的异质上下文竞争。第三，长期记忆与图检索研究已经说明外部记忆和关系化表示的价值，但尚未明确区分治理层与表示层，也未充分讨论长期记忆返回对当前运行的污染控制问题。第四，系统级评测虽然越来越强调交互性、鲁棒性与行为证据，但观测性仍常被放在工程实现层，而非方法论核心位置。
 
-与已有研究相比，本文方法因此有四点关键区分。其一，它将运行内显著性治理与跨运行长期记忆图谱分离，并分别形式化为象群上下文管理策略与克拉克星鸦长时记忆图谱机制。其二，它将长时程连续性与上下文压缩视为提示预算下耦合的优化问题，而不是若干彼此独立的启发式工具。其三，它将长期记忆图谱理解为“经治理后的经验胶囊图”，而不是一般意义上的图化知识库或语料索引。其四，它将事件中心可观测性从工程层面的辅助监控提升为方法论基础设施，因为结构化轨迹不仅用于调试，也用于进度投影、记忆治理与失败分析。换言之，本文并不是再发明一个通用的多智能体编排框架，而是试图补足现有系统在上下文治理、长期记忆组织、预算约束压缩与事件化证据上的共性空缺。
+与已有研究相比，本文方法因此有四点关键区分。其一，它将运行内显著性治理与跨运行长期记忆图谱分离，并分别形式化为象群上下文管理策略与克拉克星鸦长时记忆图谱机制。其二，它将长时程连续性与上下文压缩视为提示预算下耦合的优化问题，而不是若干彼此独立的启发式工具。其三，它将长期记忆图谱理解为经治理后的经验胶囊图，而不是一般意义上的图化知识库或语料索引。其四，它将事件中心可观测性从工程层面的辅助监控提升为方法论基础设施，因为结构化轨迹不仅用于调试，也用于进度投影、记忆治理与失败分析。换言之，本文并不是再发明一个通用的多智能体编排框架，而是试图补足现有系统在上下文治理、长期记忆组织、预算约束压缩与事件化证据上的共性空缺。
 
 \section{问题表述}
 
@@ -129,6 +130,7 @@
 \pi_{\text{route}} : (x, \mathcal{H}_t, \mathcal{X}_t) \mapsto \{(\alpha_j, \tau_j)\}_{j=1}^{m_t},
 \end{equation}
 其中 $\alpha_j \in \mathcal{A}$ 是被选中的智能体，$\tau_j$ 是紧凑任务数据包。系统不仅要决定由谁执行，还要决定应随委派携带哪些压缩后的上下文与记忆证据。
+为保证协作规范性，本文约束 $\tau_j$ 至少包含四类字段：任务目标摘要 $g_j$、压缩上下文切片 $\hat{\mathcal{C}}_j$、可追溯证据索引 $\eta_j$ 与执行预算约束 $\beta_j$。这使跨角色协作从口头式转交变为可审计、可复现的数据包传递。
 
 记忆在四个层级上受到治理：
 \begin{equation}
@@ -136,7 +138,7 @@
 \end{equation}
 其中，局部记忆服务于当前运行；候选记忆存放尚未验证的中间知识；集体记忆存放已验证的共享知识；星鸦图谱记忆存放可在未来以子图形式返回的跨运行长期记忆胶囊。
 
-在治理逻辑上，这四层并非简单并列的存储容器，而构成受条件约束的状态转移链。局部记忆承接当前步骤的临时结果，候选记忆承接尚待验证与筛选的中间知识，集体记忆保存已经过证据支持且值得在当前系统内部持续复用的共享内容，而星鸦图谱记忆只接收那些不仅在当前运行中有共享价值、而且具备跨运行泛化价值的经验胶囊。换言之，集体记忆回答的是“当前系统内部哪些知识应继续共享”，星鸦图谱记忆回答的是“哪些经验值得沉淀为未来运行可召回的长期结构”。
+在治理逻辑上，这四层并非简单并列的存储容器，而构成受条件约束的状态转移链。局部记忆承接当前步骤的临时结果，候选记忆承接尚待验证与筛选的中间知识，集体记忆保存已经过证据支持且值得在当前系统内部持续复用的共享内容，而星鸦图谱记忆只接收那些不仅在当前运行中有共享价值、而且具备跨运行泛化价值的经验胶囊。换言之，集体记忆回答的是当前系统内部哪些知识应继续共享，星鸦图谱记忆回答的是哪些经验值得沉淀为未来运行可召回的长期结构。
 
 最后，执行过程会产生事件流
 \begin{equation}
@@ -160,6 +162,7 @@ x \rightarrow \text{路由} \rightarrow \text{上下文构造} \rightarrow \text
 \end{equation}
 
 给定请求 $x$ 后，系统首先解析路由策略，决定任务是保持单智能体执行、进入工作流，还是委派给专业化智能体。随后，系统从线程历史、记忆层、检索证据、策略指令与委派数据包中构造候选上下文。象群上下文管理策略与上下文压缩共同决定在当前提示预算下哪些片段能够保留下来。活跃智能体或监督者随后基于压缩后的提示进行推理，在需要时调用工具或检索，也可继续拆分并委派子任务。执行结束后，MGCM 决定产生的知识是保留在本地、成为候选共享笔记，还是被提升为集体记忆。随后，克拉克星鸦长时记忆图谱机制进一步决定哪些高价值经验应被提升为跨运行长期记忆胶囊，并在何种线索与约束下以子图形式返回。与此同时，所有执行阶段都会产生结构化事件，并被持久化与投影到 todo 视图中，用于进度重建。
+在这一流程中，协作规范的核心不是增加通信次数，而是固定每次转交的信息边界与证据边界：每次委派都要求目标、证据与预算同时对齐，每次回流都要求结果、置信与复用信号同时记录。
 
 这种表述使该框架成为一种以方法为中心、而非以架构为中心的方案。重点不在于枚举软件模块，而在于明确规定上下文、记忆与协作如何跨时间被联合治理。
 
@@ -167,7 +170,7 @@ x \rightarrow \text{路由} \rightarrow \text{上下文构造} \rightarrow \text
 
 \subsection{象群上下文管理策略}
 
-从章节化研究问题看，象群上下文管理策略对应本文第三章的核心机制。该章并不试图同时解决“当前应看什么”和“未来应记住什么”这两类问题，而是聚焦于预算受限条件下的群体上下文治理：当多个智能体、工具输出和中间产物同时竞争有限提示空间时，系统应如何决定哪些信息进入当前提示、哪些只保留为候选共享记忆、哪些被压缩延后，乃至哪些应被直接舍弃。因此，本节关注的是共享上下文的显著性排序、跨角色传播与协作稳定性；个体长期记忆的形成、表示与跨运行返回不作为本节重点，而作为下一部分以及论文第四章的独立研究对象展开。
+从章节化研究问题看，象群上下文管理策略对应本文第三章的核心机制。该章并不试图同时解决当前应看什么和未来应记住什么这两类问题，而是聚焦于预算受限条件下的群体上下文治理：当多个智能体、工具输出和中间产物同时竞争有限提示空间时，系统应如何决定哪些信息进入当前提示、哪些只保留为候选共享记忆、哪些被压缩延后，乃至哪些应被直接舍弃。因此，本节关注的是共享上下文的显著性排序、跨角色传播与协作稳定性；个体长期记忆的形成、表示与跨运行返回不作为本节重点，而作为下一部分以及论文第四章的独立研究对象展开。
 
 象群上下文管理策略并不是神经网络内部的注意力层，而是一种系统级显著性策略，用于在协作执行中对候选上下文进行耐久性重要度排序。为与历史实验标识 \texttt{rq2\_elephant\_attention} 和实现记号保持一致，下式沿用符号 $s_i^{\text{EA}}$。对于每个候选片段 $z_i \in \mathcal{X}_t$，定义其策略分数为
 \begin{equation}
@@ -179,13 +182,13 @@ s_i^{\text{EA}} = \alpha \, \mathrm{Rel}(z_i, x) + \beta \, \mathrm{Val}(z_i) + 
 \begin{equation}
 \beta + \gamma + \delta > \alpha_{\text{recency}},
 \end{equation}
-这表示经过验证、可复用并受到结果支持的上下文，能够压过仅仅“最新”的上下文。这一点不同于以新近性为主导的提示组装方式，后者往往会高估新近但不稳定的交互历史。
+这表示经过验证、可复用并受到结果支持的上下文，能够压过仅仅最新的上下文。这一点不同于以新近性为主导的提示组装方式，后者往往会高估新近但不稳定的交互历史。
 
 在实践中，象群上下文管理策略要解决的是一个典型的协作问题：当多个智能体、工具输出与中间结果争夺有限提示预算时，什么应当持续保持影响力。当专业化智能体的产出与已验证规则需要在后续决策中持续发挥作用时，该机制尤为重要。
 
 \subsection{克拉克星鸦长时记忆图谱机制}
 
-仅有运行内的群体上下文治理仍不足以支撑长时程系统的跨线程适应。象群上下文管理策略能够回答“当前这一轮什么最该被看见”，却不能单独回答“哪些经验值得被长期保存、未来如何按线索召回，以及如何避免陈旧或冲突记忆重新污染当前提示”。因此，在群体治理层之上，还需要一个面向个体经验沉淀与长期复用的记忆机制。前一部分解决的是运行内共享上下文的选择问题，后一部分解决的是跨运行个体经验的存储与返回问题，二者共同构成长时程多智能体系统的记忆闭环。
+仅有运行内的群体上下文治理仍不足以支撑长时程系统的跨线程适应。象群上下文管理策略能够回答当前这一轮什么最该被看见，却不能单独回答哪些经验值得被长期保存、未来如何按线索召回，以及如何避免陈旧或冲突记忆重新污染当前提示。因此，在群体治理层之上，还需要一个面向个体经验沉淀与长期复用的记忆机制。前一部分解决的是运行内共享上下文的选择问题，后一部分解决的是跨运行个体经验的存储与返回问题，二者共同构成长时程多智能体系统的记忆闭环。
 
 从论文组织上看，克拉克星鸦长时记忆图谱机制对应第四章。该章的研究对象不再是多个智能体在当前运行中的上下文竞争，而是单个经验单元如何从局部工作痕迹演化为可复用的长期记忆胶囊。围绕这一目标，本文重点考察四个相互衔接的环节：经验抽取与规范化表示、基于验证与复用信号的提升判定、图谱节点与关系边构建，以及面向后续任务的安全返回与子图注入。也就是说，本节关注的是个体长期记忆的形成、表示、检索与更新；这些个体记忆在返回到运行时之后，才进一步参与上一节所讨论的群体上下文治理。
 
@@ -209,15 +212,15 @@ r(m, x, \mathcal{H}_t) \geq \theta_{\text{return}}
 \end{equation}
 时重新引入。
 
-这形成了一种“治理层 + 图谱层”分离的长期记忆模型：MGCM 负责决定哪些候选经验值得被提升、验证、降级或废弃；图谱层则把通过治理的经验表示为记忆胶囊节点，并通过时间关联、任务关联、证据支持、范围重叠、修正/替代与冲突关系构建边。未来检索时，系统依据当前任务线索先定位候选节点，再扩展为局部子图，并在注入提示前过滤陈旧或冲突节点。本文实现中的 \texttt{seagull\_memory} 与 \texttt{rq3\_seagull\_memory} 仅作为历史实现别名保留，用于对齐已有实验目录与结果资产；主文中的理论表述统一采用克拉克星鸦长时记忆图谱机制。
+这形成了一种治理层 + 图谱层分离的长期记忆模型：MGCM 负责决定哪些候选经验值得被提升、验证、降级或废弃；图谱层则把通过治理的经验表示为记忆胶囊节点，并通过时间关联、任务关联、证据支持、范围重叠、修正/替代与冲突关系构建边。未来检索时，系统依据当前任务线索先定位候选节点，再扩展为局部子图，并在注入提示前过滤陈旧或冲突节点。本文实现中的 \texttt{seagull\_memory} 与 \texttt{rq3\_seagull\_memory} 仅作为历史实现别名保留，用于对齐已有实验目录与结果资产；主文中的理论表述统一采用克拉克星鸦长时记忆图谱机制。
 
 在工程实现上，本文将该机制设计为一个独立的 Neo4j 可插拔模块，而不侵入 AgentOrch 的核心运行时。长期记忆以 \texttt{:MemoryCapsule} 节点形式存入 Neo4j 5.x 图数据库，\texttt{capsule\_id} 作为唯一主键。节点记录任务目标、摘要、结果、知识范围、标签、实体、结构化 claims，以及场景哈希、显著性、置信度、状态、复用计数和创建/校验时间等元数据；边则固定为时间相邻、同任务、证据支持、范围重叠、修正替代与显式冲突六类关系。索引层同时建立主键约束、摘要相关全文索引、摘要向量索引，以及面向线程族、任务族、状态与时间字段的范围索引，从而支撑跨运行检索与局部子图扩展。
 
-在返回路径上，模块采用“混合召回 + 一跳扩展 + 渐进式披露”的策略。系统首先利用向量索引与全文索引各召回 top-6 候选胶囊，并按照 semantic score、lexical score、scene match、confidence 与 reuse count 联合重排，同时扣除 stale penalty 与 conflict penalty；随后从 top-3 种子节点执行 1-hop 子图扩展，默认最多返回 12 个节点与 24 条边，并在注入提示前抑制 \texttt{deprecated}、低置信陈旧节点和冲突节点。首屏仅返回可注入提示的子图摘要、节点索引表与边列表；若智能体需要细节，再按 \texttt{capsule\_id} 调用详情查询接口。由此，图谱层可以作为独立模块嵌入任意智能体，并在不替换原有编排器的前提下提供长期记忆子图服务。
+在返回路径上，模块采用混合召回 + 一跳扩展 + 渐进式披露的策略。系统首先利用向量索引与全文索引各召回 top-6 候选胶囊，并按照 semantic score、lexical score、scene match、confidence 与 reuse count 联合重排，同时扣除 stale penalty 与 conflict penalty；随后从 top-3 种子节点执行 1-hop 子图扩展，默认最多返回 12 个节点与 24 条边，并在注入提示前抑制 \texttt{deprecated}、低置信陈旧节点和冲突节点。首屏仅返回可注入提示的子图摘要、节点索引表与边列表；若智能体需要细节，再按 \texttt{capsule\_id} 调用详情查询接口。由此，图谱层可以作为独立模块嵌入任意智能体，并在不替换原有编排器的前提下提供长期记忆子图服务。
 
 为评估这一实现的工程可用性，本文在本机 Windows 11、Python 3.13.5 与 Neo4j 5.26.24 Community 环境下，对三档 Neo4j 图规模进行了真实延迟测试。测试覆盖 12 个场景，统一采用 2 轮预热与 5 轮正式测量；在 scale-1、scale-2 与 scale-4 设置下，分别得到 360、720 与 1440 个记忆胶囊节点，并对应 3012、3045 与 2440 条关系边。结果如表~\ref{tab:ltmg-graph-scale-latency} 所示：\texttt{recall()} 的平均耗时稳定在 91.60--99.08\,ms，P95 为 120.24--142.44\,ms，吞吐保持在约 10\,QPS；\texttt{fetch\_capsule\_details()} 的平均耗时维持在 3.67--3.76\,ms。该结果表明，当前 Neo4j 图结构存储与混合检索链路能够在约 0.1\,s 内完成首屏长期记忆子图返回，并在图规模扩展到 1440 个节点时仍维持可接受的交互式响应。
 
-除时延之外，长期记忆图谱还需要在固定首屏预算下与强退化基线比较其记忆质量。为此，本文在同一演示语料上构造了一个独立于 AgentOrch 主流程的模块级强基线 benchmark：所有方法共享 12 个场景与同一批记忆胶囊候选，统一采用“首屏 top-6 节点 + top-12 边”的评估预算。比较对象包括无长期记忆、纯向量记忆、平面摘要记忆、朴素图记忆以及完整的克拉克星鸦长时记忆图谱机制。单次聚合结果见表~\ref{tab:ltmg-baseline-aggregate}，五个 embedding seed 下的稳定性汇总见表~\ref{tab:ltmg-stability-aggregate}。可以看到，完整图谱机制在单次聚合中把 \texttt{relation\_hit\_rate} 提升到 0.0324，并把 \texttt{stale\_node\_injection\_rate} 压到 0；在五个种子上，\texttt{conflict\_resolution\_success} 的均值达到 0.9833，95\% 置信区间为 [0.9500, 1.0000]。这些结果说明显式关系建模、陈旧抑制和冲突裁决确实带来了更安全的首屏子图；但 \texttt{flat\_summary\_memory} 仍然是一个非常强的检索基线，其在 \texttt{capsule\_recall@k}、\texttt{subgraph\_relevance} 与 \texttt{returned\_memory\_usefulness} 上仍高于当前图谱实现。这意味着当前图谱模块的优势主要体现在“结构化关系返回与错误记忆抑制”，而不是已经在所有首屏召回指标上形成压倒性优势。
+除时延之外，长期记忆图谱还需要在固定首屏预算下与强退化基线比较其记忆质量。为此，本文在同一演示语料上构造了一个独立于 AgentOrch 主流程的模块级强基线 benchmark：所有方法共享 12 个场景与同一批记忆胶囊候选，统一采用首屏 top-6 节点 + top-12 边的评估预算。比较对象包括无长期记忆、纯向量记忆、平面摘要记忆、朴素图记忆以及完整的克拉克星鸦长时记忆图谱机制。单次聚合结果见表~\ref{tab:ltmg-baseline-aggregate}，五个 embedding seed 下的稳定性汇总见表~\ref{tab:ltmg-stability-aggregate}。可以看到，完整图谱机制在单次聚合中把 \texttt{relation\_hit\_rate} 提升到 0.0324，并把 \texttt{stale\_node\_injection\_rate} 压到 0；在五个种子上，\texttt{conflict\_resolution\_success} 的均值达到 0.9833，95\% 置信区间为 [0.9500, 1.0000]。这些结果说明显式关系建模、陈旧抑制和冲突裁决确实带来了更安全的首屏子图；但 \texttt{flat\_summary\_memory} 仍然是一个非常强的检索基线，其在 \texttt{capsule\_recall@k}、\texttt{subgraph\_relevance} 与 \texttt{returned\_memory\_usefulness} 上仍高于当前图谱实现。这意味着当前图谱模块的优势主要体现在结构化关系返回与错误记忆抑制，而不是已经在所有首屏召回指标上形成压倒性优势。
 
 \subsection{长时程注意力}
 
@@ -309,13 +312,13 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 运行协议在正式实验中尽量固定。主文只纳入真实模型，参考模型为 \texttt{gpt-4o}，低成本真实模型集合为 \texttt{gpt-4o-mini}、\texttt{deepseek-chat} 和 \texttt{qwen-plus}。主预算档位为 \texttt{12000} tokens，RQ4 额外扫描更低预算档位，用于观察退化曲线而非单点得分。主指标直接采用正式运行文件中的 \texttt{quality\_score}，成功率、token 使用量以及任务特定元数据也全部来自真实结果目录。若运行失败、超时或低分，均按原始记录纳入汇总，不做事后修正。
 
-基线设置按研究问题固定，以避免收益来源混杂。RQ1 比较完整框架、单智能体基础版与去除象群上下文管理策略的多智能体版本；RQ2 比较完整框架、去除象群上下文管理策略的多智能体版本与单智能体长上下文版本；RQ3 比较完整框架、朴素长期记忆版本与去除星鸦长时记忆图谱机制的多智能体版本；由于正式实验目录仍沿用 \texttt{rq2\_elephant\_attention} 与 \texttt{rq3\_seagull\_memory} 这两类历史命名，正文将其视为实现别名，而不再作为理论命名；RQ4 比较完整框架、去除上下文压缩的版本与去除长时程注意力的版本；RQ5 仅作为补充分析，比对完整框架与普通日志版本。这样的设计是为了把“更多智能体”“更长上下文”和“显式治理机制”这三类可能的收益来源分开讨论，而不是只给出一个难以解释的混合总分。
+基线设置按研究问题固定，以避免收益来源混杂。RQ1 比较完整框架、单智能体基础版与去除象群上下文管理策略的多智能体版本；RQ2 比较完整框架、去除象群上下文管理策略的多智能体版本与单智能体长上下文版本；RQ3 比较完整框架、朴素长期记忆版本与去除星鸦长时记忆图谱机制的多智能体版本；由于正式实验目录仍沿用 \texttt{rq2\_elephant\_attention} 与 \texttt{rq3\_seagull\_memory} 这两类历史命名，正文将其视为实现别名，而不再作为理论命名；RQ4 比较完整框架、去除上下文压缩的版本与去除长时程注意力的版本；RQ5 仅作为补充分析，比对完整框架与普通日志版本。这样的设计是为了把更多智能体更长上下文和显式治理机制这三类可能的收益来源分开讨论，而不是只给出一个难以解释的混合总分。
 
 除主文公开 benchmark 中的 RQ3 对照外，本文还设置了一个直接面向克拉克星鸦图谱模块实现的离线强基线实验。该实验不依赖外部编排器，而是在同一演示图上统一比较五种返回策略：\texttt{no\_long\_term\_memory} 不返回任何历史记忆；\texttt{vector\_memory} 仅使用向量索引返回候选胶囊；\texttt{flat\_summary\_memory} 将同任务族高状态节点压成平面摘要并按摘要相关性返回节点，不构造边；\texttt{naive\_graph\_memory} 允许向量/全文混合召回与一跳扩展，但不使用 scene-aware 重排、陈旧抑制和冲突裁决；\texttt{clarks\_nutcracker\_graph} 则启用完整的混合召回、关系感知扩展、陈旧抑制、冲突消解与渐进式披露策略。所有方法共享同一语料、相同首屏预算和相同 top-k 约束，从而使差异尽量集中到长期记忆机制本身。
 
 该实验的主指标与第二章机制目标保持一致。\texttt{capsule\_recall@k} 衡量首屏 top-k 节点覆盖高价值胶囊的比例；\texttt{subgraph\_relevance} 衡量返回节点中真正属于当前任务有效子图的占比；\texttt{relation\_hit\_rate} 衡量返回边与 gold 关系边的一致程度；\texttt{returned\_memory\_usefulness} 以阶段权重估计首屏返回内容的平均有用性；陈旧节点注入率衡量首屏中陈旧或废弃节点的混入比例；冲突消解成功率衡量在存在冲突记忆时，系统是否保留了更新时间更近、置信度更高的优胜节点并排除了失败节点。\texttt{latency\_ms} 作为工程指标单独报告，用于观察质量提升是否伴随可接受的时间开销，但不将其作为主质量证据。
 
-统计汇总默认以 run-level 记录为单位，并在表中同时报告样本数、seed 数、模型数与运行数，避免把极小样本下的 \texttt{1.00} 或 \texttt{0.00} 误读为大规模稳定现象。主结果表给出均值与 bootstrap 95\% 置信区间；针对 \texttt{full\_framework} 与关键基线的比较，另行报告配对差值、bootstrap 区间与 sign test 的近似 $p$ 值。低成本模型聚合结果只用于检验方向是否跨模型保持，不用于主张绝对性能上界。由于当前实验使用的是 benchmark 对齐切片，而非完整公开测试集，正文统一把这些结果表述为“本文实现切片上的真实结果”，而不把它们写成完整公开 benchmark 排行结论。
+统计汇总默认以 run-level 记录为单位，并在表中同时报告样本数、seed 数、模型数与运行数，避免把极小样本下的 \texttt{1.00} 或 \texttt{0.00} 误读为大规模稳定现象。主结果表给出均值与 bootstrap 95\% 置信区间；针对 \texttt{full\_framework} 与关键基线的比较，另行报告配对差值、bootstrap 区间与 sign test 的近似 $p$ 值。低成本模型聚合结果只用于检验方向是否跨模型保持，不用于主张绝对性能上界。由于当前实验使用的是 benchmark 对齐切片，而非完整公开测试集，正文统一把这些结果表述为本文实现切片上的真实结果，而不把它们写成完整公开 benchmark 排行结论。
 
 除公开 benchmark 外，本文还对克拉克星鸦长时记忆图谱模块进行了两类实现级评测。一类是本地 Neo4j 工程效率测试，报告 \texttt{recall()} 与 \texttt{fetch\_capsule\_details()} 的时延分布，用于验证模块的可插拔部署可行性；另一类是上文给出的离线强基线 benchmark，用于在受控首屏预算下比较不同长期记忆返回策略的记忆质量。这两类结果共同服务于机制验证，但都不替代公开 benchmark 所承担的系统级主证据角色。
 
@@ -330,7 +333,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 \label{fig:coverage-map}
 \end{figure}
 
-为避免实验部分只给出零散数字而缺少证据结构，本节在数值表之外增加三类视觉材料。首先，图~\ref{fig:coverage-map} 给出公开 benchmark 的覆盖密度与证据强度概览，用来说明为什么不同研究问题能承载的结论强度并不相同。可以看到，RQ1 的 benchmark、模型与运行密度都明显高于其余问题，因此它更接近主证据形态；RQ2--RQ4 虽然已经通过补跑获得更好的 seed 覆盖，但密度仍不均匀，RQ5 则本质上仍是诊断性补充证据。这种“先看证据密度，再看实验优劣”的顺序，有助于让后续图表解读不脱离真实覆盖边界。
+为避免实验部分只给出零散数字而缺少证据结构，本节在数值表之外增加三类视觉材料。首先，图~\ref{fig:coverage-map} 给出公开 benchmark 的覆盖密度与证据强度概览，用来说明为什么不同研究问题能承载的结论强度并不相同。可以看到，RQ1 的 benchmark、模型与运行密度都明显高于其余问题，因此它更接近主证据形态；RQ2--RQ4 虽然已经通过补跑获得更好的 seed 覆盖，但密度仍不均匀，RQ5 则本质上仍是诊断性补充证据。这种先看证据密度，再看实验优劣的顺序，有助于让后续图表解读不脱离真实覆盖边界。
 
 \begin{figure}[t]
 \centering
@@ -339,16 +342,16 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 \label{fig:main-results}
 \end{figure}
 
-图~\ref{fig:main-results} 是主文最重要的公开 benchmark 结果图。左侧的绝对结果说明，RQ1 与 RQ4 中完整框架相对关键基线的优势最清晰；右侧的配对差值进一步压缩了阅读成本，使“增益来自哪里”不再只依赖表格查找。从当前结果看，RQ1 和 RQ4 的正向信号最稳定，RQ2 在本轮补跑后仍保留正向配对 gap，但优势明显弱于 RQ1 与 RQ4；RQ3 则在当前真实数据上依然没有形成正向优势。也正因为图~\ref{fig:coverage-map} 已经显示不同研究问题的证据密度并不对称，所以这里更合适的写法是：统一框架在长时程任务和预算鲁棒性上表现更好，而 RQ2 更接近“存在弱正向趋势但证据尚不闭合”，并不意味着所有模块贡献都已经被同等强度地验证。
+图~\ref{fig:main-results} 是主文最重要的公开 benchmark 结果图。左侧的绝对结果说明，RQ1 与 RQ4 中完整框架相对关键基线的优势最清晰；右侧的配对差值进一步压缩了阅读成本，使增益来自哪里不再只依赖表格查找。从当前结果看，RQ1 和 RQ4 的正向信号最稳定，RQ2 在本轮补跑后仍保留正向配对 gap，但优势明显弱于 RQ1 与 RQ4；RQ3 则在当前真实数据上依然没有形成正向优势。也正因为图~\ref{fig:coverage-map} 已经显示不同研究问题的证据密度并不对称，所以这里更合适的写法是：统一框架在长时程任务和预算鲁棒性上表现更好，而 RQ2 更接近存在弱正向趋势但证据尚不闭合，并不意味着所有模块贡献都已经被同等强度地验证。
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.98\linewidth]{\reportassetspath/formal_reference_profile.pdf}
-\caption{参考模型的实验剖面图。每个子图展示 \texttt{gpt-4o} 在对应研究问题上的绝对主指标、置信区间与 token 开销，用于观察“高分是否伴随更高成本”以及“哪些任务已接近饱和”。}
+\caption{参考模型的实验剖面图。每个子图展示 \texttt{gpt-4o} 在对应研究问题上的绝对主指标、置信区间与 token 开销，用于观察高分是否伴随更高成本以及哪些任务已接近饱和。}
 \label{fig:reference-profile}
 \end{figure}
 
-图~\ref{fig:reference-profile} 补足了只看总体均值时容易遗漏的绝对形态。它显示，在参考模型上，RQ2 与 RQ3 的多个变体都已经接近高分区间，这意味着它们的比较更容易受到 ceiling effect 的影响；同时，部分看似接近的结果其实伴随着不同的 token 使用量，说明“谁更强”之外还应关心“谁以何种成本达到相近表现”。这种剖面视角使实验叙事从单一优劣判断扩展到“绝对水平、置信区间、开销结构”三者并读，也更符合长时程系统论文应有的呈现方式。
+图~\ref{fig:reference-profile} 补足了只看总体均值时容易遗漏的绝对形态。它显示，在参考模型上，RQ2 与 RQ3 的多个变体都已经接近高分区间，这意味着它们的比较更容易受到 ceiling effect 的影响；同时，部分看似接近的结果其实伴随着不同的 token 使用量，说明谁更强之外还应关心谁以何种成本达到相近表现。这种剖面视角使实验叙事从单一优劣判断扩展到绝对水平、置信区间、开销结构三者并读，也更符合长时程系统论文应有的呈现方式。
 
 \begin{figure}[t]
 \centering
@@ -357,7 +360,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 \label{fig:cheap-results}
 \end{figure}
 
-图~\ref{fig:cheap-results} 展示的是低成本真实模型聚合结果。它说明，在当前已收集的公开 benchmark 对齐切片上，RQ1 与 RQ4 的收益方向并不只出现在参考模型 \texttt{gpt-4o} 上，而是在低成本模型集合中也保持为正。RQ2 的低成本模型聚合结果依旧偏向 \texttt{full\_framework}，说明象群上下文管理策略在高干扰上下文中的作用并非完全不可见，但这种趋势目前仍建立在有限模型覆盖之上。与此同时，这张图也保留了负面与不充分发现：RQ2 虽然出现了正向均值差距，但 sign test 的结果仍未达到足够稳健的统计支持，跨模型一致性也只在少数模型上成立，而且低成本单智能体长上下文基线目前仍只有一个真实模型；RQ3 则依旧没有出现预期中的正向间隔。因此，图~\ref{fig:cheap-results} 只能支持“部分模块收益具有一定跨模型迁移性”，不能支持“所有模块在不同模型上都一致成立”。
+图~\ref{fig:cheap-results} 展示的是低成本真实模型聚合结果。它说明，在当前已收集的公开 benchmark 对齐切片上，RQ1 与 RQ4 的收益方向并不只出现在参考模型 \texttt{gpt-4o} 上，而是在低成本模型集合中也保持为正。RQ2 的低成本模型聚合结果依旧偏向 \texttt{full\_framework}，说明象群上下文管理策略在高干扰上下文中的作用并非完全不可见，但这种趋势目前仍建立在有限模型覆盖之上。与此同时，这张图也保留了负面与不充分发现：RQ2 虽然出现了正向均值差距，但 sign test 的结果仍未达到足够稳健的统计支持，跨模型一致性也只在少数模型上成立，而且低成本单智能体长上下文基线目前仍只有一个真实模型；RQ3 则依旧没有出现预期中的正向间隔。因此，图~\ref{fig:cheap-results} 只能支持部分模块收益具有一定跨模型迁移性，不能支持所有模块在不同模型上都一致成立。
 
 \begin{figure}[t]
 \centering
@@ -366,7 +369,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 \label{fig:memory-diagnostics}
 \end{figure}
 
-图~\ref{fig:memory-diagnostics} 对应 RQ3。该图不再只把三个指标并排堆成静态柱状，而是强调 recall、reuse 与 stale memory 必须被联立理解。当前公开 benchmark 切片上的真实结果仍然不能支持“星鸦长时记忆图谱机制已经显著更强”这一强断言：\texttt{full\_framework} 在 recall 与 reuse 上并未明显拉开与退化变体的距离，stale memory 指标也没有形成足够清晰的优势。然而，表~\ref{tab:ltmg-baseline-aggregate} 与表~\ref{tab:ltmg-stability-aggregate} 给出的模块级强基线 benchmark 提供了更细粒度的证据。与 \texttt{vector\_memory} 和 \texttt{naive\_graph\_memory} 相比，完整图谱机制在单次聚合结果中把 \texttt{relation\_hit\_rate} 提升到 0.0324，并把 \texttt{stale\_node\_injection\_rate} 压到 0；在五个 seed 的稳定性汇总中，\texttt{conflict\_resolution\_success} 的均值为 0.9833，且 95\% 置信区间达到 [0.9500, 1.0000]。但它在 \texttt{capsule\_recall@k}、\texttt{subgraph\_relevance} 和 \texttt{returned\_memory\_usefulness} 上仍落后于 \texttt{flat\_summary\_memory}。因此，更准确的写法是：当前图谱层已经开始显示出结构化关系返回与错误记忆抑制方面的机制优势，并在多 seed 汇总下保持了相同趋势，但首屏召回排序与节点选择仍不足以支持“全面优于强基线”的结论。
+图~\ref{fig:memory-diagnostics} 对应 RQ3。该图不再只把三个指标并排堆成静态柱状，而是强调 recall、reuse 与 stale memory 必须被联立理解。当前公开 benchmark 切片上的真实结果仍然不能支持星鸦长时记忆图谱机制已经显著更强这一强断言：\texttt{full\_framework} 在 recall 与 reuse 上并未明显拉开与退化变体的距离，stale memory 指标也没有形成足够清晰的优势。然而，表~\ref{tab:ltmg-baseline-aggregate} 与表~\ref{tab:ltmg-stability-aggregate} 给出的模块级强基线 benchmark 提供了更细粒度的证据。与 \texttt{vector\_memory} 和 \texttt{naive\_graph\_memory} 相比，完整图谱机制在单次聚合结果中把 \texttt{relation\_hit\_rate} 提升到 0.0324，并把 \texttt{stale\_node\_injection\_rate} 压到 0；在五个 seed 的稳定性汇总中，\texttt{conflict\_resolution\_success} 的均值为 0.9833，且 95\% 置信区间达到 [0.9500, 1.0000]。但它在 \texttt{capsule\_recall@k}、\texttt{subgraph\_relevance} 和 \texttt{returned\_memory\_usefulness} 上仍落后于 \texttt{flat\_summary\_memory}。因此，更准确的写法是：当前图谱层已经开始显示出结构化关系返回与错误记忆抑制方面的机制优势，并在多 seed 汇总下保持了相同趋势，但首屏召回排序与节点选择仍不足以支持全面优于强基线的结论。
 
 \begin{figure}[t]
 \centering
@@ -377,7 +380,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 图~\ref{fig:budget-robustness} 对应 RQ4。图中最重要的信息不是某一个预算点的绝对高低，而是预算继续收缩时各方法的退化速度。从当前真实结果看，\texttt{full\_framework} 相对于 \texttt{multi\_agent\_no\_long\_horizon} 和 \texttt{multi\_agent\_no\_compression} 维持了更高的主指标，配对差值也稳定为正。这支持了这样一种更谨慎的解释：在当前 LongBench 与 InfiniteBench 的实现切片上，长时程注意力与上下文压缩的组合能够减缓预算压力下的性能坍塌。
 
-不过，这一结论仍然需要受限表述。当前公开结果主要来自 LongBench 的官方子集切片，样本量和 seed 数都偏小，因此它更接近“当前切片上显示出较平缓退化曲线”，而不是“已在完整长上下文 benchmark 上稳定证明”的结论。文中所有关于预算鲁棒性的说法都应理解为这一边界下的判断。
+不过，这一结论仍然需要受限表述。当前公开结果主要来自 LongBench 的官方子集切片，样本量和 seed 数都偏小，因此它更接近当前切片上显示出较平缓退化曲线，而不是已在完整长上下文 benchmark 上稳定证明的结论。文中所有关于预算鲁棒性的说法都应理解为这一边界下的判断。
 
 \begin{figure}[t]
 \centering
@@ -386,11 +389,11 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 \label{fig:scaling}
 \end{figure}
 
-图~\ref{fig:scaling} 是扩展性补充图，而不是主结论图。它提示我们，更多 agent 并不会自动转化为更高分数；一旦协作规模扩大，协调质量、上下文传递与记忆治理就会成为新的瓶颈。因此，这张图的价值在于说明“协作规模需要治理”，而不在于证明“增加 agent 数量本身就是优势来源”。
+图~\ref{fig:scaling} 是扩展性补充图，而不是主结论图。它提示我们，更多 agent 并不会自动转化为更高分数；一旦协作规模扩大，协调质量、上下文传递与记忆治理就会成为新的瓶颈。因此，这张图的价值在于说明协作规模需要治理，而不在于证明增加 agent 数量本身就是优势来源。
 
 \subsection{跨模型结果}
 
-跨模型分析的意义在于回答一个更窄但非常关键的问题：当前观察到的收益是否依赖某一个特别强的模型。从现有真实数据看，可以支持的说法是“部分结论具有一定方向稳定性”，尤其体现在 RQ1 与 RQ4；RQ2 在补跑后仍保留弱正向趋势，但这种趋势既没有在参考模型上清晰拉开，也没有形成充分的跨模型一致性；RQ3 则依旧只呈现混合方向，而不能支持稳定收益。也就是说，框架表现出的并不是完全统一的泛化图景，而是若干模块已经出现了可迁移的正向信号，另一些模块则仍需更大规模补跑验证，甚至可能需要重新审视模块本身的设计假设。
+跨模型分析的意义在于回答一个更窄但非常关键的问题：当前观察到的收益是否依赖某一个特别强的模型。从现有真实数据看，可以支持的说法是部分结论具有一定方向稳定性，尤其体现在 RQ1 与 RQ4；RQ2 在补跑后仍保留弱正向趋势，但这种趋势既没有在参考模型上清晰拉开，也没有形成充分的跨模型一致性；RQ3 则依旧只呈现混合方向，而不能支持稳定收益。也就是说，框架表现出的并不是完全统一的泛化图景，而是若干模块已经出现了可迁移的正向信号，另一些模块则仍需更大规模补跑验证，甚至可能需要重新审视模块本身的设计假设。
 
 \begin{figure}[t]
 \centering
@@ -399,7 +402,7 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 \label{fig:gap-consistency}
 \end{figure}
 
-图~\ref{fig:gap-consistency} 把此前分散在表格中的两个关键信号放到同一张图里：一是完整框架相对于关键基线的配对差值，二是这种差值是否在不同真实模型上保持方向一致。联合观察后，RQ1 与 RQ4 的优势比只看均值时更有说服力，因为它们既有正向配对 gap，也有较高的一致性；RQ2 虽然均值略偏正，但无论是配对区间还是方向一致性都还不够稳健；RQ3 的结果则进一步说明，当前并不能把星鸦长时记忆图谱机制写成稳定成立的模块收益；现有实验更接近对早期胶囊式前体方案的验证，而非对完整图谱层的闭合证据。与图~\ref{fig:main-results} 和图~\ref{fig:cheap-results} 相比，这张图更适合承担“结论边界控制”的角色。
+图~\ref{fig:gap-consistency} 把此前分散在表格中的两个关键信号放到同一张图里：一是完整框架相对于关键基线的配对差值，二是这种差值是否在不同真实模型上保持方向一致。联合观察后，RQ1 与 RQ4 的优势比只看均值时更有说服力，因为它们既有正向配对 gap，也有较高的一致性；RQ2 虽然均值略偏正，但无论是配对区间还是方向一致性都还不够稳健；RQ3 的结果则进一步说明，当前并不能把星鸦长时记忆图谱机制写成稳定成立的模块收益；现有实验更接近对早期胶囊式前体方案的验证，而非对完整图谱层的闭合证据。与图~\ref{fig:main-results} 和图~\ref{fig:cheap-results} 相比，这张图更适合承担结论边界控制的角色。
 
 \subsection{诊断与定性分析}
 
@@ -429,15 +432,15 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 
 \section{结果讨论}
 
-综合以上结果，当前真实数据能够支持三类较为稳健的判断。第一，统一框架在公开 benchmark 的长时程任务上优于单智能体强退化基线，尤其体现在 RQ1。第二，在当前实现对齐切片上，长时程注意力与上下文压缩组合显示出更清晰的正向预算鲁棒性信号。第三，象群上下文管理策略在高干扰上下文中的收益只呈现弱正向趋势，现阶段更适合被描述为“证据未闭合但方向略偏正”而非稳定结论。事件中心可观测性与多轮连续性结果则继续作为机制补充，帮助解释为什么该框架更适合长时程协作任务。
+综合以上结果，当前真实数据能够支持三类较为稳健的判断。第一，统一框架在公开 benchmark 的长时程任务上优于单智能体强退化基线，尤其体现在 RQ1。第二，在当前实现对齐切片上，长时程注意力与上下文压缩组合显示出更清晰的正向预算鲁棒性信号。第三，象群上下文管理策略在高干扰上下文中的收益只呈现弱正向趋势，现阶段更适合被描述为证据未闭合但方向略偏正而非稳定结论。事件中心可观测性与多轮连续性结果则继续作为机制补充，帮助解释为什么该框架更适合长时程协作任务。换言之，本文主结论与全文叙事链保持一致：机制优势主要体现在治理质量与边界控制，而非所有子模块都已获得同强度验证。
 
-与此同时，本文也必须保留几类明确的负面或不充分发现。RQ2 虽然出现了正向 gap，但统计显著性和跨模型一致性仍不足，而且参考模型结果并未与低成本聚合结果一起形成清晰分离，因此不能把它写成稳定成立的模块收益。RQ3 的证据更需要区分两个层次：在公开 benchmark 切片上，完整框架尚未对历史退化变体形成稳定正向优势，因此不能直接把星鸦机制写成成熟收益；在新增的模块级强基线 benchmark 中，当前图谱实现虽然已经在关系命中、陈旧抑制和冲突消解上优于 \texttt{vector\_memory} 与 \texttt{naive\_graph\_memory}，但仍未在首屏 recall、relevance 和 usefulness 上超过 \texttt{flat\_summary\_memory}。这说明当前机制离“全面优于强基线”的投稿口径还有距离，更准确的表述应是：完整图谱机制已经显示出结构化子图返回与安全控制方面的机制优势，但召回排序与首屏选择仍需继续优化。部分图表中的高成功率对应的实际样本量仍然偏小，因此不能被表述为大规模稳定现象。换句话说，当前稿件更接近一篇“公开 benchmark 主导、真实数据驱动、但结论边界严格受控”的方法论文，而不是已经完成全面优越性证明的成熟 benchmark 论文。
+与此同时，本文也必须保留几类明确的负面或不充分发现。RQ2 虽然出现了正向 gap，但统计显著性和跨模型一致性仍不足，而且参考模型结果并未与低成本聚合结果一起形成清晰分离，因此不能把它写成稳定成立的模块收益。RQ3 的证据更需要区分两个层次：在公开 benchmark 切片上，完整框架尚未对历史退化变体形成稳定正向优势，因此不能直接把星鸦机制写成成熟收益；在新增的模块级强基线 benchmark 中，当前图谱实现虽然已经在关系命中、陈旧抑制和冲突消解上优于 \texttt{vector\_memory} 与 \texttt{naive\_graph\_memory}，但仍未在首屏 recall、relevance 和 usefulness 上超过 \texttt{flat\_summary\_memory}。这说明当前机制离全面优于强基线的投稿口径还有距离，更准确的表述应是：完整图谱机制已经显示出结构化子图返回与安全控制方面的机制优势，但召回排序与首屏选择仍需继续优化。部分图表中的高成功率对应的实际样本量仍然偏小，因此不能被表述为大规模稳定现象。换句话说，当前稿件更接近一篇公开 benchmark 主导、真实数据驱动、但结论边界严格受控的方法论文，而不是已经完成全面优越性证明的成熟 benchmark 论文。
 
 \section{局限性}
 
 当前稿件有意对尚未完成的部分保持诚实。最重要的限制首先来自证据覆盖边界：主文中的若干 benchmark 仍是本文实现所附的对齐切片，而非完整公开 benchmark；真实模型调用成本与运行时间也继续限制 benchmark 覆盖范围，因此即使本轮已把 RQ2--RQ4 的参考模型核心对照补到五个 seed，模型与 benchmark 的覆盖仍然不均匀。其次，主要任务质量指标依赖 judge-based 评分，这可能引入评价偏差，人工评审与双盲复核仍需补充。再次，自定义诊断套件只能作为补充证据，不能替代公开 benchmark 去支撑主结论；当前跨模型分析也仍局限于少量真实模型，尚不足以支撑更强的跨提供商泛化陈述。最后，成本-性能权衡、失败类型附录以及更大规模多 seed 复现实验都还没有扩展到投稿级完整度。
 
-这些局限之所以重要，是因为方法论文的说服力并不来自概念新颖本身，而来自“概念、实验协议、统计汇总与结论边界”四者之间是否严格一致。因此，当前版本更适合被理解为一个已经具备真实 benchmark 主证据的高强度稿件雏形，而不是已经完成全部验证的最终优越性证明。
+这些局限之所以重要，是因为方法论文的说服力并不来自概念新颖本身，而来自概念、实验协议、统计汇总与结论边界四者之间是否严格一致。因此，当前版本更适合被理解为一个已经具备真实 benchmark 主证据的高强度稿件雏形，而不是已经完成全部验证的最终优越性证明。
 
 此外，该方法本身也存在风险。若系数校准不当，象群上下文管理策略可能会过度偏向历史上已验证的信息，从而抑制真正有价值的新证据。若提升、构边与返回阈值设置过于宽松，克拉克星鸦长时记忆图谱机制仍可能积累陈旧节点、错误关系或冲突子图。长时程注意力依赖摘要与状态快照算子的质量，而这些算子本身也可能引入失真。若冗余抑制调节不佳，上下文压缩可能会丢弃那些低频但决定性的证据。最后，事件中心可观测性虽然提升了可解释性，但也引入了额外的存储与实现开销，未来需要显式测量。
 
@@ -454,6 +457,12 @@ q_k^{(t+1)} = \Psi(q_k^{(t)}, e_{t+1}).
 \bibitem[Chan et~al.(2024)]{chan2024chateval}
 Chan, C.-M., Chen, W., Su, Y., Yu, J., Xue, W., Zhang, S., et al., 2024. ChatEval: Towards better LLM-based evaluators through multi-agent debate. In: International Conference on Learning Representations. \url{https://openreview.net/forum?id=FQepisCUWu}.
 
+\bibitem[Brown et~al.(2020)]{brown2020gpt3}
+Brown, T. B., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P., et al., 2020. Language models are few-shot learners. Advances in Neural Information Processing Systems 33, 1877--1901.
+
+\bibitem[Brea et~al.(2023)]{brea2023episodic}
+Brea, J., Clayton, N. S., Gerstner, W., 2023. Computational models of episodic-like memory in food-caching birds. Nature Communications 14, 2979. \url{https://doi.org/10.1038/s41467-023-38570-x}.
+
 \bibitem[Dong et~al.(2026)]{dong2026pear}
 Dong, Z., Li, Y., Zhang, J., Li, Y., Ye, X., Sui, P., et al., 2026. PEAR: Plan, execute, assess, and refine: A robust planner-executor-agent benchmark. In: Findings of the Association for Computational Linguistics: EACL 2026, 3458--3477. \url{https://aclanthology.org/2026.findings-eacl.237/}.
 
@@ -463,17 +472,26 @@ Edge, D., Trinh, H., Cheng, N., Bradley, J., Chao, A., Mody, A., Truitt, S., Met
 \bibitem[Du et~al.(2025)]{du2025crossteam}
 Du, Z., Qian, C., Liu, W., Xie, Z., Wang, Y., Dang, Y., et al., 2025. Multi-Agent Collaboration via Cross-Team Orchestration. In: Findings of the Association for Computational Linguistics: ACL 2025, 10566--10584. \url{https://aclanthology.org/2025.findings-acl.541/}.
 
+\bibitem[Devlin et~al.(2019)]{devlin2019bert}
+Devlin, J., Chang, M.-W., Lee, K., Toutanova, K., 2019. BERT: Pre-training of deep bidirectional transformers for language understanding. In: Proceedings of NAACL-HLT 2019, 4171--4186. \url{https://doi.org/10.18653/v1/N19-1423}.
+
 \bibitem[Gan et~al.(2025)]{gan2025master}
 Gan, B., Shi, W., Li, X., Kong, M., Xu, S., Wang, W., et al., 2025. MASTER: A multi-agent system with LLM specialized MCTS. In: Proceedings of the 2025 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, 9570--9594. \url{https://aclanthology.org/2025.naacl-long.476/}.
 
 \bibitem[Guo et~al.(2024)]{guo2024llmmas}
 Guo, T., Chen, X., Wang, Y., Chang, R., Pei, S., Chawla, N. V., et al., 2024. Large language model based multi-agents: A survey of progress and challenges. In: Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence, 8048--8057. \url{https://doi.org/10.24963/ijcai.2024/890}.
 
+\bibitem[Gutierrez et~al.(2025)]{gutierrez2025ragtomemory}
+Gutierrez, B. J., Shu, Y., Qi, W., Zhou, S., Su, Y., 2025. From RAG to Memory: Non-Parametric Continual Learning for Large Language Models. arXiv preprint arXiv:2502.14802. \url{https://arxiv.org/abs/2502.14802}.
+
 \bibitem[Hong et~al.(2024)]{hong2024metagpt}
 Hong, S., Zhuge, M., Chen, J., Zheng, X., Cheng, Y., Zhang, C., et al., 2024. MetaGPT: Meta-programming for a multi-agent collaborative framework. In: International Conference on Learning Representations. \url{https://openreview.net/forum?id=VtmBAGCN7o}.
 
 \bibitem[Jiang et~al.(2023)]{jiang2023llmlingua}
 Jiang, H., Wu, Q., Lin, C.-Y., Yang, Y., Qiu, L., 2023. LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models. In: Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing, 13358--13376. \url{https://aclanthology.org/2023.emnlp-main.825/}.
+
+\bibitem[Jimenez-Romero et~al.(2025)]{jimenezromero2025swarm}
+Jimenez-Romero, C., Yegenoglu, A., Blum, C., 2025. Multi-agent systems powered by large language models: applications in swarm intelligence. Frontiers in Artificial Intelligence 8, 1593017. \url{https://doi.org/10.3389/frai.2025.1593017}.
 
 \bibitem[Li et~al.(2023a)]{li2023camel}
 Li, G., Hammoud, H. A. A. K., Itani, H., Khizbullin, D., Ghanem, B., 2023. CAMEL: Communicative agents for ``mind'' exploration of large scale language model society. In: Advances in Neural Information Processing Systems 36. \url{https://proceedings.neurips.cc/paper_files/paper/2023/hash/a3621ee907def47c1b952ade25c67698-Abstract-Conference.html}.
@@ -485,7 +503,10 @@ Li, Y., Dong, B., Lin, C., Guerin, F., 2023. Compressing Context to Enhance Infe
 Li, R., Xu, J., Cao, Z., Zheng, H.-T., Kim, H.-G., 2024. Extending context window in large language models with segmented base adjustment for rotary position embeddings. Applied Sciences 14, 3076. \url{https://doi.org/10.3390/app14073076}.
 
 \bibitem[Li et~al.(2024b)]{li2024masworkflow}
-Li, X., Wang, S., Zeng, S., Wu, Y., Yang, Y., 2024. A survey on LLM-based multi-agent systems: Workflow, infrastructure, and challenges. Vicinagearth 1, 100007. \url{https://doi.org/10.1007/s44336-024-00009-2}.
+Li, X., Wang, S., Zeng, S., Wu, Y., Yang, Y., 2024. A survey on LLM-based multi-agent systems: Workflow, infrastructure, and challenges. Vicinagearth 1, 9. \url{https://doi.org/10.1007/s44336-024-00009-2}.
+
+\bibitem[Lan et~al.(2026)]{lan2026publicopinion}
+Lan, H., Hu, H., Guo, P. C., Huang, Q., 2026. Public opinion dissemination simulation based on large language model multi-agent systems. Scientific Reports, online first (published 2026-04-04). \url{https://doi.org/10.1038/s41598-026-44206-z}.
 
 \bibitem[Liu et~al.(2024a)]{liu2024agentbench}
 Liu, X., Yu, H., Zhang, H., Xu, Y., Lei, X., Lai, H., et al., 2024. AgentBench: Evaluating LLMs as agents. In: International Conference on Learning Representations. \url{https://openreview.net/forum?id=zAdUB0aCTQ}.
@@ -495,6 +516,12 @@ Liu, N. F., Lin, K., Hewitt, J., Paranjape, A., Bevilacqua, M., Petroni, F., Lia
 
 \bibitem[Lewis et~al.(2020)]{lewis2020rag}
 Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Kuttler, H., Lewis, M., Yih, W.-t., Rocktaschel, T., Riedel, S., Kiela, D., 2020. Retrieval-augmented generation for knowledge-intensive NLP tasks. Advances in Neural Information Processing Systems 33, 9459--9474.
+
+\bibitem[OpenAI(2023)]{openai2023gpt4}
+OpenAI, 2023. GPT-4 Technical Report. arXiv preprint arXiv:2303.08774. \url{https://doi.org/10.48550/arXiv.2303.08774}.
+
+\bibitem[Ouyang et~al.(2022)]{ouyang2022instructgpt}
+Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al., 2022. Training language models to follow instructions with human feedback. Advances in Neural Information Processing Systems 35, 27730--27744.
 
 \bibitem[Packer et~al.(2023)]{packer2023memgpt}
 Packer, C., Wooders, S., Lin, K., Fang, V., Patil, S. G., Stoica, I., Gonzalez, J. E., 2023. MemGPT: Towards LLMs as Operating Systems. arXiv preprint arXiv:2310.08560. \url{https://doi.org/10.48550/arXiv.2310.08560}.
@@ -511,6 +538,15 @@ Qian, C., Liu, W., Lu, Y., Wei, Y., Du, Z., Yang, C., et al., 2025. Scaling larg
 \bibitem[Shinn et~al.(2023)]{shinn2023reflexion}
 Shinn, N., Cassano, F., Gopinath, A., Narasimhan, K., Yao, S., 2023. Reflexion: Language agents with verbal reinforcement learning. In: Advances in Neural Information Processing Systems 36. \url{https://proceedings.neurips.cc/paper_files/paper/2023/hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html}.
 
+\bibitem[Touvron et~al.(2023a)]{touvron2023llama}
+Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.-A., Lacroix, T., et al., 2023. LLaMA: Open and Efficient Foundation Language Models. arXiv preprint arXiv:2302.13971. \url{https://doi.org/10.48550/arXiv.2302.13971}.
+
+\bibitem[Touvron et~al.(2023b)]{touvron2023llama2}
+Touvron, H., Martin, L., Stone, K., Albert, P., Almahairi, A., Babaei, Y., et al., 2023. Llama 2: Open Foundation and Fine-Tuned Chat Models. arXiv preprint arXiv:2307.09288. \url{https://doi.org/10.48550/arXiv.2307.09288}.
+
+\bibitem[Vaswani et~al.(2017)]{vaswani2017attention}
+Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, {\L}., Polosukhin, I., 2017. Attention Is All You Need. In: Advances in Neural Information Processing Systems 30, 5998--6008.
+
 \bibitem[Wang et~al.(2024a)]{wang2024survey}
 Wang, L., Ma, C., Feng, X., Zhang, Z., Yang, H., Zhang, J., Chen, Z., Tang, J., Chen, X., Lin, Y., Zhao, W. X., Wei, Z., Wen, J., 2024. A survey on large language model based autonomous agents. Frontiers of Computer Science 18, 186345. \url{https://doi.org/10.1007/s11704-024-40231-1}.
 
@@ -526,6 +562,9 @@ Wooldridge, M., 2009. An Introduction to MultiAgent Systems. Wiley, Chichester.
 \bibitem[Wu et~al.(2023)]{wu2023autogen}
 Wu, Q., Bansal, G., Zhang, J., Wu, Y., Li, B., Zhu, E., et al., 2023. AutoGen: Enabling next-gen LLM applications via multi-agent conversation. arXiv preprint arXiv:2308.08155. \url{https://doi.org/10.48550/arXiv.2308.08155}.
 
+\bibitem[Zhao et~al.(2026)]{zhao2026ragaigc}
+Zhao, P., Zhang, H., Yu, Q., Wang, Z., Geng, Y., Fu, F., Yang, L., Zhang, W., Jiang, J., Cui, B., 2026. Retrieval-Augmented Generation for AI-Generated Content: A Survey. Data Science and Engineering 11, 1--29. \url{https://doi.org/10.1007/s41019-025-00335-5}.
+
 \bibitem[Yao et~al.(2023)]{yao2023react}
 Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., Cao, Y., 2023. ReAct: Synergizing reasoning and acting in language models. In: International Conference on Learning Representations. \url{https://openreview.net/forum?id=WE_vluYUL-X}.
 
@@ -539,3 +578,4 @@ Zhou, X., Zhu, H., Mathur, L., Zhang, R., Yu, H., Qi, Z., et al., 2024. SOTOPIA:
 
 \end{CJK*}
 \end{document}
+
