@@ -67,7 +67,7 @@
 
 作为经典基础背景，Wooldridge 对多智能体系统中的协作、协调、组织结构与通信协议给出了非 LLM 时代的系统框架 \citep{wooldridge2009}。在 LLM 语境下，正式综述则把研究重点推进到基于角色画像、通信模式、环境接口和能力获取机制的系统设计 \citep{guo2024llmmas,li2024masworkflow}。这说明多智能体问题并非简单地多放几个模型，而是涉及组织、路由与知识流动的系统性问题。
 
-代表性系统方面，CAMEL 通过角色扮演机制展示了多智能体协作与数据生成的可行性 \citep{li2023camel}；AutoGen 将可对话智能体与群聊编排抽象为通用框架，是少数仍值得保留的高影响预印本代表 \citep{wu2023autogen}；MetaGPT 和 ChatDev 分别将 SOP、结构化消息与软件开发流水线纳入协作骨架，推动了软件工程场景中的多智能体系统化设计 \citep{hong2024metagpt,qian2024chatdev}。进一步地，MASTER 通过面向专业化角色的 MCTS 机制组织招募与通信，MegaAgent 探索了无预定义 SOP 的大规模自治协作，Scaling Large Language Model-based Multi-Agent Collaboration 研究了多智能体协作的规模扩展规律，而 Cross-Team Orchestration 则把多团队并行探索与阶段性交叉协作正式化 \citep{gan2025master,wang2025megaagent,qian2025macnet,du2025crossteam}。在应用层，LLM 驱动的多智能体仿真已扩展到群体智能与舆情扩散场景 \citep{jimenezromero2025swarm,lan2026publicopinion}。这些工作极大丰富了协作范式，但其优化目标仍多集中在任务分解、角色编排或团队扩展上。相比之下，本文更关心的是另一层问题：当这些角色与团队已经存在之后，系统究竟该如何决定哪些上下文应在角色之间传播、哪些经验应被提升为共享知识，以及如何在有限预算下保持协作连续性。
+代表性系统方面，CAMEL 通过角色扮演机制展示了多智能体协作与数据生成的可行性 \citep{li2023camel}；AutoGen 将可对话智能体与群聊编排抽象为通用框架，是该方向的高影响代表工作之一 \citep{wu2023autogen}；MetaGPT 和 ChatDev 分别将 SOP、结构化消息与软件开发流水线纳入协作骨架，推动了软件工程场景中的多智能体系统化设计 \citep{hong2024metagpt,qian2024chatdev}。进一步地，MASTER 通过面向专业化角色的 MCTS 机制组织招募与通信，MegaAgent 探索了无预定义 SOP 的大规模自治协作，Scaling Large Language Model-based Multi-Agent Collaboration 研究了多智能体协作的规模扩展规律，而 Cross-Team Orchestration 则把多团队并行探索与阶段性交叉协作正式化 \citep{gan2025master,wang2025megaagent,qian2025macnet,du2025crossteam}。在应用层，LLM 驱动的多智能体仿真已扩展到群体智能与舆情扩散场景 \citep{jimenezromero2025swarm,lan2026publicopinion}。这些工作极大丰富了协作范式，但其优化目标仍多集中在任务分解、角色编排或团队扩展上。相比之下，本文更关心的是另一层问题：当这些角色与团队已经存在之后，系统究竟该如何决定哪些上下文应在角色之间传播、哪些经验应被提升为共享知识，以及如何在有限预算下保持协作连续性。
 
 \subsection{长上下文利用局限与位置偏置}
 
@@ -467,7 +467,7 @@ Brea, J., Clayton, N. S., Gerstner, W. (2023). Computational models of episodic-
 Dong, Z., Li, Y., Zhang, J., Li, Y., Ye, X., Sui, P., et al. (2026). PEAR: Plan, execute, assess, and refine: A robust planner-executor-agent benchmark. In Findings of the Association for Computational Linguistics: EACL 2026, 3458--3477. \url{https://aclanthology.org/2026.findings-eacl.237/}.
 
 \bibitem[Edge et~al.(2024)]{edge2024graphrag}
-Edge, D., Trinh, H., Cheng, N., Bradley, J., Chao, A., Mody, A., Truitt, S., Metropolitansky, D., Ness, R. O., Larson, J. (2024). From Local to Global: A Graph RAG Approach to Query-Focused Summarization. arXiv preprint arXiv:2404.16130. \url{https://doi.org/10.48550/arXiv.2404.16130}.
+Edge, D., Trinh, H., Cheng, N., Bradley, J., Chao, A., Mody, A., Truitt, S., Metropolitansky, D., Ness, R. O., Larson, J. (2024). From local to global: A graph RAG approach to query-focused summarization. Microsoft Research technical report. \url{https://www.microsoft.com/en-us/research/publication/from-local-to-global-a-graph-rag-approach-to-query-focused-summarization/}.
 
 \bibitem[Du et~al.(2025)]{du2025crossteam}
 Du, Z., Qian, C., Liu, W., Xie, Z., Wang, Y., Dang, Y., et al. (2025). Multi-Agent Collaboration via Cross-Team Orchestration. In Findings of the Association for Computational Linguistics: ACL 2025, 10566--10584. \url{https://aclanthology.org/2025.findings-acl.541/}.
@@ -482,7 +482,7 @@ Gan, B., Shi, W., Li, X., Kong, M., Xu, S., Wang, W., et al. (2025). MASTER: A m
 Guo, T., Chen, X., Wang, Y., Chang, R., Pei, S., Chawla, N. V., et al. (2024). Large language model based multi-agents: A survey of progress and challenges. In Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence, 8048--8057. \url{https://doi.org/10.24963/ijcai.2024/890}.
 
 \bibitem[Gutierrez et~al.(2025)]{gutierrez2025ragtomemory}
-Gutierrez, B. J., Shu, Y., Qi, W., Zhou, S., Su, Y. (2025). From RAG to Memory: Non-Parametric Continual Learning for Large Language Models. arXiv preprint arXiv:2502.14802. \url{https://arxiv.org/abs/2502.14802}.
+Gutierrez, B. J., Shu, Y., Qi, W., Zhou, S., Su, Y. (2025). From RAG to memory: Non-parametric continual learning for large language models. In Proceedings of the 42nd International Conference on Machine Learning, 17438--17460. PMLR. \url{https://proceedings.mlr.press/v267/gutierrez25a.html}.
 
 \bibitem[Hong et~al.(2024)]{hong2024metagpt}
 Hong, S., Zhuge, M., Chen, J., Zheng, X., Cheng, Y., Zhang, C., et al. (2024). MetaGPT: Meta-programming for a multi-agent collaborative framework. In International Conference on Learning Representations. \url{https://openreview.net/forum?id=VtmBAGCN7o}.
@@ -512,19 +512,19 @@ Lan, H., Hu, H., Guo, P. C., Huang, Q. (2026). Public opinion dissemination simu
 Liu, X., Yu, H., Zhang, H., Xu, Y., Lei, X., Lai, H., et al. (2024). AgentBench: Evaluating LLMs as agents. In International Conference on Learning Representations. \url{https://openreview.net/forum?id=zAdUB0aCTQ}.
 
 \bibitem[Liu et~al.(2024b)]{liu2024lostmiddle}
-Liu, N. F., Lin, K., Hewitt, J., Paranjape, A., Bevilacqua, M., Petroni, F., Liang, P. (2024). Lost in the Middle: How Language Models Use Long Contexts. arXiv preprint arXiv:2307.03172. \url{https://doi.org/10.48550/arXiv.2307.03172}.
+Liu, N. F., Lin, K., Hewitt, J., Paranjape, A., Bevilacqua, M., Petroni, F., Liang, P. (2024). Lost in the middle: How language models use long contexts. Transactions of the Association for Computational Linguistics 12, 157--173. \url{https://aclanthology.org/2024.tacl-1.9/}.
 
 \bibitem[Lewis et~al.(2020)]{lewis2020rag}
 Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Kuttler, H., Lewis, M., Yih, W.-t., Rocktaschel, T., Riedel, S., Kiela, D. (2020). Retrieval-augmented generation for knowledge-intensive NLP tasks. Advances in Neural Information Processing Systems 33, 9459--9474. \url{https://proceedings.neurips.cc/paper/2020/hash/6b493230205f780e1bc26945df7481e5-Abstract.html}.
 
 \bibitem[OpenAI(2023)]{openai2023gpt4}
-OpenAI. (2023). GPT-4 Technical Report. arXiv preprint arXiv:2303.08774. \url{https://doi.org/10.48550/arXiv.2303.08774}.
+OpenAI. (2023). GPT-4 technical report. OpenAI Research. \url{https://cdn.openai.com/papers/gpt-4.pdf}.
 
 \bibitem[Ouyang et~al.(2022)]{ouyang2022instructgpt}
 Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., et al. (2022). Training language models to follow instructions with human feedback. Advances in Neural Information Processing Systems 35, 27730--27744. \url{https://proceedings.neurips.cc/paper/2022/hash/b1efde53be364a73914f58805a001731-Abstract-Conference.html}.
 
 \bibitem[Packer et~al.(2023)]{packer2023memgpt}
-Packer, C., Wooders, S., Lin, K., Fang, V., Patil, S. G., Stoica, I., Gonzalez, J. E. (2023). MemGPT: Towards LLMs as Operating Systems. arXiv preprint arXiv:2310.08560. \url{https://doi.org/10.48550/arXiv.2310.08560}.
+Packer, C., Wooders, S., Lin, K., Fang, V., Patil, S. G., Stoica, I., Gonzalez, J. E. (2023). MemGPT: Towards LLMs as operating systems. MemGPT research technical report. \url{https://research.memgpt.ai/}.
 
 \bibitem[Park et~al.(2023)]{park2023generative}
 Park, J. S., O'Brien, J. C., Cai, C. J., Morris, M. R., Liang, P., Bernstein, M. S. (2023). Generative agents: Interactive simulacra of human behavior. In Proceedings of the 36th Annual ACM Symposium on User Interface Software and Technology, 1--22. \url{https://doi.org/10.1145/3586183.3606763}.
@@ -539,10 +539,10 @@ Qian, C., Liu, W., Lu, Y., Wei, Y., Du, Z., Yang, C., et al. (2025). Scaling lar
 Shinn, N., Cassano, F., Gopinath, A., Narasimhan, K., Yao, S. (2023). Reflexion: Language agents with verbal reinforcement learning. In Advances in Neural Information Processing Systems 36. \url{https://proceedings.neurips.cc/paper_files/paper/2023/hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html}.
 
 \bibitem[Touvron et~al.(2023a)]{touvron2023llama}
-Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.-A., Lacroix, T., et al. (2023). LLaMA: Open and Efficient Foundation Language Models. arXiv preprint arXiv:2302.13971. \url{https://doi.org/10.48550/arXiv.2302.13971}.
+Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.-A., Lacroix, T., et al. (2023). LLaMA: Open and efficient foundation language models. Meta AI technical report. \url{https://ai.meta.com/research/publications/llama-open-and-efficient-foundation-language-models/}.
 
 \bibitem[Touvron et~al.(2023b)]{touvron2023llama2}
-Touvron, H., Martin, L., Stone, K., Albert, P., Almahairi, A., Babaei, Y., et al. (2023). Llama 2: Open Foundation and Fine-Tuned Chat Models. arXiv preprint arXiv:2307.09288. \url{https://doi.org/10.48550/arXiv.2307.09288}.
+Touvron, H., Martin, L., Stone, K., Albert, P., Almahairi, A., Babaei, Y., et al. (2023). Llama 2: Open foundation and fine-tuned chat models. Meta AI technical report. \url{https://ai.meta.com/research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/}.
 
 \bibitem[Vaswani et~al.(2017)]{vaswani2017attention}
 Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, {\L}., Polosukhin, I. (2017). Attention Is All You Need. In Advances in Neural Information Processing Systems 30, 5998--6008. \url{https://proceedings.neurips.cc/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html}.
@@ -559,8 +559,8 @@ Wang, J., Wang, Z., Sun, L., He, K., Liu, M., Chen, A., et al. (2025). MegaAgent
 \bibitem[Wooldridge(2009)]{wooldridge2009}
 Wooldridge, M. (2009). An Introduction to MultiAgent Systems. Wiley, Chichester. \url{https://www.cs.ox.ac.uk/people/michael.wooldridge/pubs/imas/IMAS2e.html}.
 
-\bibitem[Wu et~al.(2023)]{wu2023autogen}
-Wu, Q., Bansal, G., Zhang, J., Wu, Y., Li, B., Zhu, E., et al. (2023). AutoGen: Enabling next-gen LLM applications via multi-agent conversation. arXiv preprint arXiv:2308.08155. \url{https://doi.org/10.48550/arXiv.2308.08155}.
+\bibitem[Wu et~al.(2024)]{wu2023autogen}
+Wu, Q., Bansal, G., Zhang, J., Wu, Y., Li, B., Zhu, E., et al. (2024). AutoGen: Enabling next-gen LLM applications via multi-agent conversation. In First Conference on Language Modeling (COLM). \url{https://openreview.net/forum?id=BAakY1hNKS}.
 
 \bibitem[Zhao et~al.(2026)]{zhao2026ragaigc}
 Zhao, P., Zhang, H., Yu, Q., Wang, Z., Geng, Y., Fu, F., Yang, L., Zhang, W., Jiang, J., Cui, B. (2026). Retrieval-Augmented Generation for AI-Generated Content: A Survey. Data Science and Engineering 11, 1--29. \url{https://doi.org/10.1007/s41019-025-00335-5}.
@@ -568,8 +568,8 @@ Zhao, P., Zhang, H., Yu, Q., Wang, Z., Geng, Y., Fu, F., Yang, L., Zhang, W., Ji
 \bibitem[Yao et~al.(2023)]{yao2023react}
 Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., Cao, Y. (2023). ReAct: Synergizing reasoning and acting in language models. In International Conference on Learning Representations. \url{https://openreview.net/forum?id=WE_vluYUL-X}.
 
-\bibitem[Zhong et~al.(2023)]{zhong2023memorybank}
-Zhong, W., Guo, L., Gao, Q., Ye, H., Wang, Y. (2023). MemoryBank: Enhancing Large Language Models with Long-Term Memory. arXiv preprint arXiv:2305.10250. \url{https://doi.org/10.48550/arXiv.2305.10250}.
+\bibitem[Zhong et~al.(2024)]{zhong2023memorybank}
+Zhong, W., Guo, L., Gao, Q., Ye, H., Wang, Y. (2024). MemoryBank: Enhancing large language models with long-term memory. Proceedings of the AAAI Conference on Artificial Intelligence 38(17), 19724--19731. \url{https://doi.org/10.1609/aaai.v38i17.29946}.
 
 \bibitem[Zhou et~al.(2024)]{zhou2024sotopia}
 Zhou, X., Zhu, H., Mathur, L., Zhang, R., Yu, H., Qi, Z., et al. (2024). SOTOPIA: Interactive evaluation for social intelligence in language agents. In International Conference on Learning Representations. \url{https://openreview.net/forum?id=mM7VurbA4r}.

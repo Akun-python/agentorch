@@ -1,0 +1,107 @@
+{
+  "scope": "non-preprint replacements in cas-sc-template-zh.tex",
+  "verified_count": 6,
+  "total": 9,
+  "results": [
+    {
+      "key": "edge2024graphrag",
+      "url": "https://www.microsoft.com/en-us/research/publication/from-local-to-global-a-graph-rag-approach-to-query-focused-summarization/",
+      "checked_at": "2026-04-25T06:49:39.449931+00:00",
+      "status": 403,
+      "final_url": "https://www.microsoft.com/en-us/research/publication/from-local-to-global-a-graph-rag-approach-to-query-focused-summarization/",
+      "content_type": "text/html",
+      "title": "Access Denied",
+      "overlap": 1,
+      "tokens": 10,
+      "verified": false
+    },
+    {
+      "key": "gutierrez2025ragtomemory",
+      "url": "https://proceedings.mlr.press/v267/gutierrez25a.html",
+      "checked_at": "2026-04-25T06:49:40.561225+00:00",
+      "status": 200,
+      "final_url": "https://proceedings.mlr.press/v267/gutierrez25a.html",
+      "content_type": "text/html; charset=utf-8",
+      "title": "From RAG to Memory: Non-Parametric Continual Learning for Large Language Models",
+      "overlap": 12,
+      "tokens": 12,
+      "verified": true
+    },
+    {
+      "key": "liu2024lostmiddle",
+      "url": "https://aclanthology.org/2024.tacl-1.9/",
+      "checked_at": "2026-04-25T06:49:45.835289+00:00",
+      "status": 200,
+      "final_url": "https://aclanthology.org/2024.tacl-1.9/",
+      "content_type": "text/html; charset=utf-8",
+      "title": "Lost in the Middle: How Language Models Use Long Contexts - ACL Anthology",
+      "overlap": 10,
+      "tokens": 10,
+      "verified": true
+    },
+    {
+      "key": "openai2023gpt4",
+      "url": "https://cdn.openai.com/papers/gpt-4.pdf",
+      "checked_at": "2026-04-25T06:49:47.525063+00:00",
+      "status": 200,
+      "final_url": "https://cdn.openai.com/papers/gpt-4.pdf",
+      "content_type": "application/pdf",
+      "title": "",
+      "overlap": 1,
+      "tokens": 4,
+      "verified": true
+    },
+    {
+      "key": "packer2023memgpt",
+      "url": "https://research.memgpt.ai/",
+      "checked_at": "2026-04-25T06:50:43.488931+00:00",
+      "status": 200,
+      "final_url": "https://research.memgpt.ai/",
+      "content_type": "text/html; charset=utf-8",
+      "title": "MemGPT",
+      "overlap": 6,
+      "tokens": 6,
+      "verified": true
+    },
+    {
+      "key": "touvron2023llama",
+      "url": "https://ai.meta.com/research/publications/llama-open-and-efficient-foundation-language-models/",
+      "checked_at": "2026-04-25T06:50:44.595493+00:00",
+      "status": "ERR",
+      "error": "HTTPSConnectionPool(host='ai.meta.com', port=443): Max retries exceeded with url: /research/publications/llama-open-and-efficient-foundation-language-models/ (Caused by NewConnectionError(\"HTTPSConnection(host='ai.meta.com', port=443): Failed to establish a new connection: [WinError 10051] 向一个无法连接的网络尝试了一个套接字操作。\"))",
+      "verified": false
+    },
+    {
+      "key": "touvron2023llama2",
+      "url": "https://ai.meta.com/research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/",
+      "checked_at": "2026-04-25T06:51:02.679238+00:00",
+      "status": "ERR",
+      "error": "HTTPSConnectionPool(host='ai.meta.com', port=443): Max retries exceeded with url: /research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/ (Caused by NewConnectionError(\"HTTPSConnection(host='ai.meta.com', port=443): Failed to establish a new connection: [WinError 10051] 向一个无法连接的网络尝试了一个套接字操作。\"))",
+      "verified": false
+    },
+    {
+      "key": "wu2023autogen",
+      "url": "https://openreview.net/forum?id=BAakY1hNKS",
+      "checked_at": "2026-04-25T06:51:20.753951+00:00",
+      "status": 200,
+      "final_url": "https://openreview.net/forum?id=BAakY1hNKS",
+      "content_type": "text/html; charset=utf-8",
+      "title": "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversations | OpenReview",
+      "overlap": 10,
+      "tokens": 10,
+      "verified": true
+    },
+    {
+      "key": "zhong2023memorybank",
+      "url": "https://doi.org/10.1609/aaai.v38i17.29946",
+      "checked_at": "2026-04-25T06:51:24.008677+00:00",
+      "status": 200,
+      "final_url": "https://ojs.aaai.org/index.php/AAAI/article/view/29946",
+      "content_type": "text/html; charset=utf-8",
+      "title": "MemoryBank: Enhancing Large Language Models with Long-Term Memory | Proceedings of the AAAI Conference on Artificial Intelligence",
+      "overlap": 9,
+      "tokens": 9,
+      "verified": true
+    }
+  ]
+}
