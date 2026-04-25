@@ -1,88 +1,144 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="920" viewBox="0 0 1280 920" fill="none">
-  <rect width="1280" height="920" fill="#F6F0E5"/>
-  <rect x="40" y="36" width="1200" height="848" rx="30" fill="#FFFDF8" stroke="#D7C9AF" stroke-width="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1020" viewBox="0 0 1440 1020" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">agentorch Architecture Overview</title>
+  <desc id="desc">Layered architecture diagram for agentorch, emphasizing runtime orchestration, tools, state, knowledge, and multi-agent coordination.</desc>
 
-  <text x="72" y="98" fill="#1F2937" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700">
-    agentorch Architecture Overview
+  <defs>
+    <style>
+      .title { font-family: "Segoe UI", Arial, sans-serif; font-size: 40px; font-weight: 700; letter-spacing: 0; }
+      .subtitle { font-family: "Segoe UI", Arial, sans-serif; font-size: 19px; font-weight: 400; letter-spacing: 0; }
+      .card-title { font-family: "Segoe UI", Arial, sans-serif; font-size: 30px; font-weight: 700; letter-spacing: 0; }
+      .card-text { font-family: "Segoe UI", Arial, sans-serif; font-size: 18px; font-weight: 400; letter-spacing: 0; }
+      .card-text-strong { font-family: "Segoe UI", Arial, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: 0; }
+      .chip-text { font-family: "Segoe UI", Arial, sans-serif; font-size: 17px; font-weight: 500; letter-spacing: 0; }
+      .footer-text { font-family: "Segoe UI", Arial, sans-serif; font-size: 18px; font-weight: 400; letter-spacing: 0; }
+      .connector { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <filter id="soft-shadow" x="-5%" y="-8%" width="110%" height="116%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1F2937" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="1020" fill="#F5EFE3"/>
+  <rect x="40" y="34" width="1360" height="952" rx="32" fill="#FFFDF8" stroke="#D7C9AF" stroke-width="2"/>
+
+  <text x="84" y="96" class="title" fill="#1F2937">agentorch Architecture Overview</text>
+  <text x="84" y="132" class="subtitle" fill="#64748B">
+    Code-first, async-first runtime for explicit tools, workflows, retrieval, memory, and multi-agent coordination.
   </text>
-  <text x="72" y="134" fill="#6B7280" font-family="Segoe UI, Arial, sans-serif" font-size="18">
-    Code-first, async-first orchestration runtime with tools, workflows, retrieval, and emphasized multi-agent coordination.
+  <rect x="1110" y="78" width="246" height="40" rx="20" fill="#EEF2FF" stroke="#818CF8" stroke-width="1.5"/>
+  <text x="1138" y="104" class="chip-text" fill="#3730A3">Multi-agent first runtime</text>
+
+  <g opacity="0.92">
+    <path d="M394 257H445" class="connector" stroke="#A67818"/>
+    <path d="M995 257H1046" class="connector" stroke="#6373E6"/>
+    <path d="M239 338V410" class="connector" stroke="#D86F58"/>
+    <path d="M720 338V410" class="connector" stroke="#4F9D7B"/>
+    <path d="M1201 338V410" class="connector" stroke="#5C8FCC"/>
+    <path d="M720 558V620" class="connector" stroke="#9B63D1"/>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="84" y="176" width="310" height="162" rx="24" fill="#FDEAB9" stroke="#E4A72D" stroke-width="2"/>
+    <text x="112" y="222" class="card-title" fill="#7A4A06">Application Layer</text>
+    <text x="112" y="263" class="card-text" fill="#7A4A06">
+      <tspan x="112" dy="0">create_agent / create_multi_agent</tspan>
+      <tspan x="112" dy="28">AgentDesign / TeamDesign</tspan>
+      <tspan x="112" dy="28">Workflow / Supervisor entrypoints</tspan>
+    </text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="445" y="176" width="550" height="162" rx="24" fill="#DCEFE8" stroke="#5CA98A" stroke-width="2"/>
+    <text x="475" y="222" class="card-title" fill="#0F5132">Orchestration Core</text>
+    <text x="475" y="263" class="card-text" fill="#0F5132">
+      <tspan x="475" dy="0">Runtime / Agent</tspan>
+      <tspan x="475" dy="28">ContextKernel / prompts</tspan>
+      <tspan x="475" dy="28">Workflow execution</tspan>
+    </text>
+    <text x="725" y="263" class="card-text" fill="#0F5132">
+      <tspan x="725" dy="0">Reasoning frameworks</tspan>
+      <tspan x="725" dy="28">TaskPacket / Handoff</tspan>
+      <tspan x="725" dy="28">Policies / tracing / extensions</tspan>
+    </text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="1046" y="176" width="310" height="162" rx="24" fill="#E3E9FF" stroke="#6373E6" stroke-width="2"/>
+    <text x="1074" y="222" class="card-title" fill="#27346C">Model Layer</text>
+    <text x="1074" y="263" class="card-text" fill="#27346C">
+      <tspan x="1074" dy="0">ModelConfig / provider registry</tspan>
+      <tspan x="1074" dy="28">OpenAI-compatible adapters</tspan>
+      <tspan x="1074" dy="28">Streaming / media / tool calls</tspan>
+    </text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="84" y="410" width="370" height="148" rx="24" fill="#FFE1D9" stroke="#D86F58" stroke-width="2"/>
+    <text x="112" y="456" class="card-title" fill="#7A271A">Action Systems</text>
+    <text x="112" y="492" class="card-text" fill="#7A271A">
+      <tspan x="112" dy="0">ToolRegistry / @tool decorator</tspan>
+      <tspan x="112" dy="27">Filesystem / Git / Web / Media</tspan>
+      <tspan x="112" dy="27">SandboxManager / Python worker</tspan>
+    </text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="535" y="410" width="370" height="148" rx="24" fill="#E3F0D3" stroke="#8AAE56" stroke-width="2"/>
+    <text x="563" y="456" class="card-title" fill="#375623">State Systems</text>
+    <text x="563" y="492" class="card-text" fill="#375623">
+      <tspan x="563" dy="0">MemoryManager / mechanisms</tspan>
+      <tspan x="563" dy="27">Thread state / workspace records</tspan>
+      <tspan x="563" dy="27">MGCM collective memory governance</tspan>
+    </text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="986" y="410" width="370" height="148" rx="24" fill="#E7F0FF" stroke="#5C8FCC" stroke-width="2"/>
+    <text x="1014" y="456" class="card-title" fill="#153E75">Knowledge Systems</text>
+    <text x="1014" y="492" class="card-text" fill="#153E75">
+      <tspan x="1014" dy="0">IndexedKnowledgeBase / adapters</tspan>
+      <tspan x="1014" dy="27">Classic / deliberative / hybrid RAG</tspan>
+      <tspan x="1014" dy="27">Citations / evidence reports</tspan>
+    </text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="84" y="620" width="1272" height="258" rx="30" fill="#F0E0FF" stroke="#9B63D1" stroke-width="3"/>
+    <text x="114" y="674" class="title" fill="#5B2B85">Multi-Agent Layer</text>
+    <text x="114" y="712" class="card-text-strong" fill="#5B2B85">
+      First-class team orchestration for scoped delegation, shared state, inspectable handoffs, and low-token collaboration.
+    </text>
+
+    <rect x="114" y="742" width="260" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
+    <text x="244" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">AgentRegistry / AgentSpec</text>
+
+    <rect x="398" y="742" width="236" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
+    <text x="516" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">TaskPacket / Handoff</text>
+
+    <rect x="658" y="742" width="220" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
+    <text x="768" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">Supervisor / Coordinator</text>
+
+    <rect x="902" y="742" width="204" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
+    <text x="1004" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">CoordinationPolicy</text>
+
+    <rect x="1130" y="742" width="196" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
+    <text x="1228" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">MemoryPolicy</text>
+
+    <rect x="208" y="800" width="232" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
+    <text x="324" y="825" text-anchor="middle" class="chip-text" fill="#5B2B85">Specialist agents</text>
+
+    <rect x="466" y="800" width="230" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
+    <text x="581" y="825" text-anchor="middle" class="chip-text" fill="#5B2B85">Workflow agent nodes</text>
+
+    <rect x="722" y="800" width="220" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
+    <text x="832" y="825" text-anchor="middle" class="chip-text" fill="#5B2B85">Shared knowledge</text>
+
+    <rect x="968" y="800" width="222" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
+    <text x="1079" y="825" text-anchor="middle" class="chip-text" fill="#5B2B85">Aggregated outputs</text>
+  </g>
+
+  <rect x="84" y="910" width="1272" height="48" rx="24" fill="#FFF0D8" stroke="#D89B35" stroke-width="2"/>
+  <text x="114" y="941" class="footer-text" fill="#7C4A03">
+    Extension surface: skills · plugins · custom retrievers · custom policies · sandbox backends · runtime hooks · specialist agents
   </text>
-
-  <rect x="72" y="184" width="280" height="142" rx="22" fill="#FDE5B0" stroke="#E4AF3F" stroke-width="2"/>
-  <text x="96" y="228" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Application Layer</text>
-  <text x="96" y="268" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="18">Agent</text>
-  <text x="96" y="296" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="18">Runtime</text>
-  <text x="96" y="324" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="18">Workflow / Supervisor</text>
-
-  <rect x="390" y="184" width="500" height="142" rx="22" fill="#DCEFE8" stroke="#69A78D" stroke-width="2"/>
-  <text x="414" y="228" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Orchestration Core</text>
-  <text x="414" y="268" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">PromptBuilder</text>
-  <text x="610" y="268" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">Reasoning Policies</text>
-  <text x="414" y="296" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">TaskPacket / Handoff</text>
-  <text x="610" y="296" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">Observability / Tracing</text>
-  <text x="414" y="324" fill="#0F5132" font-family="Segoe UI, Arial, sans-serif" font-size="18">Tool Routing / Delegation / Retrieval</text>
-
-  <rect x="928" y="184" width="272" height="142" rx="22" fill="#E3E9FF" stroke="#6A7ED6" stroke-width="2"/>
-  <text x="952" y="228" fill="#27346C" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Model Layer</text>
-  <text x="952" y="268" fill="#27346C" font-family="Segoe UI, Arial, sans-serif" font-size="18">OpenAIModel</text>
-  <text x="952" y="296" fill="#27346C" font-family="Segoe UI, Arial, sans-serif" font-size="18">BaseModelAdapter</text>
-  <text x="952" y="324" fill="#27346C" font-family="Segoe UI, Arial, sans-serif" font-size="18">Streaming / Tool Calls</text>
-
-  <rect x="72" y="388" width="350" height="134" rx="22" fill="#FFE1D9" stroke="#D86F58" stroke-width="2"/>
-  <text x="96" y="434" fill="#7A271A" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Action Systems</text>
-  <text x="96" y="476" fill="#7A271A" font-family="Segoe UI, Arial, sans-serif" font-size="18">ToolRegistry / tool decorator</text>
-  <text x="96" y="506" fill="#7A271A" font-family="Segoe UI, Arial, sans-serif" font-size="18">SandboxManager / python_interpreter</text>
-
-  <rect x="464" y="388" width="350" height="134" rx="22" fill="#E3F0D3" stroke="#8AAE56" stroke-width="2"/>
-  <text x="488" y="434" fill="#375623" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">State Systems</text>
-  <text x="488" y="476" fill="#375623" font-family="Segoe UI, Arial, sans-serif" font-size="18">MemoryManager</text>
-  <text x="488" y="506" fill="#375623" font-family="Segoe UI, Arial, sans-serif" font-size="18">Thread Memory / Long-term Records</text>
-
-  <rect x="856" y="388" width="344" height="134" rx="22" fill="#E7F0FF" stroke="#6B96C9" stroke-width="2"/>
-  <text x="880" y="434" fill="#153E75" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Knowledge Systems</text>
-  <text x="880" y="476" fill="#153E75" font-family="Segoe UI, Arial, sans-serif" font-size="18">KnowledgeBase / BaseRetriever</text>
-  <text x="880" y="506" fill="#153E75" font-family="Segoe UI, Arial, sans-serif" font-size="18">RAGContextBuilder / RetrievalQuery</text>
-
-  <rect x="72" y="572" width="1128" height="210" rx="28" fill="#F0E0FF" stroke="#9B63D1" stroke-width="3"/>
-  <text x="98" y="624" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700">Multi-Agent Layer</text>
-  <text x="98" y="662" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">
-    First-class orchestration surface for explicit delegation, specialist routing, and low-token collaboration
-  </text>
-
-  <rect x="96" y="690" width="232" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.76"/>
-  <text x="114" y="715" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="18">AgentRegistry / AgentSpec</text>
-
-  <rect x="356" y="690" width="202" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.76"/>
-  <text x="374" y="715" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="18">TaskPacket / Handoff</text>
-
-  <rect x="586" y="690" width="178" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.76"/>
-  <text x="612" y="715" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="18">Supervisor Router</text>
-
-  <rect x="792" y="690" width="188" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.76"/>
-  <text x="820" y="715" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="18">Delegation Policy</text>
-
-  <rect x="1008" y="690" width="168" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.76"/>
-  <text x="1032" y="715" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="18">Structured Results</text>
-
-  <rect x="226" y="736" width="220" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.76"/>
-  <text x="252" y="761" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="18">Workflow Agent Nodes</text>
-
-  <rect x="486" y="736" width="268" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.76"/>
-  <text x="512" y="761" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="18">Specialist Agent Execution</text>
-
-  <rect x="794" y="736" width="210" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.76"/>
-  <text x="826" y="761" fill="#5B2B85" font-family="Segoe UI, Arial, sans-serif" font-size="18">Aggregated Outputs</text>
-
-  <rect x="72" y="814" width="1128" height="44" rx="22" fill="#FFF0D8" stroke="#D89B35" stroke-width="2"/>
-  <text x="96" y="842" fill="#7C4A03" font-family="Segoe UI, Arial, sans-serif" font-size="18">
-    Extension Surface: skills · plugins · custom retrievers · custom policies · sandbox backends · specialist agents
-  </text>
-
-  <path d="M352 255H390" stroke="#A67818" stroke-width="4" stroke-linecap="round"/>
-  <path d="M890 255H928" stroke="#6A7ED6" stroke-width="4" stroke-linecap="round"/>
-  <path d="M247 326V388" stroke="#D86F58" stroke-width="4" stroke-linecap="round"/>
-  <path d="M640 326V388" stroke="#69A78D" stroke-width="4" stroke-linecap="round"/>
-  <path d="M1064 326V388" stroke="#6B96C9" stroke-width="4" stroke-linecap="round"/>
-  <path d="M640 522V572" stroke="#9B63D1" stroke-width="5" stroke-linecap="round"/>
 </svg>
