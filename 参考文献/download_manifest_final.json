@@ -1,0 +1,369 @@
+{
+  "total": 40,
+  "pdf": 34,
+  "html_fallback": 3,
+  "txt_note": 3,
+  "missing": 0,
+  "records": [
+    {
+      "index": 1,
+      "key": "chan2024chateval",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\001_chan2024chateval.pdf",
+      "source_url": "https://openreview.net/forum?id=FQepisCUWu",
+      "note": "ok"
+    },
+    {
+      "index": 2,
+      "key": "brown2020gpt3",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\002_brown2020gpt3.pdf",
+      "source_url": "https://proceedings.neurips.cc/paper/2020/hash/1457c0d6bfcb4967418bfb8ac142f64a-Abstract.html",
+      "note": "ok"
+    },
+    {
+      "index": 3,
+      "key": "brea2023episodic",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\003_brea2023episodic.pdf",
+      "source_url": "https://doi.org/10.1038/s41467-023-38570-x",
+      "note": "ok"
+    },
+    {
+      "index": 4,
+      "key": "dong2026pear",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\004_dong2026pear.pdf",
+      "source_url": "https://aclanthology.org/2026.findings-eacl.237/",
+      "note": "ok"
+    },
+    {
+      "index": 5,
+      "key": "edge2024graphrag",
+      "status": "html_fallback",
+      "file_type": "html",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\005_edge2024graphrag.html",
+      "source_url": "https://www.microsoft.com/en-us/research/publication/from-local-to-global-a-graph-rag-approach-to-query-focused-summarization/",
+      "note": "no_public_pdf_or_site_protection"
+    },
+    {
+      "index": 6,
+      "key": "du2025crossteam",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\006_du2025crossteam.pdf",
+      "source_url": "https://aclanthology.org/2025.findings-acl.541/",
+      "note": "ok"
+    },
+    {
+      "index": 7,
+      "key": "devlin2019bert",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\007_devlin2019bert.pdf",
+      "source_url": "https://doi.org/10.18653/v1/N19-1423",
+      "note": "ok"
+    },
+    {
+      "index": 8,
+      "key": "gan2025master",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\008_gan2025master.pdf",
+      "source_url": "https://aclanthology.org/2025.naacl-long.476/",
+      "note": "ok"
+    },
+    {
+      "index": 9,
+      "key": "guo2024llmmas",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\009_guo2024llmmas.pdf",
+      "source_url": "https://doi.org/10.24963/ijcai.2024/890",
+      "note": "ok"
+    },
+    {
+      "index": 10,
+      "key": "gutierrez2025ragtomemory",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\010_gutierrez2025ragtomemory.pdf",
+      "source_url": "https://proceedings.mlr.press/v267/gutierrez25a.html",
+      "note": "ok"
+    },
+    {
+      "index": 11,
+      "key": "hong2024metagpt",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\011_hong2024metagpt.pdf",
+      "source_url": "https://openreview.net/forum?id=VtmBAGCN7o",
+      "note": "ok"
+    },
+    {
+      "index": 12,
+      "key": "jiang2023llmlingua",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\012_jiang2023llmlingua.pdf",
+      "source_url": "https://aclanthology.org/2023.emnlp-main.825/",
+      "note": "ok"
+    },
+    {
+      "index": 13,
+      "key": "jimenezromero2025swarm",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\013_jimenezromero2025swarm.pdf",
+      "source_url": "https://doi.org/10.3389/frai.2025.1593017",
+      "note": "ok"
+    },
+    {
+      "index": 14,
+      "key": "li2023camel",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\014_li2023camel.pdf",
+      "source_url": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/a3621ee907def47c1b952ade25c67698-Abstract-Conference.html",
+      "note": "ok"
+    },
+    {
+      "index": 15,
+      "key": "li2023selectivecontext",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\015_li2023selectivecontext.pdf",
+      "source_url": "https://aclanthology.org/2023.emnlp-main.391/",
+      "note": "ok"
+    },
+    {
+      "index": 16,
+      "key": "li2024sbarope",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\016_li2024sbarope.pdf",
+      "source_url": "https://doi.org/10.3390/app14073076",
+      "note": "ok"
+    },
+    {
+      "index": 17,
+      "key": "li2024masworkflow",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\017_li2024masworkflow.pdf",
+      "source_url": "https://doi.org/10.1007/s44336-024-00009-2",
+      "note": "ok"
+    },
+    {
+      "index": 18,
+      "key": "lan2026publicopinion",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\018_lan2026publicopinion.pdf",
+      "source_url": "https://doi.org/10.1038/s41598-026-44206-z",
+      "note": "ok"
+    },
+    {
+      "index": 19,
+      "key": "liu2024agentbench",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\019_liu2024agentbench.pdf",
+      "source_url": "https://openreview.net/forum?id=zAdUB0aCTQ",
+      "note": "ok"
+    },
+    {
+      "index": 20,
+      "key": "liu2024lostmiddle",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\020_liu2024lostmiddle.pdf",
+      "source_url": "https://aclanthology.org/2024.tacl-1.9/",
+      "note": "ok"
+    },
+    {
+      "index": 21,
+      "key": "lewis2020rag",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\021_lewis2020rag.pdf",
+      "source_url": "https://proceedings.neurips.cc/paper/2020/hash/6b493230205f780e1bc26945df7481e5-Abstract.html",
+      "note": "ok"
+    },
+    {
+      "index": 22,
+      "key": "openai2023gpt4",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\022_openai2023gpt4.pdf",
+      "source_url": "https://cdn.openai.com/papers/gpt-4.pdf",
+      "note": "ok"
+    },
+    {
+      "index": 23,
+      "key": "ouyang2022instructgpt",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\023_ouyang2022instructgpt.pdf",
+      "source_url": "https://proceedings.neurips.cc/paper/2022/hash/b1efde53be364a73914f58805a001731-Abstract-Conference.html",
+      "note": "ok"
+    },
+    {
+      "index": 24,
+      "key": "packer2023memgpt",
+      "status": "html_fallback",
+      "file_type": "html",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\024_packer2023memgpt.html",
+      "source_url": "https://research.memgpt.ai/",
+      "note": "no_public_pdf_or_site_protection"
+    },
+    {
+      "index": 25,
+      "key": "park2023generative",
+      "status": "txt_note",
+      "file_type": "txt",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\025_park2023generative.txt",
+      "source_url": "https://doi.org/10.1145/3586183.3606763",
+      "note": "no_public_pdf_or_paywalled"
+    },
+    {
+      "index": 26,
+      "key": "qian2024chatdev",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\026_qian2024chatdev.pdf",
+      "source_url": "https://aclanthology.org/2024.acl-long.810/",
+      "note": "ok"
+    },
+    {
+      "index": 27,
+      "key": "qian2025macnet",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\027_qian2025macnet.pdf",
+      "source_url": "https://openreview.net/forum?id=K3n5jPkrU6",
+      "note": "ok"
+    },
+    {
+      "index": 28,
+      "key": "shinn2023reflexion",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\028_shinn2023reflexion.pdf",
+      "source_url": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html",
+      "note": "ok"
+    },
+    {
+      "index": 29,
+      "key": "touvron2023llama",
+      "status": "txt_note",
+      "file_type": "txt",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\029_touvron2023llama.txt",
+      "source_url": "https://ai.meta.com/research/publications/llama-open-and-efficient-foundation-language-models/",
+      "note": "no_public_pdf_or_paywalled"
+    },
+    {
+      "index": 30,
+      "key": "touvron2023llama2",
+      "status": "txt_note",
+      "file_type": "txt",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\030_touvron2023llama2.txt",
+      "source_url": "https://ai.meta.com/research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/",
+      "note": "no_public_pdf_or_paywalled"
+    },
+    {
+      "index": 31,
+      "key": "vaswani2017attention",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\031_vaswani2017attention.pdf",
+      "source_url": "https://proceedings.neurips.cc/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html",
+      "note": "ok"
+    },
+    {
+      "index": 32,
+      "key": "wang2024survey",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\032_wang2024survey.pdf",
+      "source_url": "https://doi.org/10.1007/s11704-024-40231-1",
+      "note": "ok"
+    },
+    {
+      "index": 33,
+      "key": "wang2024sotopiapi",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\033_wang2024sotopiapi.pdf",
+      "source_url": "https://aclanthology.org/2024.acl-long.698/",
+      "note": "ok"
+    },
+    {
+      "index": 34,
+      "key": "wang2025megaagent",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\034_wang2025megaagent.pdf",
+      "source_url": "https://aclanthology.org/2025.findings-acl.259/",
+      "note": "ok"
+    },
+    {
+      "index": 35,
+      "key": "wooldridge2009",
+      "status": "html_fallback",
+      "file_type": "html",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\035_wooldridge2009.html",
+      "source_url": "https://www.cs.ox.ac.uk/people/michael.wooldridge/pubs/imas/IMAS2e.html",
+      "note": "no_public_pdf_or_site_protection"
+    },
+    {
+      "index": 36,
+      "key": "wu2023autogen",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\036_wu2023autogen.pdf",
+      "source_url": "https://openreview.net/forum?id=BAakY1hNKS",
+      "note": "ok"
+    },
+    {
+      "index": 37,
+      "key": "zhao2026ragaigc",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\037_zhao2026ragaigc.pdf",
+      "source_url": "https://doi.org/10.1007/s41019-025-00335-5",
+      "note": "ok"
+    },
+    {
+      "index": 38,
+      "key": "yao2023react",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\038_yao2023react.pdf",
+      "source_url": "https://openreview.net/forum?id=WE_vluYUL-X",
+      "note": "ok"
+    },
+    {
+      "index": 39,
+      "key": "zhong2023memorybank",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\039_zhong2023memorybank.pdf",
+      "source_url": "https://doi.org/10.1609/aaai.v38i17.29946",
+      "note": "ok"
+    },
+    {
+      "index": 40,
+      "key": "zhou2024sotopia",
+      "status": "pdf",
+      "file_type": "pdf",
+      "saved_as": "c:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\参考文献\\编号下载\\040_zhou2024sotopia.pdf",
+      "source_url": "https://openreview.net/forum?id=mM7VurbA4r",
+      "note": "ok"
+    }
+  ]
+}
