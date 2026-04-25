@@ -4,7 +4,7 @@
 
 `agentorch` 是一个代码优先、异步优先的 Python 智能体编排框架，用来构建可编程的 agent 系统。它提供结构化工具、工作流、RAG、记忆、推理策略、沙箱执行和多智能体委派能力。
 
-![Architecture Overview](notebooks/resources/architecture_overview.svg)
+![Architecture Overview](resource/architecture_overview.svg)
 
 ## 为什么使用 agentorch
 
