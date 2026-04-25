@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">agentorch Runtime Flow</title>
+  <desc id="desc">Runtime request flow showing context preparation, model generation, tool execution, workflow execution, multi-agent delegation, aggregation, and final result.</desc>
+
+  <defs>
+    <style>
+      .title { font-family: "Segoe UI", Arial, sans-serif; font-size: 38px; font-weight: 700; letter-spacing: 0; }
+      .subtitle { font-family: "Segoe UI", Arial, sans-serif; font-size: 19px; font-weight: 400; letter-spacing: 0; }
+      .node-title { font-family: "Segoe UI", Arial, sans-serif; font-size: 25px; font-weight: 700; letter-spacing: 0; }
+      .node-text { font-family: "Segoe UI", Arial, sans-serif; font-size: 17px; font-weight: 400; letter-spacing: 0; }
+      .node-text-strong { font-family: "Segoe UI", Arial, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: 0; }
+      .small-text { font-family: "Segoe UI", Arial, sans-serif; font-size: 15px; font-weight: 500; letter-spacing: 0; }
+      .caption { font-family: "Segoe UI", Arial, sans-serif; font-size: 18px; font-weight: 400; letter-spacing: 0; }
+      .connector { fill: none; stroke: #4B5563; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
+      .connector-soft { fill: none; stroke: #64748B; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow-soft); stroke-dasharray: 8 8; }
+    </style>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M1 1L13 7L1 13V1Z" fill="#4B5563"/>
+    </marker>
+    <marker id="arrow-soft" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M1 1L11 6L1 11V1Z" fill="#64748B"/>
+    </marker>
+    <filter id="soft-shadow" x="-5%" y="-8%" width="110%" height="116%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1F2937" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="1040" fill="#F5EFE3"/>
+  <rect x="40" y="34" width="1360" height="972" rx="32" fill="#FFFDF8" stroke="#D7C9AF" stroke-width="2"/>
+
+  <text x="78" y="94" class="title" fill="#1F2937">agentorch Runtime Flow</text>
+  <text x="78" y="130" class="subtitle" fill="#64748B">
+    Context is prepared, routed through model/tool/workflow branches, then returned as RunResult or stream.
+  </text>
+
+  <rect x="1036" y="76" width="306" height="44" rx="22" fill="#EEF2FF" stroke="#818CF8" stroke-width="1.5"/>
+  <text x="1189" y="104" text-anchor="middle" class="small-text" fill="#3730A3">context-aware · tool-safe · multi-agent</text>
+
+  <g>
+    <path d="M250 212H316" class="connector"/>
+    <path d="M596 212H662" class="connector"/>
+    <path d="M942 212H1008" class="connector"/>
+    <path d="M1133 272V342" class="connector"/>
+    <path d="M1133 444V510" class="connector"/>
+    <path d="M988 563H886" class="connector"/>
+    <path d="M704 563H596" class="connector"/>
+    <path d="M412 563H294" class="connector"/>
+    <path d="M1133 616V682" class="connector"/>
+    <path d="M772 616V682" class="connector"/>
+    <path d="M1036 738H932" class="connector"/>
+    <path d="M612 738H506" class="connector"/>
+    <path d="M772 794V850" class="connector"/>
+    <path d="M401 794V894H558" class="connector-soft"/>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="78" y="166" width="172" height="92" rx="20" fill="#FDEAB9" stroke="#E4A72D" stroke-width="2"/>
+    <text x="164" y="206" text-anchor="middle" class="node-title" fill="#7A4A06">User Input</text>
+    <text x="164" y="234" text-anchor="middle" class="small-text" fill="#7A4A06">thread_id + metadata</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="316" y="166" width="280" height="92" rx="20" fill="#DCEFE8" stroke="#5CA98A" stroke-width="2"/>
+    <text x="456" y="206" text-anchor="middle" class="node-title" fill="#0F5132">Agent / Runtime</text>
+    <text x="456" y="234" text-anchor="middle" class="small-text" fill="#0F5132">request envelope · stream events</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="662" y="146" width="280" height="132" rx="22" fill="#E8F5F0" stroke="#5CA98A" stroke-width="2"/>
+    <text x="802" y="188" text-anchor="middle" class="node-title" fill="#0F5132">Context Preparation</text>
+    <text x="802" y="218" text-anchor="middle" class="node-text" fill="#0F5132">ContextKernel / policies</text>
+    <text x="802" y="246" text-anchor="middle" class="node-text" fill="#0F5132">memory · RAG · skills · tools</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="1008" y="166" width="250" height="92" rx="20" fill="#E4E9FF" stroke="#6373E6" stroke-width="2"/>
+    <text x="1133" y="206" text-anchor="middle" class="node-title" fill="#27346C">PromptBuilder</text>
+    <text x="1133" y="234" text-anchor="middle" class="small-text" fill="#27346C">messages + compacted context</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="1008" y="342" width="250" height="102" rx="22" fill="#E4E9FF" stroke="#6373E6" stroke-width="2"/>
+    <text x="1133" y="382" text-anchor="middle" class="node-title" fill="#27346C">Model.generate()</text>
+    <text x="1133" y="412" text-anchor="middle" class="node-text" fill="#27346C">assistant text / tool calls</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="988" y="510" width="290" height="106" rx="24" fill="#FFF0D8" stroke="#D89B35" stroke-width="2"/>
+    <text x="1133" y="552" text-anchor="middle" class="node-title" fill="#7A4A06">Runtime Decision</text>
+    <text x="1133" y="580" text-anchor="middle" class="node-text" fill="#7A4A06">continue · tools · delegate</text>
+    <text x="1133" y="606" text-anchor="middle" class="small-text" fill="#7A4A06">or finish directly</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="704" y="502" width="182" height="122" rx="24" fill="#F0E0FF" stroke="#9B63D1" stroke-width="3"/>
+    <text x="795" y="545" text-anchor="middle" class="node-title" fill="#5B2B85">Delegate</text>
+    <text x="795" y="575" text-anchor="middle" class="node-text" fill="#5B2B85">agent branch</text>
+    <text x="795" y="602" text-anchor="middle" class="small-text" fill="#5B2B85">first-class path</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="412" y="502" width="184" height="122" rx="24" fill="#FFE1D9" stroke="#D86F58" stroke-width="2"/>
+    <text x="504" y="545" text-anchor="middle" class="node-title" fill="#7A271A">Tool Call</text>
+    <text x="504" y="575" text-anchor="middle" class="node-text" fill="#7A271A">validated input</text>
+    <text x="504" y="602" text-anchor="middle" class="small-text" fill="#7A271A">structured result</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="78" y="502" width="216" height="122" rx="24" fill="#FFE1D9" stroke="#D86F58" stroke-width="2"/>
+    <text x="186" y="545" text-anchor="middle" class="node-title" fill="#7A271A">Sandbox / Tools</text>
+    <text x="186" y="575" text-anchor="middle" class="node-text" fill="#7A271A">filesystem · git · web</text>
+    <text x="186" y="602" text-anchor="middle" class="small-text" fill="#7A271A">Python worker when enabled</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="644" y="682" width="256" height="112" rx="24" fill="#F0E0FF" stroke="#9B63D1" stroke-width="3"/>
+    <text x="772" y="724" text-anchor="middle" class="node-title" fill="#5B2B85">Multi-Agent Control</text>
+    <text x="772" y="754" text-anchor="middle" class="node-text" fill="#5B2B85">Supervisor / AgentRegistry</text>
+    <text x="772" y="782" text-anchor="middle" class="small-text" fill="#5B2B85">TaskPacket · Handoff · aggregation</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="1036" y="682" width="242" height="112" rx="24" fill="#E8F5F0" stroke="#5CA98A" stroke-width="2"/>
+    <text x="1157" y="724" text-anchor="middle" class="node-title" fill="#0F5132">Workflow Path</text>
+    <text x="1157" y="754" text-anchor="middle" class="node-text" fill="#0F5132">Node.retrieve / tool / agent</text>
+    <text x="1157" y="782" text-anchor="middle" class="small-text" fill="#0F5132">explicit DAG execution</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="296" y="682" width="210" height="112" rx="24" fill="#E3F0D3" stroke="#8AAE56" stroke-width="2"/>
+    <text x="401" y="724" text-anchor="middle" class="node-title" fill="#375623">State Update</text>
+    <text x="401" y="754" text-anchor="middle" class="node-text" fill="#375623">memory · artifacts</text>
+    <text x="401" y="782" text-anchor="middle" class="small-text" fill="#375623">traces · usage metadata</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="570" y="860" width="300" height="68" rx="22" fill="#FFF0D8" stroke="#D89B35" stroke-width="2"/>
+    <text x="720" y="902" text-anchor="middle" class="node-title" fill="#7A4A06">Final RunResult / Stream</text>
+  </g>
+
+  <text x="720" y="990" class="caption" fill="#64748B" text-anchor="middle">
+    Delegation, workflow nodes, and tool loops are explicit runtime branches, not hidden prompt side effects.
+  </text>
+</svg>
