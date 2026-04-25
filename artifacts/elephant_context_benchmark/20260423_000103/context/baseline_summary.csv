@@ -1,0 +1,2 @@
+variant,budget,run_count,task_success,context_precision,context_recall,key_evidence_retention_rate,stage_focus_hit_rate,redundancy_ratio,budget_utilization,compaction_gain
+elephant_full,12000,5,0.8,0.2,0.666667,0.7,0.6,0.25,1.0,0.432601

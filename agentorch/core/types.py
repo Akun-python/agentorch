@@ -111,7 +111,9 @@ class PromptContext(BaseModel):
     retrieval_plan: dict[str, Any] | None = None
     knowledge_scope: list[str] = Field(default_factory=list)
     tool_descriptions: list[dict[str, Any]] = Field(default_factory=list)
+    available_skills: list[dict[str, Any]] = Field(default_factory=list)
     skill_instructions: list[str] = Field(default_factory=list)
+    skill_resources: list[str] = Field(default_factory=list)
     output_instruction: str | None = None
     task_packet: dict[str, Any] | None = None
     agent_role: str | None = None

@@ -5,11 +5,29 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from agentorch.security import RedactionConfig, sanitize_for_export, summarize_text
+
 
 class SQLiteRecordStore:
-    def __init__(self, path: str | Path) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        redaction: RedactionConfig | dict[str, object] | None = None,
+        summary_only_content: bool = False,
+        max_content_chars: int = 8000,
+        max_metadata_chars: int = 4000,
+        truncate_thread_messages: bool = True,
+        persist_full_prompt_text: bool = False,
+    ) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.redaction = RedactionConfig.from_any(redaction)
+        self.summary_only_content = summary_only_content
+        self.max_content_chars = max(200, int(max_content_chars))
+        self.max_metadata_chars = max(200, int(max_metadata_chars))
+        self.truncate_thread_messages = truncate_thread_messages
+        self.persist_full_prompt_text = persist_full_prompt_text
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
@@ -36,11 +54,40 @@ class SQLiteRecordStore:
             if "metadata" not in columns:
                 conn.execute("ALTER TABLE records ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
 
+    def _prepare_content(self, kind: str, content: str) -> tuple[str, dict[str, Any]]:
+        original_length = len(content)
+        force_summary = self.summary_only_content
+        if kind == "thread_message" and self.truncate_thread_messages:
+            force_summary = force_summary or not self.persist_full_prompt_text
+        if force_summary:
+            stored = summarize_text(content, max_chars=min(self.max_content_chars, 800))
+        else:
+            stored = summarize_text(content, max_chars=self.max_content_chars)
+        metadata: dict[str, Any] = {
+            "original_length": original_length,
+            "truncated": len(stored) < original_length,
+        }
+        return stored, metadata
+
+    def _prepare_metadata(self, metadata: dict[str, Any] | None) -> dict[str, Any]:
+        safe_metadata = sanitize_for_export(metadata or {}, config=self.redaction)
+        serialized = json.dumps(safe_metadata, ensure_ascii=False, sort_keys=True)
+        if len(serialized) <= self.max_metadata_chars:
+            return safe_metadata
+        return {
+            "summary": summarize_text(serialized, max_chars=self.max_metadata_chars),
+            "truncated": True,
+            "original_length": len(serialized),
+        }
+
     async def add_record(self, thread_id: str, kind: str, content: str, tags: list[str], metadata: dict[str, Any] | None = None) -> int:
+        stored_content, content_metadata = self._prepare_content(kind, content)
+        safe_metadata = self._prepare_metadata(metadata)
+        safe_metadata = {**safe_metadata, "_storage": content_metadata}
         with self._connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO records(thread_id, kind, content, tags, metadata) VALUES (?, ?, ?, ?, ?)",
-                (thread_id, kind, content, json.dumps(tags, ensure_ascii=False), json.dumps(metadata or {}, ensure_ascii=False)),
+                (thread_id, kind, stored_content, json.dumps(tags, ensure_ascii=False), json.dumps(safe_metadata, ensure_ascii=False)),
             )
             return int(cursor.lastrowid)
 
@@ -96,5 +143,5 @@ class SQLiteRecordStore:
         with self._connect() as conn:
             conn.execute(
                 "UPDATE records SET metadata = ? WHERE id = ?",
-                (json.dumps(metadata, ensure_ascii=False), record_id),
+                (json.dumps(sanitize_for_export(metadata, config=self.redaction), ensure_ascii=False), record_id),
             )

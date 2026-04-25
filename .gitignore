@@ -9,6 +9,16 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+cas-sc*
+.pytest_cache
+.playwright-cli
+.claude
+.agentorch_examples
+.agentorch
+archive
+api接口
+.venv_compare313
+.tmp-deep-research-skill-test
 
 # Keep local-only project materials out of the remote repository.
 pyproject.toml
@@ -22,9 +32,67 @@ skill设计规范.txt
 状态_记忆_持久化设计.md
 部署_观测_日志_Tracing.md
 需求.txt
+test_openai_responses.py
 
 # Keep the notebooks directory on remote even if it is otherwise empty.
 notebooks/*
 !notebooks/.gitkeep
 !notebooks/resources/
 !notebooks/resources/*.svg
+.agentorch_examples/evolution_facade_demo/checkpoints.db
+.agentorch_examples/evolution_facade_demo/records.db
+.agentorch_examples/evolution_workflow_demo/checkpoints.db
+.agentorch_examples/evolution_workflow_demo/records.db
+.agentorch_examples/inspect_context_strategy/checkpoints.db
+.agentorch_examples/inspect_context_strategy/records.db
+.agentorch_examples/inspect_workflow_context/checkpoints.db
+.agentorch_examples/inspect_workflow_context/records.db
+.agentorch_examples/inspect_workflow_context_after_patch/checkpoints.db
+.agentorch_examples/inspect_workflow_context_after_patch/records.db
+.agentorch_examples/inspect_workflow_context_after_patch_2/checkpoints.db
+.agentorch_examples/inspect_workflow_context_after_patch_2/records.db
+.playwright-cli/console-2026-04-18T06-19-36-415Z.log
+.playwright-cli/console-2026-04-18T06-19-53-591Z.log
+.gitignore
+测试.ipynb
+tmp/docs/开题报告_重构版.pre_plan_backup.docx
+tmp/docs/开题报告.backup.docx
+tmp/docs/开题报告.restructure.backup.docx
+tmp/docs/write_kaiti_report_detailed.py
+tmp/docs/write_kaiti_report.py
+tmp/docs/write_kaiti_report_restructured.py
+tmp/neo4j_stderr.log
+tmp/neo4j_stdout.log
+tmp/neo4j5_ltmg_sandbox/conf/neo4j-admin.conf
+tmp/neo4j5_ltmg_sandbox/conf/neo4j.conf
+tmp/neo4j5_ltmg_sandbox/conf/server-logs.xml
+tmp/neo4j5_ltmg_sandbox/conf/user-logs.xml
+tmp/neo4j5_ltmg_sandbox/run/neo4j.pid
+.tmp-deep-research-skill-test
+
+# 用户指定的本地 LaTeX 编译产物和研究报告草稿
+/cas-sc-template-zh.abs
+/cas-sc-template-zh.aux
+/cas-sc-template-zh.fdb_latexmk
+/cas-sc-template-zh.fls
+/cas-sc-template-zh.log
+/cas-sc-template-zh.out
+/cas-sc-template-zh.pdf
+/cas-sc-template-zh.synctex.gz
+/cas-sc-template-zh.tex
+/cas-sc-template.abs
+/cas-sc-template.aux
+/cas-sc-template.log
+/cas-sc-template.out
+/cas-sc-template.pdf
+/cas-sc-template.synctex.gz
+/cas-sc-template.tex
+/deep-research-report.md
+# 论文/开题资料，保留在本地，不进入 AgentTorch 代码仓库
+/参考文献/
+/开题/
+/开题主题.pdf
+
+# GitHub 单文件 100MB 限制：大型实验运行日志保留本地
+/artifacts/elephant_context_benchmark/20260422_235855/runs.jsonl
+/artifacts/elephant_context_benchmark/20260422_235855/context/runs.jsonl

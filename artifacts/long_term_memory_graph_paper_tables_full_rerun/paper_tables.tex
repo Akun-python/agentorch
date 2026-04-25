@@ -1,0 +1,50 @@
+\begin{table}[t]
+\centering
+\caption{Long-term memory graph baseline benchmark aggregates.}
+\label{tab:ltmg-baseline-aggregate}
+\begin{tabular}{lrrrrrrr}
+\hline
+Baseline & Recall & Relevance & Relation & Usefulness & Stale & Conflict & Latency \\
+\hline
+no\_long\_term\_memory & 0.0000 & 0.0000 & 0.0000 & 0.0000 & 0.0000 & 0.0000 & 0.0002 \\
+vector\_memory & 0.1250 & 0.0833 & 0.0000 & 0.0813 & 0.1528 & 0.3333 & 1.5979 \\
+flat\_summary\_memory & 1.0000 & 0.8333 & 0.0000 & 0.7500 & 0.0000 & 1.0000 & 1.7513 \\
+naive\_graph\_memory & 0.3958 & 0.2639 & 0.0093 & 0.2625 & 0.3750 & 1.0000 & 7.5805 \\
+clarks\_nutcracker\_graph & 0.6667 & 0.4444 & 0.0324 & 0.4382 & 0.0000 & 0.9167 & 14.7057 \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[t]
+\centering
+\caption{Baseline stability aggregates with bootstrap 95 percent confidence intervals.}
+\label{tab:ltmg-stability-aggregate}
+\begin{tabular}{lrrrrrrr}
+\hline
+Baseline & Recall & Relevance & Relation & Usefulness & Stale & Conflict & Latency \\
+\hline
+no\_long\_term\_memory & 0.0000 [0.0000, 0.0000] & 0.0000 [0.0000, 0.0000] & 0.0000 [0.0000, 0.0000] & 0.0000 [0.0000, 0.0000] & 0.0000 [0.0000, 0.0000] & 0.0000 [0.0000, 0.0000] & 0.0002 [0.0002, 0.0002] \\
+vector\_memory & 0.1458 [0.1042, 0.1833] & 0.1111 [0.0944, 0.1278] & 0.0000 [0.0000, 0.0000] & 0.1057 [0.0900, 0.1214] & 0.1695 [0.1361, 0.2083] & 0.4833 [0.3167, 0.6500] & 2.3488 [2.0298, 2.5846] \\
+flat\_summary\_memory & 1.0000 [1.0000, 1.0000] & 0.8333 [0.8333, 0.8333] & 0.0000 [0.0000, 0.0000] & 0.7500 [0.7500, 0.7500] & 0.0000 [0.0000, 0.0000] & 1.0000 [1.0000, 1.0000] & 2.5694 [2.1066, 2.8900] \\
+naive\_graph\_memory & 0.3250 [0.2875, 0.3583] & 0.2167 [0.1889, 0.2389] & 0.0069 [0.0041, 0.0097] & 0.2164 [0.1917, 0.2383] & 0.3972 [0.3555, 0.4333] & 0.9000 [0.8167, 0.9667] & 10.0294 [8.8399, 10.9718] \\
+clarks\_nutcracker\_graph & 0.6417 [0.6167, 0.6708] & 0.4388 [0.4194, 0.4583] & 0.0352 [0.0310, 0.0399] & 0.4332 [0.4143, 0.4521] & 0.0000 [0.0000, 0.0000] & 0.9833 [0.9500, 1.0000] & 19.3140 [16.9177, 21.4137] \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\begin{table}[t]
+\centering
+\caption{Neo4j graph-scale latency summary.}
+\label{tab:ltmg-graph-scale-latency}
+\begin{tabular}{lrrrrrrrr}
+\hline
+Scale & Nodes & Edges & RecallMean & RecallP95 & RecallQPS & DetailMean & DetailP95 & DetailQPS \\
+\hline
+1 & 360 & 3012 & 99.080 & 120.244 & 10.093 & 3.759 & 4.572 & 266.028 \\
+2 & 720 & 3045 & 98.422 & 126.376 & 10.160 & 3.672 & 4.185 & 272.331 \\
+4 & 1440 & 2440 & 91.602 & 142.437 & 10.917 & 3.674 & 4.029 & 272.183 \\
+\hline
+\end{tabular}
+\end{table}

@@ -49,7 +49,11 @@ def create_git_recent_commits_tool(workspace_root: str | Path, *, name: str = "g
                     "subject": subject,
                 }
             )
-        return {"path": target.relative_to(root).as_posix() if target != root else ".", "commits": commits}
+        return {
+            "path": target.relative_to(root).as_posix() if target != root else ".",
+            "commits": commits,
+            "summary": f"Loaded {len(commits)} recent commit(s) from {target.relative_to(root).as_posix() if target != root else '.'}.",
+        }
 
     return FunctionTool(
         name=name,

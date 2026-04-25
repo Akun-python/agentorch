@@ -1,0 +1,18 @@
+{
+  "run_id": "lifecycle",
+  "quick": true,
+  "variants": [
+    "mgcm_full",
+    "mgcm_thread_local_memory"
+  ],
+  "case_ids": [
+    "succession_01",
+    "cross_thread_01",
+    "promotion_validation_01",
+    "conflict_01",
+    "temporal_decay_01"
+  ],
+  "record_count": 10,
+  "generated_at": "2026-04-22T23:32:28.446505",
+  "output_dir": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\artifacts\\elephant_context_benchmark\\20260422_233226\\lifecycle"
+}

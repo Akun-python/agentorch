@@ -42,7 +42,9 @@ class PromptBuilder:
             "{% if agent_role %}\nAgent Role:\n{{ agent_role }}\n{% endif %}"
             "{% if task_packet %}\nTask Packet:\n{{ task_packet }}\n{% endif %}"
             "{% if delegation_context %}\nDelegation Context:\n{{ delegation_context }}\n{% endif %}"
+            "{% if available_skills %}\nAvailable Skills:\n{{ available_skills }}\n{% endif %}"
             "{% if skill_instructions %}\nSkill Instructions:\n{{ skill_instructions|join('\\n\\n') }}\n{% endif %}"
+            "{% if skill_resources %}\nLoaded Skill Resources:\n{{ skill_resources|join('\\n\\n') }}\n{% endif %}"
             "{% if tool_descriptions %}\nAvailable Tools:\n{{ tool_descriptions }}\n{% endif %}"
             "{% if output_instruction %}\nOutput Constraint:\n{{ output_instruction }}\n{% endif %}"
         )
@@ -76,7 +78,9 @@ class PromptBuilder:
             task_packet=context.task_packet or {},
             agent_role=context.agent_role or "",
             delegation_context=context.delegation_context or {},
+            available_skills=context.available_skills,
             skill_instructions=context.skill_instructions,
+            skill_resources=context.skill_resources,
             tool_descriptions=context.tool_descriptions,
             output_instruction=context.output_instruction or "",
         ).strip()

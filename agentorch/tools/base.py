@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -51,6 +52,12 @@ class BaseTool(ABC):
             },
         }
 
+    async def aclose(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
 
 class FunctionTool(BaseTool):
     def __init__(
@@ -64,9 +71,13 @@ class FunctionTool(BaseTool):
         timeout: float = 30.0,
         retryable: bool = False,
         needs_sandbox: bool = False,
+        aclose_callback: Callable[[], Awaitable[None]] | None = None,
+        close_callback: Callable[[], None] | None = None,
     ) -> None:
         self.input_model = input_model
         self.func = func
+        self._aclose_callback = aclose_callback
+        self._close_callback = close_callback
         self.spec = ToolSpec(
             name=name,
             description=description,
@@ -95,3 +106,11 @@ class FunctionTool(BaseTool):
             raise ToolError(f"Tool '{self.spec.name}' timed out after {self.spec.timeout} seconds.", tool_name=self.spec.name) from exc
         except Exception as exc:
             raise ToolError(str(exc), tool_name=self.spec.name) from exc
+
+    async def aclose(self) -> None:
+        if self._aclose_callback is not None:
+            await self._aclose_callback()
+
+    def close(self) -> None:
+        if self._close_callback is not None:
+            self._close_callback()

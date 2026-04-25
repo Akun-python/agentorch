@@ -17,7 +17,18 @@ class SceneHashIndexPolicy(MemoryIndexPolicy):
 
     def build_index(self, **kwargs: Any) -> dict[str, Any]:
         config = kwargs.get("config") or {}
-        fields = list(config.get("scene_index_fields") or ["goal", "knowledge_scope", "agent_role", "thread_id"])
+        allow_cross_thread = bool(config.get("allow_cross_thread_recall", False))
+
+        # Use different field sets for intra-thread vs cross-thread scenarios
+        if allow_cross_thread:
+            # For cross-thread: exclude thread_id to enable matching across threads
+            intra_fields = list(config.get("scene_index_fields_intra_thread") or ["goal", "knowledge_scope", "agent_role", "thread_id"])
+            cross_fields = list(config.get("scene_index_fields_cross_thread") or ["goal", "knowledge_scope", "agent_role"])
+        else:
+            # For intra-thread only: use thread_id
+            intra_fields = list(config.get("scene_index_fields") or ["goal", "knowledge_scope", "agent_role", "thread_id"])
+            cross_fields = intra_fields
+
         payload = {
             "thread_id": kwargs.get("thread_id"),
             "task_id": kwargs.get("task_id"),
@@ -25,9 +36,21 @@ class SceneHashIndexPolicy(MemoryIndexPolicy):
             "agent_role": kwargs.get("agent_role"),
             "knowledge_scope": list(kwargs.get("knowledge_scope") or []),
         }
-        canonical = {key: payload.get(key) for key in fields}
-        digest = hashlib.sha1(json.dumps(canonical, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
-        return {"scene_hash": digest, "fields": canonical}
+
+        # Build both hashes
+        intra_canonical = {key: payload.get(key) for key in intra_fields}
+        cross_canonical = {key: payload.get(key) for key in cross_fields}
+
+        intra_digest = hashlib.sha1(json.dumps(intra_canonical, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+        cross_digest = hashlib.sha1(json.dumps(cross_canonical, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+
+        return {
+            "scene_hash": intra_digest,
+            "scene_hash_intra_thread": intra_digest,
+            "scene_hash_cross_thread": cross_digest,
+            "fields": intra_canonical,
+            "cross_thread_fields": cross_canonical,
+        }
 
 
 class RelevanceOnlyDecayPolicy(MemoryDecayPolicy):
@@ -46,6 +69,26 @@ class RelevanceOnlyDecayPolicy(MemoryDecayPolicy):
         reuse = float(metadata.get("reuse_count", 0.0))
         evidence_strength = float(metadata.get("evidence_count", 0.0))
         outcome_strength = float(metadata.get("outcome_strength", 0.0))
+
+        # Apply temporal decay if recency_weight is configured
+        recency_score = 0.0
+        recency_weight = float(config.get("recency_weight", 0.0))
+        if recency_weight > 0:
+            last_validated = metadata.get("last_validated_at")
+            if last_validated:
+                try:
+                    from datetime import datetime, timezone
+                    import math
+
+                    now = datetime.now(timezone.utc)
+                    validated_time = datetime.fromisoformat(last_validated.replace("Z", "+00:00"))
+                    age_days = (now - validated_time).total_seconds() / 86400.0
+                    # Exponential decay with 30-day half-life
+                    decay_factor = math.exp(-age_days / 30.0)
+                    recency_score = decay_factor * recency_weight
+                except (ValueError, AttributeError):
+                    recency_score = 0.0
+
         score = (
             relevance * float(config.get("relevance_weight", 4.0))
             + salience * 0.6
@@ -53,6 +96,7 @@ class RelevanceOnlyDecayPolicy(MemoryDecayPolicy):
             + reuse * float(config.get("reuse_weight", 0.8))
             + evidence_strength * float(config.get("evidence_weight", 1.8))
             + outcome_strength * float(config.get("outcome_weight", 1.2))
+            + recency_score
         )
         return score, {
             "relevance": relevance,
@@ -61,6 +105,7 @@ class RelevanceOnlyDecayPolicy(MemoryDecayPolicy):
             "reuse": reuse,
             "evidence_strength": evidence_strength,
             "outcome_strength": outcome_strength,
+            "recency": recency_score,
         }
 
 
@@ -195,7 +240,7 @@ class SceneFirstRecallPolicy(MemoryRecallPolicy):
             order_desc=True,
             limit=max(top_k * 8, 12),
         )
-        if strategy_kind in {"mgcm", "nutcracker_memory", "semantic_only", "hybrid_long_memory", "custom"}:
+        if strategy_kind in {"mgcm", "memory_policy", "nutcracker_memory", "semantic_only", "hybrid_long_memory", "custom"}:
             collective_records = await manager.search_collective_memory(
                 query=query,
                 thread_id=None if allow_cross_thread else thread_id,
@@ -242,7 +287,17 @@ class SceneFirstRecallPolicy(MemoryRecallPolicy):
                 knowledge_scope=knowledge_scope,
                 config=config,
             )
-            scene_match = 1.0 if metadata.get("scene_index", {}).get("scene_hash") == current_scene.get("scene_hash") else 0.0
+            # Use appropriate scene hash based on cross-thread mode
+            if allow_cross_thread:
+                # For cross-thread: match using cross_thread hash
+                record_scene_hash = metadata.get("scene_index", {}).get("scene_hash_cross_thread")
+                current_scene_hash = current_scene.get("scene_hash_cross_thread")
+            else:
+                # For intra-thread: match using intra_thread hash
+                record_scene_hash = metadata.get("scene_index", {}).get("scene_hash_intra_thread") or metadata.get("scene_index", {}).get("scene_hash")
+                current_scene_hash = current_scene.get("scene_hash_intra_thread") or current_scene.get("scene_hash")
+
+            scene_match = 1.0 if record_scene_hash == current_scene_hash else 0.0
             score += scene_match * 1.5
             candidate = {
                 "record": record,

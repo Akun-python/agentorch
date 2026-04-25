@@ -1,0 +1,12 @@
+{
+  "baseline_report": "artifacts\\long_term_memory_graph_benchmark_full_rerun\\baseline_benchmark_report.json",
+  "stability_report": "artifacts\\long_term_memory_graph_stability_full_rerun\\baseline_stability_report.json",
+  "graph_scale_report": "artifacts\\long_term_memory_graph_scale_latency_full_rerun\\graph_scale_latency_report.json",
+  "graph_scale_root": "artifacts\\long_term_memory_graph_scale_latency",
+  "graph_scale_rows": 3,
+  "output_dir": "artifacts\\long_term_memory_graph_paper_tables_full_rerun",
+  "outputs": [
+    "artifacts\\long_term_memory_graph_paper_tables_full_rerun\\paper_tables.md",
+    "artifacts\\long_term_memory_graph_paper_tables_full_rerun\\paper_tables.tex"
+  ]
+}

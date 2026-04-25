@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from agentorch.core import UsageInfo
+from agentorch.security import PayloadBudgetConfig, RedactionConfig, sanitize_for_export, shape_payload
 
 
 class EventBus:
@@ -26,8 +27,17 @@ class EventSink(ABC):
 
 
 class Logger:
-    def __init__(self, name: str = "agentorch", file_path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        name: str = "agentorch",
+        file_path: str | Path | None = None,
+        *,
+        redaction: RedactionConfig | dict[str, object] | None = None,
+        payload_budget: PayloadBudgetConfig | dict[str, object] | None = None,
+    ) -> None:
         self.logger = logging.getLogger(name)
+        self.redaction = RedactionConfig.from_any(redaction)
+        self.payload_budget = PayloadBudgetConfig.from_any(payload_budget)
         self.logger.setLevel(logging.INFO)
         self.logger.handlers.clear()
         console_handler = logging.StreamHandler()
@@ -40,14 +50,23 @@ class Logger:
             self.logger.addHandler(file_handler)
 
     def log(self, event_type: str, payload: dict[str, Any]) -> None:
-        self.logger.info(json.dumps({"event_type": event_type, **payload}, ensure_ascii=False))
+        event_record = shape_payload({"event_type": event_type, **payload}, budget=self.payload_budget, redaction=self.redaction)
+        self.logger.info(json.dumps(event_record, ensure_ascii=False))
 
 
 class ConsoleEventSink(EventSink):
     IMPORTANT_EVENTS = {"final_result", "run_failed", "human_feedback_emitted", "run_completed"}
 
-    def __init__(self, mode: Literal["silent", "important_only", "all"] = "silent") -> None:
+    def __init__(
+        self,
+        mode: Literal["silent", "important_only", "all"] = "silent",
+        *,
+        redaction: RedactionConfig | dict[str, object] | None = None,
+        payload_budget: PayloadBudgetConfig | dict[str, object] | None = None,
+    ) -> None:
         self.mode = mode
+        self.redaction = RedactionConfig.from_any(redaction)
+        self.payload_budget = PayloadBudgetConfig.from_any(payload_budget)
         self._logger = logging.getLogger("agentorch.console")
         self._logger.setLevel(logging.INFO)
         self._logger.handlers.clear()
@@ -60,7 +79,8 @@ class ConsoleEventSink(EventSink):
             return
         if self.mode == "important_only" and event_type not in self.IMPORTANT_EVENTS:
             return
-        self._logger.info(json.dumps({"event_type": event_type, **payload}, ensure_ascii=False))
+        event_record = shape_payload({"event_type": event_type, **payload}, budget=self.payload_budget, redaction=self.redaction)
+        self._logger.info(json.dumps(event_record, ensure_ascii=False))
 
 
 class TodoProjection:
@@ -134,7 +154,21 @@ class TodoProjection:
 
     @staticmethod
     def _metadata(event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
-        keys = ("feedback_id", "kind", "severity", "blocking", "tool_call_id", "query", "visited_sources", "chunk_count", "status")
+        keys = (
+            "feedback_id",
+            "kind",
+            "severity",
+            "blocking",
+            "tool_call_id",
+            "query",
+            "visited_sources",
+            "chunk_count",
+            "status",
+            "error_category",
+            "error_stage",
+            "prompt_char_estimate",
+            "context_compaction_applied",
+        )
         return {key: payload[key] for key in keys if key in payload}
 
     @classmethod
@@ -306,10 +340,19 @@ class TodoProjection:
 
 
 class SQLiteEventStore(EventSink):
-    def __init__(self, path: str | Path, *, capture_todos: bool = True) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        capture_todos: bool = True,
+        redaction: RedactionConfig | dict[str, object] | None = None,
+        payload_budget: PayloadBudgetConfig | dict[str, object] | None = None,
+    ) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.capture_todos = capture_todos
+        self.redaction = RedactionConfig.from_any(redaction)
+        self.payload_budget = PayloadBudgetConfig.from_any(payload_budget)
         self._initialize()
         self._todo_projection = TodoProjection(self._connect) if capture_todos else None
 
@@ -369,7 +412,7 @@ class SQLiteEventStore(EventSink):
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uniq_run_todos ON run_todos(run_id, todo_key)")
 
     def emit(self, event_type: str, payload: dict[str, Any]) -> None:
-        event_record = {"event_type": event_type, **payload}
+        event_record = shape_payload({"event_type": event_type, **payload}, budget=self.payload_budget, redaction=self.redaction)
         with self._connect() as conn:
             conn.execute(
                 """
@@ -497,6 +540,12 @@ class SQLiteEventStore(EventSink):
             return None
         return self.get_run_todos(str(runs[0]["run_id"]))
 
+    async def aclose(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
 
 class ObservabilityManager(EventSink):
     def __init__(self, store: SQLiteEventStore | None = None) -> None:
@@ -531,6 +580,20 @@ class ObservabilityManager(EventSink):
             return None
         return self.store.get_latest_thread_todos(thread_id)
 
+    async def aclose(self) -> None:
+        if self.store is None:
+            return
+        close_async = getattr(self.store, "aclose", None)
+        if callable(close_async):
+            await close_async()
+
+    def close(self) -> None:
+        if self.store is None:
+            return
+        close_sync = getattr(self.store, "close", None)
+        if callable(close_sync):
+            close_sync()
+
 
 class Tracer:
     def __init__(self, event_bus: EventBus, logger: Logger | None = None, sinks: list[EventSink] | None = None) -> None:
@@ -547,6 +610,12 @@ class Tracer:
             sink.emit(event_type, payload)
         if self.logger:
             self.logger.log(event_type, payload)
+
+    async def aclose(self) -> None:
+        for sink in self.sinks:
+            close_async = getattr(sink, "aclose", None)
+            if callable(close_async):
+                await close_async()
 
 
 class ExecutionTrace:

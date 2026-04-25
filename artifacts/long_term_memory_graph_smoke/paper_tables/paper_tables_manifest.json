@@ -1,0 +1,12 @@
+{
+  "baseline_report": "artifacts\\long_term_memory_graph_smoke\\baselines\\baseline_benchmark_report.json",
+  "stability_report": "artifacts\\long_term_memory_graph_smoke\\stability\\baseline_stability_report.json",
+  "graph_scale_report": null,
+  "graph_scale_root": "artifacts\\long_term_memory_graph_scale_latency",
+  "graph_scale_rows": 2,
+  "output_dir": "artifacts\\long_term_memory_graph_smoke\\paper_tables",
+  "outputs": [
+    "artifacts\\long_term_memory_graph_smoke\\paper_tables\\paper_tables.md",
+    "artifacts\\long_term_memory_graph_smoke\\paper_tables\\paper_tables.tex"
+  ]
+}

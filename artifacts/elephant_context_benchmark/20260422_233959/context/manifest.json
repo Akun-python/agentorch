@@ -1,0 +1,21 @@
+{
+  "run_id": "context",
+  "quick": true,
+  "variants": [
+    "elephant_full",
+    "multi_agent_default_context"
+  ],
+  "budgets": [
+    12000
+  ],
+  "case_ids": [
+    "rule_preservation_01",
+    "evidence_competition_01",
+    "delegation_handoff_01",
+    "tool_conflict_01",
+    "late_synthesis_01"
+  ],
+  "record_count": 10,
+  "generated_at": "2026-04-22T23:40:01.644861",
+  "output_dir": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\artifacts\\elephant_context_benchmark\\20260422_233959\\context"
+}

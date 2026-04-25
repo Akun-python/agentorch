@@ -1,0 +1,4 @@
+2026-04-23 14:54:52.020+0000 WARN  You are using an unsupported version of the Java runtime. Please use Oracle(R) Java(TM) Runtime Environment 8, OpenJDK(TM) 8 or IBM J9.
+2026-04-23 14:54:52.037+0000 INFO  ======== Neo4j 3.5.12 ========
+2026-04-23 14:54:52.047+0000 INFO  Starting...
+2026-04-23 14:54:53.546+0000 INFO  Neo4j Server shutdown initiated by request

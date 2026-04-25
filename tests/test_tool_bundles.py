@@ -36,6 +36,7 @@ async def _test_filesystem_execution_and_git_bundles_can_be_assigned_separately(
     execution_registry = ToolRegistry()
     register_execution_tools(execution_registry, sandbox)
     assert "run_command" in execution_registry
+    assert "python_interpreter" in execution_registry
     assert "read_file" not in execution_registry
 
     git_registry = ToolRegistry()
@@ -56,7 +57,7 @@ def test_register_default_agent_tools_combines_selected_bundles(tmp_path: Path):
     )
     registry = ToolRegistry()
     register_default_agent_tools(registry, workspace_root=tmp_path, sandbox=sandbox)
-    for tool_name in ["read_file", "run_command", "git_status"]:
+    for tool_name in ["read_file", "run_command", "python_interpreter", "git_status"]:
         assert tool_name in registry
 
 
@@ -71,6 +72,7 @@ def test_tool_registry_with_bundles_returns_preconfigured_registry(tmp_path: Pat
     registry = ToolRegistry.with_bundles(workspace_root=tmp_path, sandbox=sandbox)
     assert "read_file" in registry
     assert "run_command" in registry
+    assert "python_interpreter" in registry
     assert "git_status" in registry
 
 

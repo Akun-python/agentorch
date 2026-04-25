@@ -4,6 +4,8 @@ import contextlib
 import json
 import uuid
 import asyncio
+import inspect
+import sqlite3
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -15,11 +17,10 @@ from agentorch.agents import (
     Handoff,
     SharedNote,
     Supervisor,
-    TaskArtifact,
     TaskPacket,
     TaskStatus,
 )
-from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
+from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig, validate_supported_python
 from agentorch.core import (
     CompactionDecision,
     ContextEnvelope,
@@ -35,7 +36,8 @@ from agentorch.core import (
     ToolExecutionResult,
     UsageInfo,
 )
-from agentorch.feedback import FeedbackKind, HumanFeedbackManager
+from agentorch.extensions import ExtensionManager, HandoffHookContext, RunHookContext, RuntimeExtension, SupervisorPlanHookContext
+from agentorch.feedback import HumanFeedbackManager
 from agentorch.knowledge import (
     BaseRetriever,
     Citation,
@@ -61,28 +63,32 @@ from agentorch.models import BaseModelAdapter, OpenAIModel, create_model_adapter
 from agentorch.observability import ConsoleEventSink, EventBus, ObservabilityManager, SQLiteEventStore, Tracer, UsageTracker
 from agentorch.prompts import PromptBuilder
 from agentorch.reasoning import BasePolicy, BaseReasoningFramework, LegacyPolicyAdapter, ReactPolicy, ReasoningSessionContext, ReasoningStrategyConfig
+from agentorch.security import shape_payload
 from agentorch.runtime.context_compaction import (
-    apply_budget_aware_compaction,
-    apply_static_context_filters,
-    estimate_prompt_context_budget,
     build_handoff_capsule,
     compact_task_packet,
     trim_message_content,
 )
+from agentorch.runtime.context_kernel import ContextKernel
+from agentorch.runtime.workflow_execution import execute_runtime_workflow
 from agentorch.sandbox import SandboxManager
-from agentorch.skills import SkillLoader, SkillRegistry
-from agentorch.skills import SkillRoutingConfig
+from agentorch.skills import (
+    SkillArgumentBundle,
+    SkillCatalog,
+    SkillCatalogConfig,
+    SkillLoader,
+    SkillRegistry,
+    SkillRequest,
+    SkillRoutingConfig,
+)
 from agentorch.strategies import (
-    BaseContextStrategy,
-    BaseCooperationStrategy,
-    BaseLongHorizonStrategy,
-    BaseMemoryGovernanceStrategy,
-    ContextStrategyConfig,
-    CooperationStrategyConfig,
-    LongHorizonStrategyConfig,
-    MemoryGovernanceStrategyConfig,
-    create_memory_governance_strategy,
-    create_cooperation_strategy,
+    ContextPolicy,
+    CoordinationPolicy,
+    DefaultContextSelector,
+    DefaultMemoryEvaluator,
+    DefaultRoutePlanner,
+    MemoryPolicy,
+    StatePolicy,
 )
 from agentorch.tools import BaseTool, ToolError, ToolRegistry
 from agentorch.tools.knowledge import (
@@ -90,7 +96,7 @@ from agentorch.tools.knowledge import (
     create_open_retrieved_evidence_tool,
     create_search_knowledge_assets_tool,
 )
-from agentorch.workflow import Context, Workflow, WorkflowRunner
+from agentorch.workflow import Workflow
 
 
 class Runtime:
@@ -106,7 +112,8 @@ class Runtime:
         include_web_tools: bool = False,
         web_search_api_key: str | None = None,
         workspace_root: str | Path | None = None,
-        skills: SkillRegistry | None = None,
+        skills: SkillRegistry | SkillCatalog | str | Path | list[str | Path] | tuple[str | Path, ...] | None = None,
+        skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None,
         memory: MemoryManager | None = None,
         retriever: BaseRetriever | None = None,
         knowledge_base: KnowledgeBase | None = None,
@@ -123,13 +130,19 @@ class Runtime:
         config: RuntimeConfig | dict[str, Any] | None = None,
         tracer: Tracer | None = None,
         human_feedback: HumanFeedbackManager | None = None,
+        extensions: ExtensionManager | list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
+        managed_agents: list[Any] | tuple[Any, ...] | None = None,
     ) -> "Runtime":
         runtime_config = RuntimeConfig.from_any(config)
         selected_model = model or create_model_adapter(model_config)
-        skill_root = Path(workspace_root or Path.cwd()) / ".skills"
-        selected_skills = skills or SkillRegistry()
-        for discovered_skill in SkillLoader().discover(skill_root):
-            selected_skills.register(discovered_skill)
+        selected_workspace_root = Path(workspace_root or Path.cwd())
+        selected_skills = cls._resolve_skill_registry(
+            skills=skills,
+            workspace_root=selected_workspace_root,
+            loader=SkillLoader(),
+            runtime_config=runtime_config,
+            skill_catalog=skill_catalog,
+        )
         selected_tools = cls._coerce_tool_registry(tools)
         selected_tools.extend(cls._coerce_tool_registry(custom_tools))
         if not selected_tools.list_specs():
@@ -169,6 +182,7 @@ class Runtime:
             model=selected_model,
             tools=selected_tools,
             skills=selected_skills,
+            workspace_root=selected_workspace_root,
             memory=memory,
             retriever=retriever,
             knowledge_base=selected_knowledge_base,
@@ -181,6 +195,8 @@ class Runtime:
             config=runtime_config,
             tracer=tracer,
             human_feedback=human_feedback,
+            extensions=extensions,
+            managed_agents=managed_agents,
         )
 
     @staticmethod
@@ -195,6 +211,44 @@ class Runtime:
             return registry
         for tool in tools:
             registry.register(tool)
+        return registry
+
+    @staticmethod
+    def _resolve_skill_registry(
+        *,
+        skills: SkillRegistry | SkillCatalog | str | Path | list[str | Path] | tuple[str | Path, ...] | None,
+        workspace_root: Path,
+        loader: SkillLoader,
+        runtime_config: RuntimeConfig,
+        skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None,
+    ) -> SkillRegistry:
+        catalog_config = SkillCatalogConfig.from_any(skill_catalog or runtime_config.skill_catalog)
+        if isinstance(skills, SkillRegistry):
+            return skills
+        if isinstance(skills, SkillCatalog):
+            return SkillRegistry(catalog=skills, diagnostics=skills.diagnostics)
+
+        registry = SkillRegistry()
+        explicit_items: list[str | Path] = []
+        if skills is None:
+            discovered = loader.discover_catalog(workspace_root, config=catalog_config)
+            registry.register_catalog(discovered)
+            return registry
+        if isinstance(skills, (str, Path)):
+            explicit_items = [skills]
+        else:
+            explicit_items = list(skills)
+
+        for item in explicit_items:
+            candidate = Path(item)
+            resolved_candidate = candidate if candidate.is_absolute() else (workspace_root / candidate)
+            if (resolved_candidate / "SKILL.md").exists():
+                registry.register(loader.load(resolved_candidate))
+                continue
+            if any((resolved_candidate / relative_root).exists() for relative_root in catalog_config.discovery_roots):
+                registry.register_catalog(loader.discover_catalog(resolved_candidate, config=catalog_config))
+                continue
+            registry.register_many(*loader.discover(resolved_candidate))
         return registry
 
     @classmethod
@@ -214,6 +268,7 @@ class Runtime:
         model: BaseModelAdapter,
         tools: ToolRegistry | None = None,
         skills: SkillRegistry | None = None,
+        workspace_root: str | Path | None = None,
         memory: MemoryManager | None = None,
         retriever: BaseRetriever | None = None,
         knowledge_base: KnowledgeBase | None = None,
@@ -226,14 +281,18 @@ class Runtime:
         config: RuntimeConfig | None = None,
         tracer: Tracer | None = None,
         human_feedback: HumanFeedbackManager | None = None,
+        extensions: ExtensionManager | list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
+        managed_agents: list[Any] | tuple[Any, ...] | None = None,
     ) -> None:
+        validate_supported_python()
         self.model = model
         self.tools = tools or ToolRegistry()
         self.skills = skills or SkillRegistry()
+        self.workspace_root = Path(workspace_root or Path.cwd())
         self.memory = memory or MemoryManager()
         self.retriever = retriever or (knowledge_base.get_retriever() if knowledge_base is not None else None)
         self.knowledge_base = knowledge_base
-        self.sandbox = sandbox or SandboxManager()
+        self.sandbox = sandbox
         self.agent_registry = agent_registry or AgentRegistry()
         self.supervisor = supervisor
         self.coordinator = coordinator or Coordinator.default()
@@ -247,8 +306,59 @@ class Runtime:
         self.human_feedback = human_feedback
         if self.human_feedback is not None:
             self.human_feedback.bind_runtime(self)
+        self.extensions = ExtensionManager.from_any(extensions)
+        self._managed_agents = list(managed_agents or [])
+        self._skill_thread_cache: dict[str, dict[str, Any]] = {}
         self.reasoning_framework = self._normalize_reasoning(self.policy)
+        self.context_kernel = ContextKernel(
+            runtime=self,
+            context_selector=self.config.context_selector or DefaultContextSelector(),
+            route_planner=self.config.route_planner or DefaultRoutePlanner(),
+            memory_evaluator=self.config.memory_evaluator or DefaultMemoryEvaluator(),
+        )
         self._register_builtin_knowledge_tools()
+        self._closed = False
+        self._background_managed = False
+
+    async def _aclose_resource(self, resource: Any) -> None:
+        close_async = getattr(resource, "aclose", None)
+        if callable(close_async):
+            outcome = close_async()
+            if inspect.isawaitable(outcome):
+                await outcome
+            return
+        close = getattr(resource, "close", None)
+        if callable(close):
+            close()
+
+    @staticmethod
+    def _error_category(exc: Exception) -> str:
+        message = str(exc).lower()
+        exc_type = type(exc).__name__
+        if "environment_error:" in message:
+            return "environment_error"
+        if isinstance(exc, (sqlite3.Error, OverflowError)):
+            return "runtime_persistence_error"
+        if exc_type in {"APIConnectionError", "APITimeoutError", "RateLimitError"}:
+            return "provider_connection_error"
+        if "connection error" in message or "timed out" in message or "rate limit" in message:
+            return "provider_connection_error"
+        return "runtime_error"
+
+    @staticmethod
+    def _error_context(exc: Exception, envelope: ContextEnvelope, *, stage: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        context_budget = envelope.metadata.get("context_budget_report", {}) if isinstance(envelope.metadata, dict) else {}
+        payload = {
+            **envelope.model_dump(),
+            "error": str(exc),
+            "error_category": Runtime._error_category(exc),
+            "error_stage": stage,
+            "prompt_char_estimate": context_budget.get("estimated_total_chars"),
+            "context_compaction_applied": context_budget.get("compaction_applied"),
+        }
+        if extra:
+            payload.update(extra)
+        return payload
 
     def _configure_observability(self) -> None:
         observability_config = ObservabilityConfig.from_any(self.config.observability)
@@ -256,11 +366,22 @@ class Runtime:
             return
         if observability_config.store_backend != "sqlite":
             raise ValueError(f"Unsupported observability store backend '{observability_config.store_backend}'.")
-        store = SQLiteEventStore(observability_config.sqlite_path, capture_todos=observability_config.capture_todos)
+        store = SQLiteEventStore(
+            observability_config.sqlite_path,
+            capture_todos=observability_config.capture_todos,
+            redaction=observability_config.redaction,
+            payload_budget=observability_config.trace_payload_budget,
+        )
         self.observability = ObservabilityManager(store)
         self.tracer.add_sink(self.observability)
         if observability_config.console_mode != "silent":
-            self.tracer.add_sink(ConsoleEventSink(mode=observability_config.console_mode))
+            self.tracer.add_sink(
+                ConsoleEventSink(
+                    mode=observability_config.console_mode,
+                    redaction=observability_config.redaction,
+                    payload_budget=observability_config.trace_payload_budget,
+                )
+            )
 
     def _attach_observability_metadata(self, result: RunResult) -> RunResult:
         if not self.observability.enabled:
@@ -413,69 +534,17 @@ class Runtime:
             updated["context"] = ""
         return updated
 
-    def _resolve_context_strategy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> ContextStrategyConfig:
-        metadata = metadata or {}
-        node_config = node_config or {}
-        if node_config.get("context_strategy") is not None:
-            value = node_config["context_strategy"]
-            return value.config if isinstance(value, BaseContextStrategy) else ContextStrategyConfig.from_any(value)
-        if metadata.get("context_strategy") is not None:
-            value = metadata["context_strategy"]
-            return value.config if isinstance(value, BaseContextStrategy) else ContextStrategyConfig.from_any(value)
-        if agent_role:
-            registered = self.agent_registry.get(agent_role) if agent_role in {spec.name for spec in self.agent_registry.list_specs()} else None
-            if registered and registered.spec.policy_profile.default_context_strategy is not None:
-                value = registered.spec.policy_profile.default_context_strategy
-                return value.config if isinstance(value, BaseContextStrategy) else ContextStrategyConfig.from_any(value)
-        value = self.config.context_strategy
-        if value is None:
-            return ContextStrategyConfig.balanced(
-                include_tool_descriptions=True,
-                include_retrieval_report=True,
-            )
-        return value.config if isinstance(value, BaseContextStrategy) else ContextStrategyConfig.from_any(value)
+    def _resolve_context_policy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> ContextPolicy:
+        return self.context_kernel.resolve_context_policy(metadata=metadata, node_config=node_config, agent_role=agent_role)
 
-    def _resolve_long_horizon_strategy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> LongHorizonStrategyConfig:
-        metadata = metadata or {}
-        node_config = node_config or {}
-        if node_config.get("long_horizon_strategy") is not None:
-            value = node_config["long_horizon_strategy"]
-            return value.config if isinstance(value, BaseLongHorizonStrategy) else LongHorizonStrategyConfig.from_any(value)
-        if metadata.get("long_horizon_strategy") is not None:
-            value = metadata["long_horizon_strategy"]
-            return value.config if isinstance(value, BaseLongHorizonStrategy) else LongHorizonStrategyConfig.from_any(value)
-        if agent_role:
-            registered = self.agent_registry.get(agent_role) if agent_role in {spec.name for spec in self.agent_registry.list_specs()} else None
-            if registered and registered.spec.policy_profile.default_long_horizon_strategy is not None:
-                value = registered.spec.policy_profile.default_long_horizon_strategy
-                return value.config if isinstance(value, BaseLongHorizonStrategy) else LongHorizonStrategyConfig.from_any(value)
-        value = self.config.long_horizon_strategy
-        return value.config if isinstance(value, BaseLongHorizonStrategy) else LongHorizonStrategyConfig.from_any(value)
+    def _resolve_state_policy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> StatePolicy:
+        return self.context_kernel.resolve_state_policy(metadata=metadata, node_config=node_config, agent_role=agent_role)
 
-    def _resolve_cooperation_strategy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> CooperationStrategyConfig:
-        metadata = metadata or {}
-        node_config = node_config or {}
-        if node_config.get("cooperation_strategy") is not None:
-            value = node_config["cooperation_strategy"]
-            return value.config if isinstance(value, BaseCooperationStrategy) else CooperationStrategyConfig.from_any(value)
-        if metadata.get("cooperation_strategy") is not None:
-            value = metadata["cooperation_strategy"]
-            return value.config if isinstance(value, BaseCooperationStrategy) else CooperationStrategyConfig.from_any(value)
-        if agent_role:
-            registered = self.agent_registry.get(agent_role) if agent_role in {spec.name for spec in self.agent_registry.list_specs()} else None
-            if registered and registered.spec.policy_profile.default_cooperation_strategy is not None:
-                value = registered.spec.policy_profile.default_cooperation_strategy
-                return value.config if isinstance(value, BaseCooperationStrategy) else CooperationStrategyConfig.from_any(value)
-        value = self.config.cooperation_strategy
-        return value.config if isinstance(value, BaseCooperationStrategy) else CooperationStrategyConfig.from_any(value)
+    def _resolve_coordination_policy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> CoordinationPolicy:
+        return self.context_kernel.resolve_coordination_policy(metadata=metadata, node_config=node_config, agent_role=agent_role)
 
-    def _resolve_memory_governance_strategy(self, *, metadata: dict[str, Any] | None = None) -> MemoryGovernanceStrategyConfig:
-        metadata = metadata or {}
-        if metadata.get("memory_governance_strategy") is not None:
-            value = metadata["memory_governance_strategy"]
-            return value.config if isinstance(value, BaseMemoryGovernanceStrategy) else MemoryGovernanceStrategyConfig.from_any(value)
-        value = self.config.memory_governance_strategy
-        return value.config if isinstance(value, BaseMemoryGovernanceStrategy) else MemoryGovernanceStrategyConfig.from_any(value)
+    def _resolve_memory_policy(self, *, metadata: dict[str, Any] | None = None, node_config: dict[str, Any] | None = None, agent_role: str | None = None) -> MemoryPolicy:
+        return self.context_kernel.resolve_memory_policy(metadata=metadata, node_config=node_config, agent_role=agent_role)
 
     async def _rerank_context_segments(
         self,
@@ -537,45 +606,6 @@ class Runtime:
         except Exception:
             return {}
 
-    async def _apply_context_strategy_to_prompt_context(
-        self,
-        prompt_context: PromptContext,
-        *,
-        context_strategy: ContextStrategyConfig,
-        long_horizon_strategy: LongHorizonStrategyConfig,
-        stage: str,
-        selected_skill_routes: list[dict[str, Any]] | None = None,
-    ) -> tuple[PromptContext, dict[str, Any]]:
-        updated, truncated_sections = apply_static_context_filters(
-            prompt_context,
-            context_strategy=context_strategy,
-            long_horizon_strategy=long_horizon_strategy,
-        )
-        if not context_strategy.budget_aware_compaction or context_strategy.salience_mode == "off":
-            budget = estimate_prompt_context_budget(updated, truncated_sections=truncated_sections)
-            budget["estimated_total_chars_before"] = budget["estimated_total_chars"]
-            budget["estimated_total_chars_after"] = budget["estimated_total_chars"]
-            budget["selected_segment_count"] = 0
-            budget["dropped_segment_count"] = 0
-            budget["segment_scores"] = []
-            budget["inhibition_events"] = []
-            budget["compression_reason"] = "static_compaction_only"
-            budget["compaction_applied"] = False
-            return updated, budget
-        return await apply_budget_aware_compaction(
-            updated,
-            context_strategy=context_strategy,
-            stage=stage,
-            selected_skill_routes=selected_skill_routes or [],
-            rerank_callback=lambda segments, top_k: self._rerank_context_segments(
-                segments,
-                top_k,
-                user_input=prompt_context.user_input,
-                stage=stage,
-                agent_role=prompt_context.agent_role,
-            ),
-        )
-
     def _create_context_envelope(self, *, thread_id: str, metadata: dict[str, Any] | None = None) -> ContextEnvelope:
         return ContextEnvelope(
             request_id=str(uuid.uuid4()),
@@ -584,6 +614,256 @@ class Runtime:
             trace_id=str(uuid.uuid4()),
             metadata=metadata or {},
         )
+
+    def _resolve_skill_request(self, metadata: dict[str, Any] | None = None) -> SkillRequest:
+        return SkillRequest.from_any((metadata or {}).get("skill_request"))
+
+    def _resolve_skill_routing(self, metadata: dict[str, Any] | None = None) -> SkillRoutingConfig:
+        metadata = metadata or {}
+        skill_request = self._resolve_skill_request(metadata)
+        resolved = SkillRoutingConfig.from_any(skill_request.skill_routing or metadata.get("skill_routing") or self.config.skill_routing or SkillRoutingConfig())
+        if skill_request.selection_mode is not None:
+            resolved = resolved.model_copy(update={"selection_mode": skill_request.selection_mode})
+        return resolved
+
+    def _resolve_skill_catalog_config(self) -> SkillCatalogConfig:
+        return SkillCatalogConfig.from_any(self.config.skill_catalog)
+
+    def _skill_selection_mode(self, metadata: dict[str, Any] | None = None) -> str:
+        skill_request = self._resolve_skill_request(metadata)
+        if skill_request.selection_mode is not None:
+            return skill_request.selection_mode
+        resolved_routing = self._resolve_skill_routing(metadata)
+        if resolved_routing.selection_mode:
+            return resolved_routing.selection_mode
+        return self._resolve_skill_catalog_config().selection_mode
+
+    def _sync_skill_cache_to_envelope(self, thread_id: str, envelope: ContextEnvelope) -> None:
+        cache = self._skill_thread_cache.get(thread_id, {"loaded_skills": {}, "loaded_skill_resources": {}})
+        envelope.metadata["loaded_skills"] = list(cache.get("loaded_skills", {}).values())
+        envelope.metadata["loaded_skill_resources"] = list(cache.get("loaded_skill_resources", {}).values())
+
+    def _available_skill_names(self, envelope: ContextEnvelope) -> set[str]:
+        return {item.get("name", "") for item in envelope.metadata.get("available_skills", [])}
+
+    def _skill_prompt_payload(self, envelope: ContextEnvelope, selected_skills: list[str] | None = None) -> dict[str, Any]:
+        loaded_skills = list(envelope.metadata.get("loaded_skills") or [])
+        loaded_resources = list(envelope.metadata.get("loaded_skill_resources") or [])
+        prompt_skills = list(selected_skills or [])
+        seen_skill_texts = {item for item in prompt_skills if item}
+        for item in loaded_skills:
+            prompt_text = str(item.get("prompt_text") or "").strip()
+            if prompt_text and prompt_text not in seen_skill_texts:
+                prompt_skills.append(prompt_text)
+                seen_skill_texts.add(prompt_text)
+        prompt_resources: list[str] = []
+        seen_resources: set[str] = set()
+        for item in loaded_resources:
+            prompt_text = str(item.get("prompt_text") or "").strip()
+            if prompt_text and prompt_text not in seen_resources:
+                prompt_resources.append(prompt_text)
+                seen_resources.add(prompt_text)
+        return {
+            "available_skills": list(envelope.metadata.get("available_skills") or []),
+            "skill_instructions": prompt_skills,
+            "skill_resources": prompt_resources,
+        }
+
+    def _tool_specs_for_request(self, envelope: ContextEnvelope) -> list[dict[str, Any]]:
+        specs = list(self.tools.list_specs())
+        if envelope.metadata.get("allow_skill_auto_select") and envelope.metadata.get("available_skills"):
+            specs.extend(self._skill_tool_specs())
+        return specs
+
+    def _skill_tool_specs(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "load_skill",
+                    "description": (
+                        "Activate a skill from Available Skills so its SKILL.md instructions become available in the next model round."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Skill name from Available Skills."},
+                            "arguments": {
+                                "type": "object",
+                                "description": "Optional skill arguments with raw text, argv list, and structured input.",
+                                "properties": {
+                                    "raw": {"type": "string"},
+                                    "argv": {"type": "array", "items": {"type": "string"}},
+                                    "input": {"type": "object"},
+                                },
+                            },
+                        },
+                        "required": ["name"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "load_skill_resource",
+                    "description": "Load one referenced file from an already active skill, such as references/, scripts/, or assets/.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Skill name that has already been activated."},
+                            "path": {"type": "string", "description": "Relative file path under references/, scripts/, or assets/."},
+                        },
+                        "required": ["name", "path"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+        ]
+
+    def _serialize_loaded_skill(self, activation) -> dict[str, Any]:
+        return {
+            "skill_name": activation.skill_name,
+            "location": activation.location,
+            "content": activation.content,
+            "prompt_text": activation.prompt_text(),
+            "argument_bundle": activation.argument_bundle.model_dump(),
+            "structured_input": activation.structured_input,
+            "resource_hints": list(activation.resource_hints),
+            "allowed_tools": list(activation.allowed_tools),
+        }
+
+    def _serialize_loaded_skill_resource(self, resource_load) -> dict[str, Any]:
+        return {
+            "skill_name": resource_load.skill_name,
+            "location": resource_load.location,
+            "path": resource_load.path,
+            "content": resource_load.content,
+            "prompt_text": resource_load.prompt_text(),
+        }
+
+    def _upsert_loaded_skill_record(self, records: list[dict[str, Any]], record: dict[str, Any]) -> list[dict[str, Any]]:
+        filtered = [item for item in records if item.get("skill_name") != record.get("skill_name")]
+        filtered.append(record)
+        return filtered
+
+    def _upsert_loaded_skill_resource_record(self, records: list[dict[str, Any]], record: dict[str, Any]) -> list[dict[str, Any]]:
+        filtered = [
+            item
+            for item in records
+            if not (item.get("skill_name") == record.get("skill_name") and item.get("path") == record.get("path"))
+        ]
+        filtered.append(record)
+        return filtered
+
+    def _append_skill_selection_event(self, envelope: ContextEnvelope, *, event_type: str, payload: dict[str, Any]) -> None:
+        events = list(envelope.metadata.get("skill_selection_events") or [])
+        events.append({"type": event_type, **payload})
+        envelope.metadata["skill_selection_events"] = events
+
+    def _refresh_selected_skill_routes_compat(self, envelope: ContextEnvelope, preselected_routes: list[dict[str, Any]] | None = None) -> None:
+        route_map: dict[str, dict[str, Any]] = {}
+        for route in list(preselected_routes or []):
+            route_map[str(route.get("skill_name") or "")] = route
+        for record in envelope.metadata.get("loaded_skills", []):
+            skill_name = str(record.get("skill_name") or "")
+            if not skill_name:
+                continue
+            route_map[skill_name] = {
+                "skill_name": skill_name,
+                "score": 100.0,
+                "trigger_matches": [],
+                "disclosure_level": "full",
+                "content": record.get("prompt_text") or "",
+                "allowed_tools": list(record.get("allowed_tools") or []),
+                "descriptor": {
+                    "name": skill_name,
+                    "description": record.get("content") or "",
+                    "location": record.get("location") or "",
+                    "tags": [],
+                    "triggers": [],
+                    "allowed_tools": list(record.get("allowed_tools") or []),
+                    "compatibility": [],
+                },
+                "rationale": "loaded via runtime skill activation",
+            }
+        envelope.metadata["selected_skill_routes"] = list(route_map.values())
+
+    def _initialize_skill_state(
+        self,
+        *,
+        user_input: str,
+        thread_id: str,
+        envelope: ContextEnvelope,
+        metadata: dict[str, Any],
+    ) -> list[str]:
+        catalog_config = self._resolve_skill_catalog_config()
+        skill_request = self._resolve_skill_request(metadata)
+        resolved_routing = self._resolve_skill_routing(metadata)
+        selection_mode = self._skill_selection_mode(metadata)
+        allow_auto_select = self.config.auto_select_skills and skill_request.allow_auto_select
+        if catalog_config.activation_cache in {"run", "off"} or thread_id not in self._skill_thread_cache:
+            self._skill_thread_cache[thread_id] = {"loaded_skills": {}, "loaded_skill_resources": {}}
+        self._sync_skill_cache_to_envelope(thread_id, envelope)
+
+        available_skills = self.skills.available_descriptors(request=skill_request)
+        available_names = [item["name"] for item in available_skills]
+        envelope.metadata["skill_request"] = skill_request.model_dump()
+        envelope.metadata["skill_selection_mode"] = selection_mode
+        envelope.metadata["allow_skill_auto_select"] = allow_auto_select and selection_mode in {"model", "hybrid"}
+        envelope.metadata["available_skills"] = available_skills
+        envelope.metadata["resolved_skill_routing"] = resolved_routing.model_dump()
+        envelope.metadata["skill_catalog_config"] = catalog_config.model_dump()
+        envelope.metadata.setdefault("skill_selection_events", [])
+
+        for skill_name in skill_request.force_load:
+            if skill_name not in available_names:
+                self._append_skill_selection_event(
+                    envelope,
+                    event_type="force_load_rejected",
+                    payload={"skill_name": skill_name, "reason": "skill not available for this request"},
+                )
+                continue
+            activation = self.skills.activate(skill_name, arguments=skill_request.arguments.get(skill_name))
+            record = self._serialize_loaded_skill(activation)
+            envelope.metadata["loaded_skills"] = self._upsert_loaded_skill_record(
+                list(envelope.metadata.get("loaded_skills") or []),
+                record,
+            )
+            self._append_skill_selection_event(
+                envelope,
+                event_type="force_load",
+                payload={"skill_name": skill_name, "location": activation.location},
+            )
+
+        if catalog_config.activation_cache == "thread":
+            self._skill_thread_cache[thread_id]["loaded_skills"] = {
+                item["skill_name"]: item for item in envelope.metadata.get("loaded_skills", [])
+            }
+            self._skill_thread_cache[thread_id]["loaded_skill_resources"] = {
+                f"{item['skill_name']}::{item['path']}": item for item in envelope.metadata.get("loaded_skill_resources", [])
+            }
+
+        selected_skill_routes = []
+        if allow_auto_select and selection_mode in {"rule", "hybrid"}:
+            selected_skill_routes = self.skills.route_for(
+                user_input,
+                config=resolved_routing,
+                available_tools=[spec["function"]["name"] for spec in self.tools.list_specs()],
+                candidates=available_names,
+            )
+        self._refresh_selected_skill_routes_compat(
+            envelope,
+            preselected_routes=[route.model_dump() for route in selected_skill_routes],
+        )
+        selected_skills = [route.content for route in selected_skill_routes]
+        for record in envelope.metadata.get("loaded_skills", []):
+            prompt_text = str(record.get("prompt_text") or "").strip()
+            if prompt_text and prompt_text not in selected_skills:
+                selected_skills.append(prompt_text)
+        envelope.metadata["loaded_skills"] = list(envelope.metadata.get("loaded_skills") or [])
+        envelope.metadata["loaded_skill_resources"] = list(envelope.metadata.get("loaded_skill_resources") or [])
+        return selected_skills
 
     def run(
         self,
@@ -595,6 +875,11 @@ class Runtime:
         stream: bool = False,
     ) -> Any:
         if stream:
+            if not self.config.enable_streaming:
+                raise RuntimeError(
+                    "Streaming is disabled for this runtime. "
+                    "Set RuntimeConfig(enable_streaming=True) or create_agent(..., enable_streaming=True) to enable stream=True."
+                )
             return self._run_stream(user_input, thread_id=thread_id, workflow=workflow, metadata=metadata)
         return self._run(user_input, thread_id=thread_id, workflow=workflow, metadata=metadata)
 
@@ -632,13 +917,30 @@ class Runtime:
                     metadata=metadata,
                     stream_writer=writer,
                 )
+                final_payload = {
+                    "status": result.status,
+                    "finish_reason": result.finish_reason,
+                    "error_category": None,
+                    "context_budget_report": result.reasoning_metadata.get("context_budget_report"),
+                    "output_text": result.output_text,
+                    "usage": result.usage.model_dump(),
+                }
+                self.tracer.emit(
+                    "final_result",
+                    {
+                        "request_id": result.request_id,
+                        "run_id": result.run_id,
+                        "thread_id": result.thread_id,
+                        **final_payload,
+                    },
+                )
                 await writer(
                     RunStreamEvent(
                         event_type="final_result",
                         request_id=result.request_id,
                         run_id=result.run_id,
                         thread_id=result.thread_id,
-                        payload={"status": result.status, "finish_reason": result.finish_reason},
+                        payload=final_payload,
                         result=result,
                     )
                 )
@@ -672,8 +974,20 @@ class Runtime:
         metadata: dict[str, Any] | None = None,
         stream_writer: Callable[[RunStreamEvent], Awaitable[None]] | None = None,
     ) -> RunResult:
-        metadata = metadata or {}
+        metadata = dict(metadata or {})
+        hook_context = RunHookContext(
+            runtime=self,
+            thread_id=thread_id,
+            user_input=user_input,
+            metadata=metadata,
+            workflow=workflow,
+        )
+        await self.extensions.before_run(hook_context)
+        user_input = hook_context.user_input
+        metadata = hook_context.metadata
+        workflow = hook_context.workflow
         envelope = self._create_context_envelope(thread_id=thread_id, metadata=metadata)
+        hook_context.envelope = envelope
         usage_tracker = UsageTracker()
         tool_results: list[ToolExecutionResult] = []
         await self._emit_event("run_started", envelope.model_dump(), stream_writer=stream_writer)
@@ -697,42 +1011,40 @@ class Runtime:
             if self.supervisor is not None and not metadata.get("_delegated"):
                 result = await self._run_supervisor(user_input, envelope, stream_writer=stream_writer)
                 await self._emit_event("run_completed", {**envelope.model_dump(), "status": result.status}, stream_writer=stream_writer)
-                return self._attach_observability_metadata(result)
+                result = self._attach_observability_metadata(result)
+                hook_context.result = result
+                await self.extensions.after_run(hook_context)
+                return hook_context.result or result
 
             if workflow is not None:
                 result = await self._run_workflow(workflow, thread_id=thread_id, user_input=user_input, metadata=metadata)
                 status = result.get("status", "completed")
                 await self._emit_event("run_completed", {**envelope.model_dump(), "status": status}, stream_writer=stream_writer)
-                return self._attach_observability_metadata(
+                run_result = self._attach_observability_metadata(
                     RunResult(
-                    request_id=envelope.request_id,
-                    run_id=envelope.run_id,
-                    thread_id=thread_id,
-                    output_text=json.dumps(result, ensure_ascii=False),
-                    usage=usage_tracker.summary(),
-                    status=status,
-                    feedback_id=result.get("feedback_id"),
-                    await_reason=result.get("await_reason"),
-                    requires_response=bool(result.get("requires_response", False)),
-                    response_schema=result.get("response_schema"),
+                        request_id=envelope.request_id,
+                        run_id=envelope.run_id,
+                        thread_id=thread_id,
+                        output_text=json.dumps(result, ensure_ascii=False),
+                        usage=usage_tracker.summary(),
+                        status=status,
+                        feedback_id=result.get("feedback_id"),
+                        await_reason=result.get("await_reason"),
+                        requires_response=bool(result.get("requires_response", False)),
+                        response_schema=result.get("response_schema"),
                     )
                 )
+                hook_context.result = run_result
+                await self.extensions.after_run(hook_context)
+                return hook_context.result or run_result
 
             conversation = await self.memory.get_context_window(thread_id)
-            selected_skill_routes = (
-                self.skills.route_for(
-                    user_input,
-                    config=metadata.get("skill_routing") or self.config.skill_routing or SkillRoutingConfig(),
-                    available_tools=[spec["function"]["name"] for spec in self.tools.list_specs()],
-                )
-                if self.config.auto_select_skills
-                else []
+            selected_skills = self._initialize_skill_state(
+                user_input=user_input,
+                thread_id=thread_id,
+                envelope=envelope,
+                metadata=metadata,
             )
-            selected_skills = [route.content for route in selected_skill_routes]
-            envelope.metadata["resolved_skill_routing"] = SkillRoutingConfig.from_any(
-                metadata.get("skill_routing") or self.config.skill_routing or SkillRoutingConfig()
-            ).model_dump()
-            envelope.metadata["selected_skill_routes"] = [route.model_dump() for route in selected_skill_routes]
             memory_summary = await self.memory.summarize_thread(thread_id)
             local_reasoning = self.reasoning_framework
             if metadata.get("reasoning_strategy") is not None:
@@ -790,49 +1102,45 @@ class Runtime:
             )
             await self.memory.remember(MemoryRecord(thread_id=thread_id, kind="run_summary", content=final_text, tags=["run"]))
             await self._emit_event("memory_written", {**envelope.model_dump(), "kind": "run_summary"}, stream_writer=stream_writer)
-            memory_governance_strategy = self._resolve_memory_governance_strategy(metadata=envelope.metadata)
-            memory_strategy = create_memory_governance_strategy(memory_governance_strategy)
-            promotion_trace = await memory_strategy.promote_episode(
-                self.memory,
+            post_run_report = await self.context_kernel.after_agent_run(
                 thread_id=thread_id,
                 user_input=user_input,
                 final_output=final_text,
-                retrieval_payload=retrieval_payload,
-                task_packet=task_packet,
-                agent_role=agent_role,
-                knowledge_scope=metadata.get("knowledge_scope") or self.config.default_knowledge_scope,
+                metadata={
+                    **metadata,
+                    "retrieval_payload": retrieval_payload,
+                    "task_packet": task_packet,
+                    "agent_role": agent_role,
+                },
                 conversation=conversation,
             )
-            if promotion_trace:
-                envelope.metadata["memory_promotion_trace"] = promotion_trace
-            if agent_role:
-                await self.memory.add_shared_note(
-                    thread_id,
-                    SharedNote(
-                        note_id=f"{envelope.run_id}:final",
-                        task_id=(task_packet or {}).get("task_id", envelope.run_id),
-                        author_agent=agent_role,
-                        content=final_text,
-                        metadata={
-                            "parent_task_id": metadata.get("parent_task_id"),
-                            "collective_candidate": True,
-                            "memory_kind": "lesson_learned",
-                        },
-                    ),
-                )
+            if post_run_report.get("memory_promotion_trace"):
+                envelope.metadata["memory_promotion_trace"] = post_run_report["memory_promotion_trace"]
+            if post_run_report.get("state_refresh_report"):
+                envelope.metadata["state_refresh_report"] = post_run_report["state_refresh_report"]
 
             reasoning_metadata = dict(reasoning_result.metadata)
             for key in (
-                "resolved_strategies",
-                "resolved_context_strategy",
-                "resolved_long_horizon_strategy",
-                "resolved_memory_governance_strategy",
+                "resolved_policies",
+                "resolved_context_policy",
+                "resolved_state_policy",
+                "resolved_coordination_policy",
+                "resolved_memory_policy",
                 "resolved_skill_routing",
+                "skill_catalog_config",
+                "skill_request",
+                "skill_selection_mode",
+                "allow_skill_auto_select",
+                "available_skills",
+                "skill_selection_events",
+                "loaded_skills",
+                "loaded_skill_resources",
                 "selected_skill_routes",
                 "context_budget_report",
-                "memory_governance_report",
+                "memory_policy_report",
                 "memory_recall_report",
                 "memory_promotion_trace",
+                "state_refresh_report",
                 "selected_context_segments",
                 "dropped_context_segments",
                 "salience_report",
@@ -841,31 +1149,49 @@ class Runtime:
             ):
                 if key in envelope.metadata:
                     reasoning_metadata[key] = envelope.metadata[key]
+            if stream_writer is None:
+                self.tracer.emit(
+                    "final_result",
+                    {
+                        **envelope.model_dump(),
+                        "status": "completed",
+                        "finish_reason": "completed",
+                        "error_category": None,
+                        "context_budget_report": reasoning_metadata.get("context_budget_report"),
+                        "output_text": final_text,
+                        "usage": usage_tracker.summary().model_dump(),
+                    },
+                )
             await self._emit_event("run_completed", {**envelope.model_dump(), "status": "completed"}, stream_writer=stream_writer)
-            return self._attach_observability_metadata(
+            run_result = self._attach_observability_metadata(
                 RunResult(
-                request_id=envelope.request_id,
-                run_id=envelope.run_id,
-                thread_id=thread_id,
-                output_text=final_text,
-                messages=messages,
-                tool_results=tool_results,
-                usage=usage_tracker.summary(),
-                finish_reason="completed",
-                reasoning={
-                    "final_output": reasoning_result.final_output,
-                    "steps": [step.model_dump() for step in reasoning_result.steps],
-                    "trace_text": reasoning_result.trace_text,
-                },
-                reasoning_trace=reasoning_result.trace_text,
-                reasoning_kind=local_reasoning.config.kind.value,
-                reasoning_metadata=reasoning_metadata,
+                    request_id=envelope.request_id,
+                    run_id=envelope.run_id,
+                    thread_id=thread_id,
+                    output_text=final_text,
+                    messages=messages,
+                    tool_results=tool_results,
+                    usage=usage_tracker.summary(),
+                    finish_reason="completed",
+                    reasoning={
+                        "final_output": reasoning_result.final_output,
+                        "steps": [step.model_dump() for step in reasoning_result.steps],
+                        "trace_text": reasoning_result.trace_text,
+                    },
+                    reasoning_trace=reasoning_result.trace_text,
+                    reasoning_kind=local_reasoning.config.kind.value,
+                    reasoning_metadata=reasoning_metadata,
                 )
             )
+            hook_context.result = run_result
+            await self.extensions.after_run(hook_context)
+            return hook_context.result or run_result
         except Exception as exc:
+            hook_context.error = exc
+            await self.extensions.on_run_error(hook_context)
             await self._emit_event(
                 "run_failed",
-                {**envelope.model_dump(), "error": str(exc)},
+                self._error_context(exc, envelope, stage="run_impl"),
                 stream_writer=stream_writer,
             )
             raise
@@ -873,10 +1199,103 @@ class Runtime:
             if self.human_feedback is not None and feedback_token is not None:
                 self.human_feedback.reset_context(feedback_token)
 
+    async def _execute_skill_load_tool(self, arguments: dict[str, Any], envelope: ContextEnvelope):
+        from agentorch.tools.base import ToolResult
+
+        skill_name = str(arguments.get("name") or "").strip()
+        if not skill_name:
+            raise ToolError("load_skill requires a non-empty skill name.", tool_name="load_skill")
+        if skill_name not in self._available_skill_names(envelope):
+            raise ToolError(
+                f"Skill '{skill_name}' is not available in this run. Choose one of the advertised Available Skills.",
+                tool_name="load_skill",
+            )
+        raw_arguments = arguments.get("arguments")
+        if raw_arguments is None and any(key in arguments for key in ("raw", "argv", "input")):
+            raw_arguments = {key: arguments.get(key) for key in ("raw", "argv", "input") if key in arguments}
+        activation = self.skills.activate(skill_name, arguments=SkillArgumentBundle.from_any(raw_arguments))
+        record = self._serialize_loaded_skill(activation)
+        envelope.metadata["loaded_skills"] = self._upsert_loaded_skill_record(
+            list(envelope.metadata.get("loaded_skills") or []),
+            record,
+        )
+        self._append_skill_selection_event(
+            envelope,
+            event_type="load_skill",
+            payload={"skill_name": skill_name, "location": activation.location},
+        )
+        self._refresh_selected_skill_routes_compat(envelope, preselected_routes=list(envelope.metadata.get("selected_skill_routes") or []))
+        if envelope.metadata.get("skill_catalog_config", {}).get("activation_cache") == "thread":
+            cache = self._skill_thread_cache.setdefault(envelope.thread_id, {"loaded_skills": {}, "loaded_skill_resources": {}})
+            cache["loaded_skills"][skill_name] = record
+        return ToolResult(
+            tool_name="load_skill",
+            data={
+                "loaded": True,
+                "skill_name": skill_name,
+                "location": activation.location,
+                "resource_hints": list(activation.resource_hints),
+                "allowed_tools": list(activation.allowed_tools),
+            },
+        )
+
+    async def _execute_skill_resource_tool(self, arguments: dict[str, Any], envelope: ContextEnvelope):
+        from agentorch.tools.base import ToolResult
+
+        skill_name = str(arguments.get("name") or "").strip()
+        resource_path = str(arguments.get("path") or "").strip()
+        if not skill_name or not resource_path:
+            raise ToolError("load_skill_resource requires both skill name and path.", tool_name="load_skill_resource")
+        loaded_skills = {item.get("skill_name") for item in envelope.metadata.get("loaded_skills", [])}
+        if skill_name not in loaded_skills:
+            raise ToolError(
+                f"Skill '{skill_name}' is not active yet. Call load_skill first.",
+                tool_name="load_skill_resource",
+            )
+        resource_load = self.skills.load_resource(skill_name, resource_path)
+        record = self._serialize_loaded_skill_resource(resource_load)
+        envelope.metadata["loaded_skill_resources"] = self._upsert_loaded_skill_resource_record(
+            list(envelope.metadata.get("loaded_skill_resources") or []),
+            record,
+        )
+        self._append_skill_selection_event(
+            envelope,
+            event_type="load_skill_resource",
+            payload={"skill_name": skill_name, "path": resource_load.path},
+        )
+        if envelope.metadata.get("skill_catalog_config", {}).get("activation_cache") == "thread":
+            cache = self._skill_thread_cache.setdefault(envelope.thread_id, {"loaded_skills": {}, "loaded_skill_resources": {}})
+            cache["loaded_skill_resources"][f"{skill_name}::{resource_load.path}"] = record
+        return ToolResult(
+            tool_name="load_skill_resource",
+            data={
+                "loaded": True,
+                "skill_name": skill_name,
+                "path": resource_load.path,
+                "location": resource_load.location,
+            },
+        )
+
     async def _execute_tool(self, name: str, arguments: dict[str, Any], envelope: ContextEnvelope):
+        if name == "load_skill":
+            try:
+                return await self._execute_skill_load_tool(arguments, envelope)
+            except (ToolError, ValueError, KeyError, FileNotFoundError) as exc:
+                from agentorch.tools.base import ToolResult
+
+                return ToolResult(tool_name=name, data={}, success=False, error=str(exc))
+        if name == "load_skill_resource":
+            try:
+                return await self._execute_skill_resource_tool(arguments, envelope)
+            except (ToolError, ValueError, KeyError, FileNotFoundError) as exc:
+                from agentorch.tools.base import ToolResult
+
+                return ToolResult(tool_name=name, data={}, success=False, error=str(exc))
         tool = self.tools.get(name)
         try:
             if tool.spec.needs_sandbox:
+                if self.sandbox is None:
+                    raise ToolError("This tool requires a configured sandbox, but no sandbox is attached.", tool_name=name)
                 sandbox_result = await self.sandbox.execute(
                     "python",
                     arguments.get("code", ""),
@@ -887,7 +1306,10 @@ class Runtime:
                 return ToolResult(tool_name=name, data=sandbox_result.model_dump(), success=sandbox_result.exit_code == 0)
             return await self.tools.execute(name, arguments)
         except ToolError as exc:
-            self.tracer.emit("run_failed", {**envelope.model_dump(), "error": str(exc), "tool_name": name})
+            self.tracer.emit(
+                "run_failed",
+                self._error_context(exc, envelope, stage="tool_execution", extra={"tool_name": name}),
+            )
             from agentorch.tools.base import ToolResult
 
             return ToolResult(tool_name=name, data={}, success=False, error=str(exc))
@@ -972,15 +1394,14 @@ class Runtime:
                 visited_documents=[item.chunk.document_id for item in chunks],
                 visited_sources=sorted({item.source for item in chunks}),
             )
-        memory_governance_strategy = self._resolve_memory_governance_strategy(metadata=envelope.metadata)
-        memory_strategy = create_memory_governance_strategy(memory_governance_strategy)
+        memory_policy = self._resolve_memory_policy(metadata=envelope.metadata)
         report, memory_recall_report = await self._augment_report_with_memory_sources(
             report,
             thread_id=envelope.thread_id,
             query=user_input,
             knowledge_scope=plan.scopes,
             source_filters=filters.get("source_types", []),
-            memory_strategy=memory_strategy,
+            memory_policy=memory_policy,
             task_packet=envelope.metadata.get("task_packet"),
             agent_role=envelope.metadata.get("agent_role"),
         )
@@ -1019,7 +1440,7 @@ class Runtime:
         query: str,
         knowledge_scope: list[str],
         source_filters: list[str],
-        memory_strategy,
+        memory_policy: MemoryPolicy,
         task_packet: dict[str, Any] | None = None,
         agent_role: str | None = None,
     ) -> tuple[RetrievalReport, dict[str, Any]]:
@@ -1087,8 +1508,9 @@ class Runtime:
                 citations.append(citation)
                 visited_sources.add("shared_notes")
                 visited_documents.add(citation.document_id)
-        long_term_candidates = await memory_strategy.search_long_term_memory(
+        long_term_candidates = await self.context_kernel.memory_evaluator.search_long_term_memory(
             self.memory,
+            policy=memory_policy,
             thread_id=thread_id,
             query=query,
             knowledge_scope=knowledge_scope,
@@ -1096,7 +1518,8 @@ class Runtime:
             agent_role=agent_role,
             source_filters=source_filters,
         )
-        memory_evidence, memory_citations, memory_recall_report = memory_strategy.build_memory_evidence(
+        memory_evidence, memory_citations, memory_recall_report = self.context_kernel.memory_evaluator.build_memory_evidence(
+            policy=memory_policy,
             runtime=self,
             candidates=long_term_candidates,
             thread_id=thread_id,
@@ -1150,68 +1573,11 @@ class Runtime:
         output_instruction: str | None = None,
         stage: str = "respond",
     ) -> PromptContext:
-        context_strategy = self._resolve_context_strategy(metadata=context.envelope.metadata, agent_role=context.agent_role)
-        long_horizon_strategy = self._resolve_long_horizon_strategy(metadata=context.envelope.metadata, agent_role=context.agent_role)
-        task_context = (context.task_packet or {}).get("context", {})
-        selected_skill_routes = list(context.envelope.metadata.get("selected_skill_routes") or [])
-        prompt_context = PromptContext(
-            system_prompt=self.config.system_prompt,
-            user_input=context.user_input,
-            memory_summary=context.memory_summary,
-            retrieval_context=context.retrieval_payload.get("context"),
-            collective_memory_context=task_context.get("collective_memory_context"),
-            retrieved_evidence=context.retrieval_payload.get("evidence", []),
-            citations=context.retrieval_payload.get("citations", []),
-            retrieval_report=context.retrieval_payload.get("report"),
-            retrieval_coverage=context.retrieval_payload.get("coverage"),
-            collective_memory_evidence=task_context.get("collective_memory_evidence", []),
-            collective_memory_citations=task_context.get("collective_memory_citations", []),
-            retrieval_plan=context.retrieval_payload.get("plan"),
-            knowledge_scope=context.retrieval_payload.get("knowledge_scope", []),
-            tool_descriptions=self.tools.list_specs(),
-            skill_instructions=context.selected_skills,
-            task_packet=context.task_packet,
-            agent_role=context.agent_role,
-            delegation_context=context.delegation_context,
-            conversation=context.conversation,
+        return await self.context_kernel.prepare_prompt_context(
+            context,
             output_instruction=output_instruction,
-            prompt_variables={
-                "thread_id": context.thread_id,
-                "user_input": context.user_input,
-                "task_context": task_context,
-                "retrieval_payload": context.retrieval_payload,
-            },
-        )
-        compacted, budget = await self._apply_context_strategy_to_prompt_context(
-            prompt_context,
-            context_strategy=context_strategy,
-            long_horizon_strategy=long_horizon_strategy,
             stage=stage,
-            selected_skill_routes=selected_skill_routes,
         )
-        memory_governance_strategy = self._resolve_memory_governance_strategy(metadata=context.envelope.metadata)
-        memory_governance_runtime = create_memory_governance_strategy(memory_governance_strategy)
-        context.envelope.metadata["context_budget_report"] = budget
-        for key in ("selected_context_segments", "dropped_context_segments", "salience_report", "attention_profile", "compaction_trace"):
-            if key in budget:
-                context.envelope.metadata[key] = budget[key]
-        context.envelope.metadata["resolved_context_strategy"] = context_strategy.model_dump()
-        context.envelope.metadata["resolved_long_horizon_strategy"] = long_horizon_strategy.model_dump()
-        context.envelope.metadata["resolved_memory_governance_strategy"] = memory_governance_strategy.model_dump()
-        context.envelope.metadata["resolved_strategies"] = {
-            "context": context_strategy.model_dump(),
-            "long_horizon": long_horizon_strategy.model_dump(),
-            "memory_governance": memory_governance_strategy.model_dump(),
-        }
-        context.envelope.metadata["memory_governance_report"] = {
-            "kind": memory_governance_strategy.kind,
-            "collective_promotion_policy": memory_governance_strategy.collective_promotion_policy,
-            "policy_bundle": memory_governance_runtime.policy_bundle(),
-            "runtime_config": memory_governance_runtime.resolved_runtime_config(),
-            "trail_knowledge_enabled": memory_governance_strategy.trail_knowledge_enabled,
-            "validation_threshold": memory_governance_strategy.validation_threshold,
-        }
-        return compacted
 
     async def _model_round(
         self,
@@ -1246,7 +1612,7 @@ class Runtime:
             )
         request = ModelRequest(
             messages=request_messages,
-            tools=self.tools.list_specs(),
+            tools=self._tool_specs_for_request(context.envelope),
             metadata={
                 "reasoning_kind": reasoning_kind,
                 "stage": stage,
@@ -1339,7 +1705,15 @@ class Runtime:
             duration=result.duration,
         )
         context.tool_results.append(tool_result)
-        tool_message_content, tool_message_truncated = self._tool_message_content(result.data)
+        tool_message_payload = result.data
+        if not result.success:
+            tool_message_payload = {
+                "success": False,
+                "error": result.error or f"Tool '{tool_call.name}' failed.",
+            }
+            if result.data:
+                tool_message_payload["output"] = result.data
+        tool_message_content, tool_message_truncated = self._tool_message_content(tool_message_payload)
         tool_message = Message(
             role="tool",
             content=tool_message_content,
@@ -1363,6 +1737,7 @@ class Runtime:
                 "is_error": not result.success,
                 "output": self._summarize_tool_output(result.data),
                 "error": result.error,
+                "error_category": "runtime_error" if (not result.success and result.error) else None,
             },
             stream_writer=context.stream_writer,
         )
@@ -1393,6 +1768,9 @@ class Runtime:
         }
 
     def _summarize_tool_output(self, value: Any, *, depth: int = 0) -> Any:
+        budget = self.config.tool_output_budget
+        if depth == 0 and isinstance(value, dict):
+            return shape_payload(value, budget=budget, redaction=self.config.redaction)
         if depth >= 2:
             if isinstance(value, dict):
                 return {"type": "dict", "size": len(value)}
@@ -1421,99 +1799,149 @@ class Runtime:
             serialized = json.dumps(summarized, ensure_ascii=False)
         except Exception:
             serialized = trim_message_content(str(type(output)), max_chars=200)
-        return trim_message_content(serialized, max_chars=max_chars), len(serialized) > max_chars
+        effective_max_chars = min(max_chars, self.config.tool_output_budget.max_string_chars)
+        return trim_message_content(serialized, max_chars=effective_max_chars), len(serialized) > effective_max_chars
 
-    async def _run_supervisor(
+    async def aclose(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        for managed_agent in self._managed_agents:
+            await self._aclose_resource(managed_agent)
+        for resource in (
+            self.tools,
+            self.model,
+            self.retriever,
+            self.knowledge_base,
+            self.observability,
+            self.tracer,
+            self.memory,
+            self.sandbox,
+            self.extensions,
+        ):
+            await self._aclose_resource(resource)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self.aclose())
+            return
+        raise RuntimeError(
+            "Runtime.close() cannot be used inside a running event loop. "
+            "Use 'await Runtime.aclose()' in notebooks and async applications."
+        )
+
+    def _supervisor_plan_settings(self, plan: Any) -> tuple[str, int]:
+        task_plan = getattr(plan, "task_plan", None)
+        metadata = dict(getattr(task_plan, "metadata", {}) or {})
+        execution_mode = str(metadata.get("execution_mode", "sequential")).lower()
+        max_parallel_tasks = int(metadata.get("max_parallel_tasks") or 1)
+        return execution_mode, max(1, max_parallel_tasks)
+
+    async def _run_supervisor_invocation(
         self,
-        user_input: str,
-        envelope: ContextEnvelope,
         *,
+        invocation: Any,
+        plan: Any,
+        task: TaskPacket,
+        envelope: ContextEnvelope,
+        collective_payload: dict[str, Any],
+        coordination_policy: CoordinationPolicy,
+        memory_policy: MemoryPolicy,
         stream_writer: Callable[[RunStreamEvent], Awaitable[None]] | None = None,
-    ) -> RunResult:
-        collective_memory = await self.memory.search_collective_memory(
-            query=user_input,
-            thread_id=envelope.thread_id,
-            limit=self.config.max_retrieved_chunks,
+    ) -> AgentResult:
+        registered = self.agent_registry.get(invocation.agent_name)
+        self.coordinator.permission_manager.ensure_knowledge_scope(
+            registered.spec.allowed_knowledge_scopes,
+            invocation.task.knowledge_scope,
         )
-        collective_payload = self._collective_memory_payload(collective_memory)
-        cooperation_config = self._resolve_cooperation_strategy()
-        cooperation = create_cooperation_strategy(cooperation_config)
-        collective_payload["cooperation"] = cooperation.build_supervisor_context(task_context={"goal": user_input, "scope": self.config.default_knowledge_scope})
-        collective_payload["cooperation_report"] = {
-            "topology": cooperation_config.topology,
-            "handoff_policy": cooperation_config.handoff_policy,
-            "shared_workspace_policy": cooperation_config.shared_workspace_policy,
-            "trail_knowledge_policy": cooperation_config.trail_knowledge_policy,
-        }
-        task = TaskPacket(
-            task_id=envelope.run_id,
-            goal=user_input,
-            context=collective_payload,
-            origin_agent="supervisor",
-            knowledge_scope=self.config.default_knowledge_scope,
-                metadata={
-                    "thread_id": envelope.thread_id,
-                    "delegation_depth": 0,
-                    "collective_memory_refs": [item["id"] for item in collective_memory],
-                    "cooperation_strategy": cooperation_config.model_dump(),
-                },
-        )
-        self.coordinator.validate_task(task)
-        await self._emit_event("supervisor_routed", {**envelope.model_dump(), "task_id": task.task_id}, stream_writer=stream_writer)
-        await self._emit_event("aggregation_started", {**envelope.model_dump(), "task_id": task.task_id}, stream_writer=stream_writer)
-        plan = await self.supervisor.create_plan(task)
-        delegated_results: list[AgentResult] = []
-        for invocation in plan.invocations:
-            registered = self.agent_registry.get(invocation.agent_name)
-            self.coordinator.permission_manager.ensure_knowledge_scope(
-                registered.spec.allowed_knowledge_scopes,
-                invocation.task.knowledge_scope,
-            )
-            if not self.coordinator.permission_manager.can_delegate(
-                current_depth=invocation.delegation_depth - 1,
-                allowed_depth=min(self.config.max_delegation_depth, registered.spec.max_delegation_depth),
-            ):
-                raise RuntimeError(f"Delegation depth exceeded for agent '{registered.spec.name}'.")
+        if not self.coordinator.permission_manager.can_delegate(
+            current_depth=invocation.delegation_depth - 1,
+            allowed_depth=min(self.config.max_delegation_depth, registered.spec.max_delegation_depth),
+        ):
+            raise RuntimeError(f"Delegation depth exceeded for agent '{registered.spec.name}'.")
 
-            handoff = Handoff(
-                from_agent="supervisor",
-                to_agent=registered.spec.name,
-                task=invocation.task,
-                reason=plan.reason,
-                metadata={"parent_run_id": envelope.run_id},
-            )
-            await self._emit_event(
-                "handoff_created",
-                {
-                    **envelope.model_dump(),
-                    "agent_name": registered.spec.name,
-                    "task_id": invocation.task.task_id,
-                    "parent_task_id": invocation.task.parent_task_id,
-                    "delegation_depth": invocation.delegation_depth,
-                },
-                stream_writer=stream_writer,
-            )
-            await self._emit_event(
-                "agent_delegated",
-                {
-                    **envelope.model_dump(),
-                    "agent_name": registered.spec.name,
-                    "task_id": invocation.task.task_id,
-                    "parent_task_id": invocation.task.parent_task_id,
-                    "delegation_depth": invocation.delegation_depth,
-                    "knowledge_scope": invocation.task.knowledge_scope,
-                },
-                stream_writer=stream_writer,
-            )
-            child_metadata = {
-                "task_packet": compact_task_packet(invocation.task.model_dump()),
-                "handoff": build_handoff_capsule(invocation.task.model_dump(), handoff.model_dump()),
-                "_delegated": True,
-                "agent_role": registered.spec.name,
-                "knowledge_scope": invocation.task.knowledge_scope,
+        handoff = Handoff(
+            from_agent="supervisor",
+            to_agent=registered.spec.name,
+            task=invocation.task,
+            reason=plan.reason,
+            metadata={"parent_run_id": envelope.run_id},
+        )
+        compacted_task_packet, compacted_handoff = self.context_kernel.build_child_handoff_payload(
+            task_packet=invocation.task.model_dump(),
+            handoff=handoff.model_dump(),
+            coordination_policy=coordination_policy,
+        )
+        child_metadata = {
+            "task_packet": compacted_task_packet,
+            "handoff": compacted_handoff,
+            "_delegated": True,
+            "agent_role": registered.spec.name,
+            "knowledge_scope": invocation.task.knowledge_scope,
+            "parent_task_id": invocation.task.parent_task_id,
+            "coordination_policy": coordination_policy.model_dump(),
+            "memory_policy": memory_policy.model_dump(),
+        }
+        handoff_context = HandoffHookContext(
+            runtime=self,
+            envelope=envelope,
+            invocation=invocation,
+            handoff=handoff,
+            metadata=child_metadata,
+        )
+        await self.extensions.before_handoff(handoff_context)
+        invocation = handoff_context.invocation
+        handoff = handoff_context.handoff
+        child_metadata = handoff_context.metadata
+
+        await self._emit_event(
+            "handoff_created",
+            {
+                **envelope.model_dump(),
+                "agent_name": registered.spec.name,
+                "task_id": invocation.task.task_id,
                 "parent_task_id": invocation.task.parent_task_id,
-                "cooperation_strategy": cooperation_config.model_dump(),
-            }
+                "delegation_depth": invocation.delegation_depth,
+            },
+            stream_writer=stream_writer,
+        )
+        await self._emit_event(
+            "agent_delegated",
+            {
+                **envelope.model_dump(),
+                "agent_name": registered.spec.name,
+                "task_id": invocation.task.task_id,
+                "parent_task_id": invocation.task.parent_task_id,
+                "delegation_depth": invocation.delegation_depth,
+                "knowledge_scope": invocation.task.knowledge_scope,
+            },
+            stream_writer=stream_writer,
+        )
+
+        delegated_runtime = getattr(registered.agent, "runtime", None)
+        original_memory = getattr(delegated_runtime, "memory", None)
+        original_knowledge_base = getattr(delegated_runtime, "knowledge_base", None)
+        original_retriever = getattr(delegated_runtime, "retriever", None)
+        patch_shared_memory = bool(getattr(self, "_facade_explicit_shared_memory", False)) and delegated_runtime is not None
+        patch_shared_knowledge = (
+            bool(getattr(self, "_facade_explicit_shared_knowledge", False))
+            and delegated_runtime is not None
+            and getattr(delegated_runtime, "knowledge_base", None) is None
+            and self.knowledge_base is not None
+        )
+        try:
+            if patch_shared_memory:
+                delegated_runtime.memory = self.memory
+            if patch_shared_knowledge:
+                delegated_runtime.knowledge_base = self.knowledge_base
+                delegated_runtime.retriever = self.retriever or (
+                    self.knowledge_base.get_retriever() if self.knowledge_base is not None else None
+                )
+
             if stream_writer is None:
                 run_result = await registered.agent.run(
                     invocation.task.goal,
@@ -1541,63 +1969,171 @@ class Runtime:
                         run_result = child_event.result
                 if run_result is None:  # pragma: no cover
                     raise RuntimeError(f"Delegated agent '{registered.spec.name}' did not produce a final_result event.")
-            run_status = TaskStatus.COMPLETED if run_result.status == "completed" else TaskStatus.WAITING_HUMAN if run_result.status == "waiting_human" else TaskStatus.FAILED
-            agent_result = AgentResult(
-                agent_name=registered.spec.name,
-                output_text=run_result.output_text,
-                status=run_status,
-                summary=run_result.output_text,
-                structured_output={
-                    "reasoning_kind": run_result.reasoning_kind,
-                    "reasoning_metadata": run_result.reasoning_metadata,
-                    "reasoning_trace": run_result.reasoning_trace,
-                    "usage": run_result.usage.model_dump(),
-                    "tool_results": [item.model_dump() for item in run_result.tool_results],
-                    "messages": [message.model_dump() for message in run_result.messages],
-                },
+        finally:
+            if patch_shared_memory:
+                delegated_runtime.memory = original_memory
+            if patch_shared_knowledge:
+                delegated_runtime.knowledge_base = original_knowledge_base
+                delegated_runtime.retriever = original_retriever
+
+        run_status = (
+            TaskStatus.COMPLETED
+            if run_result.status == "completed"
+            else TaskStatus.WAITING_HUMAN
+            if run_result.status == "waiting_human"
+            else TaskStatus.FAILED
+        )
+        agent_result = AgentResult(
+            agent_name=registered.spec.name,
+            output_text=run_result.output_text,
+            status=run_status,
+            summary=run_result.output_text,
+            structured_output={
+                "reasoning_kind": run_result.reasoning_kind,
+                "reasoning_metadata": run_result.reasoning_metadata,
+                "reasoning_trace": run_result.reasoning_trace,
+                "usage": run_result.usage.model_dump(),
+                "tool_results": [item.model_dump() for item in run_result.tool_results],
+                "messages": [message.model_dump() for message in run_result.messages],
+            },
+            metadata={
+                "task_id": invocation.task.task_id,
+                "parent_task_id": invocation.task.parent_task_id,
+                "handoff": handoff.model_dump(),
+                "coordination_policy": coordination_policy.model_dump(),
+                "coordination_report": collective_payload["coordination_report"],
+                "reasoning_kind": run_result.reasoning_kind,
+                "reasoning_metadata": run_result.reasoning_metadata,
+                "routing_score": invocation.metadata.get("routing_score", 0.0),
+            },
+            budget_used=run_result.usage.model_dump(),
+        )
+        collective_candidate = self._build_collective_candidate(
+            task=task,
+            invocation_task=invocation.task,
+            result=agent_result,
+        )
+        await self.memory.add_shared_note(
+            envelope.thread_id,
+            SharedNote(
+                note_id=f"{invocation.task.task_id}:candidate",
+                task_id=invocation.task.task_id,
+                author_agent=registered.spec.name,
+                content=run_result.output_text,
                 metadata={
-                    "task_id": invocation.task.task_id,
-                    "parent_task_id": invocation.task.parent_task_id,
-                    "handoff": handoff.model_dump(),
-                    "cooperation_strategy": cooperation_config.model_dump(),
-                    "cooperation_report": collective_payload["cooperation_report"],
-                    "reasoning_kind": run_result.reasoning_kind,
-                    "reasoning_metadata": run_result.reasoning_metadata,
+                    "parent_task_id": task.task_id,
+                    "collective_candidate": True,
+                    "memory_kind": "lesson_learned",
+                    "scope": ",".join(invocation.task.knowledge_scope) if invocation.task.knowledge_scope else None,
+                    "collective_memory": collective_candidate,
+                    "coordination_policy": coordination_policy.model_dump(),
                 },
-                budget_used=run_result.usage.model_dump(),
-            )
-            delegated_results.append(agent_result)
-            collective_candidate = self._build_collective_candidate(
-                task=task,
-                invocation_task=invocation.task,
-                result=agent_result,
-            )
-            await self.memory.add_shared_note(
-                envelope.thread_id,
-                SharedNote(
-                    note_id=f"{invocation.task.task_id}:candidate",
-                    task_id=invocation.task.task_id,
-                    author_agent=registered.spec.name,
-                    content=run_result.output_text,
-                    metadata={
-                        "parent_task_id": task.task_id,
-                        "collective_candidate": True,
-                        "memory_kind": "lesson_learned",
-                        "scope": ",".join(invocation.task.knowledge_scope) if invocation.task.knowledge_scope else None,
-                        "collective_memory": collective_candidate,
-                    },
-                ),
-            )
-            await self._emit_event(
-                "handoff_completed",
-                {
-                    **envelope.model_dump(),
-                    "agent_name": registered.spec.name,
-                    "task_id": invocation.task.task_id,
-                    "parent_task_id": invocation.task.parent_task_id,
-                },
-                stream_writer=stream_writer,
-            )
+            ),
+        )
+        await self._emit_event(
+            "handoff_completed",
+            {
+                **envelope.model_dump(),
+                "agent_name": registered.spec.name,
+                "task_id": invocation.task.task_id,
+                "parent_task_id": invocation.task.parent_task_id,
+            },
+            stream_writer=stream_writer,
+        )
+        handoff_context.result = agent_result
+        await self.extensions.after_handoff(handoff_context)
+        return handoff_context.result or agent_result
+
+    async def _run_supervisor(
+        self,
+        user_input: str,
+        envelope: ContextEnvelope,
+        *,
+        stream_writer: Callable[[RunStreamEvent], Awaitable[None]] | None = None,
+    ) -> RunResult:
+        coordination_policy = self._resolve_coordination_policy()
+        memory_policy = self._resolve_memory_policy()
+        collective_payload, collective_memory = await self.context_kernel.prepare_supervisor_task_context(
+            user_input=user_input,
+            thread_id=envelope.thread_id,
+            coordination_policy=coordination_policy,
+            memory_policy=memory_policy,
+        )
+        task = TaskPacket(
+            task_id=envelope.run_id,
+            goal=user_input,
+            context=collective_payload,
+            origin_agent="supervisor",
+            knowledge_scope=self.config.default_knowledge_scope,
+            metadata={
+                "thread_id": envelope.thread_id,
+                "delegation_depth": 0,
+                "collective_memory_refs": [item["id"] for item in collective_memory],
+                "coordination_policy": coordination_policy.model_dump(),
+            },
+        )
+        plan_context = SupervisorPlanHookContext(
+            runtime=self,
+            task=task,
+            coordination_policy=coordination_policy,
+        )
+        await self.extensions.before_supervisor_plan(plan_context)
+        task = plan_context.task
+        coordination_policy = plan_context.coordination_policy
+
+        self.coordinator.validate_task(task)
+        await self._emit_event("supervisor_routed", {**envelope.model_dump(), "task_id": task.task_id}, stream_writer=stream_writer)
+        await self._emit_event("aggregation_started", {**envelope.model_dump(), "task_id": task.task_id}, stream_writer=stream_writer)
+        plan = await self.context_kernel.route_planner.plan(
+            supervisor=self.supervisor,
+            task=task,
+            registry=self.agent_registry,
+            coordination_policy=coordination_policy,
+        )
+        plan_context.plan = plan
+        await self.extensions.after_supervisor_plan(plan_context)
+        plan = plan_context.plan or plan
+
+        execution_mode, max_parallel_tasks = self._supervisor_plan_settings(plan)
+        delegated_results: list[AgentResult] = []
+        parallel_enabled = (
+            execution_mode == "parallel"
+            and stream_writer is None
+            and self.coordinator.execution_policy.allow_parallel
+            and len(plan.invocations) > 1
+        )
+        if parallel_enabled:
+            limit = min(max_parallel_tasks, max(1, self.coordinator.execution_policy.max_parallel_tasks))
+            semaphore = asyncio.Semaphore(limit)
+
+            async def _worker(invocation: Any) -> AgentResult:
+                async with semaphore:
+                    return await self._run_supervisor_invocation(
+                        invocation=invocation,
+                        plan=plan,
+                        task=task,
+                        envelope=envelope,
+                        collective_payload=collective_payload,
+                        coordination_policy=coordination_policy,
+                        memory_policy=memory_policy,
+                        stream_writer=None,
+                    )
+
+            delegated_results = list(await asyncio.gather(*(_worker(invocation) for invocation in plan.invocations)))
+        else:
+            for invocation in plan.invocations:
+                delegated_results.append(
+                    await self._run_supervisor_invocation(
+                        invocation=invocation,
+                        plan=plan,
+                        task=task,
+                        envelope=envelope,
+                        collective_payload=collective_payload,
+                        coordination_policy=coordination_policy,
+                        memory_policy=memory_policy,
+                        stream_writer=stream_writer,
+                    )
+                )
 
         for result in delegated_results:
             await self._emit_event(
@@ -1629,11 +2165,17 @@ class Runtime:
                 )
 
         aggregated = self.coordinator.aggregate_results(delegated_results)
-        aggregated_reasoning_metadata = self._aggregate_supervisor_reasoning(delegated_results, aggregated.metadata)
+        aggregation_metadata = dict(aggregated.metadata)
+        aggregation_metadata["plan"] = {
+            "reason": plan.reason,
+            "execution_mode": execution_mode,
+            "max_parallel_tasks": max_parallel_tasks,
+            "selected_agents": [invocation.agent_name for invocation in plan.invocations],
+            "task_plan": plan.task_plan.model_dump() if plan.task_plan is not None else None,
+        }
+        aggregated_reasoning_metadata = self._aggregate_supervisor_reasoning(delegated_results, aggregation_metadata)
         aggregated_usage = self._aggregate_supervisor_usage(delegated_results)
-        for record_id in task.metadata.get("collective_memory_refs", []):
-            await self.memory.validate_collective_memory(record_id)
-        await self._promote_candidate_collective_memory(envelope.thread_id, task.task_id)
+        await self.context_kernel.after_supervisor_aggregation(thread_id=envelope.thread_id, task=task)
         await self._emit_event(
             "aggregation_completed",
             {**envelope.model_dump(), "task_id": task.task_id, "agent_count": len(delegated_results)},
@@ -1651,353 +2193,14 @@ class Runtime:
         )
 
     async def _run_workflow(self, workflow: Workflow, *, thread_id: str, user_input: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
-        metadata = metadata or {}
-        context = Context(
+        return await execute_runtime_workflow(
+            self,
+            workflow,
             thread_id=thread_id,
             user_input=user_input,
-            state=dict(metadata.get("workflow_state", {})),
-            variables=dict(metadata.get("workflow_variables", {})),
-            resume_from=metadata.get("resume_from"),
+            metadata=metadata,
         )
 
-        async def handle_model(node, ctx):
-            child_metadata = dict(metadata)
-            if node.config.get("model") is not None:
-                child_metadata["model_override"] = node.config["model"]
-            elif node.config.get("model_config") is not None:
-                child_metadata["model_override"] = ModelConfig.from_any(node.config["model_config"]).model
-            for key in (
-                "reasoning_strategy",
-                "rag_strategy",
-                "context_strategy",
-                "long_horizon_strategy",
-                "cooperation_strategy",
-                "memory_governance_strategy",
-                "knowledge_scope",
-                "skill_routing",
-            ):
-                if node.config.get(key) is not None:
-                    child_metadata[key] = node.config[key]
-            result = await self.run(
-                node.config.get("prompt", ctx.user_input),
-                thread_id=thread_id,
-                metadata=child_metadata,
-            )
-            return {"status": "completed", "output_text": result.output_text}
-
-        async def handle_tool(node, ctx):
-            arguments = dict(node.config.get("arguments", {}))
-            if "__from_input__" in arguments:
-                arguments["query"] = ctx.user_input
-                del arguments["__from_input__"]
-            result = await self.tools.execute(node.config["tool_name"], arguments)
-            return {"status": "completed" if result.success else "failed", "output": result.data}
-
-        async def handle_router(node, ctx):
-            route = node.config.get("default_route")
-            variable = node.config.get("variable")
-            if variable and ctx.variables.get(variable):
-                route = ctx.variables[variable].get("route", route)
-            return {"status": "completed", "route": route}
-
-        async def handle_retrieve(node, ctx):
-            query = node.config.get("question", node.config.get("query", ctx.user_input))
-            local_envelope = self._create_context_envelope(thread_id=thread_id)
-            payload = await self._build_retrieval_context(
-                query,
-                local_envelope,
-                knowledge_scope=node.config.get("knowledge_scope", self.config.default_knowledge_scope),
-                retrieval_overrides={
-                    "mount_context": "workflow",
-                    "goal": node.config.get("goal"),
-                    "must_cover": node.config.get("must_cover", []),
-                    "rag_mode": node.config.get("rag_mode"),
-                    "mount": node.config.get("mount", "workflow_only"),
-                    "injection_policy": node.config.get("injection_policy"),
-                    "sources": node.config.get("sources", []),
-                    "file_types": node.config.get("file_types", []),
-                    "path_filters": node.config.get("path_filters", []),
-                    "mime_filters": node.config.get("mime_filters", []),
-                    "max_steps": node.config.get("max_steps", self.config.retrieval_budget_steps),
-                    "max_documents": node.config.get("max_documents", self.config.retrieval_budget_documents),
-                },
-            )
-            result = {
-                "status": "completed",
-                "summary": payload.get("report", {}).get("summary", payload["context"]),
-                "retrieval_context": payload["context"],
-                "evidence": payload["evidence"],
-                "citations": payload["citations"],
-                "coverage": payload.get("coverage", {}),
-                "visited_sources": payload.get("visited_sources", []),
-                "visited_documents": payload.get("report", {}).get("visited_documents", []),
-                "report": payload.get("report", {}),
-            }
-            if output_key := node.config.get("output_key"):
-                ctx.variables[output_key] = result
-            return result
-
-        async def handle_rag_router(node, ctx):
-            route = node.config.get("default_route", "deliberative")
-            query = node.config.get("question", ctx.user_input).lower()
-            if any(token in query for token in ("summary", "summarize", "overview", "概述", "总结")):
-                route = "classic"
-            elif any(token in query for token in ("page", "section", "evidence", "where", "哪一页", "证据")):
-                route = "deliberative"
-            if output_key := node.config.get("output_key"):
-                ctx.variables[output_key] = {"route": route}
-            return {"status": "completed", "route": route}
-
-        async def handle_rag_mount(node, ctx):
-            source = ctx.variables.get(node.config.get("from_variable", ""), {})
-            mount_to = node.config.get("mount_result_to", "context")
-            target_key = node.config.get("target_key", "mounted_retrieval")
-            if mount_to in {"context", "variable", "agent_input"}:
-                ctx.variables[target_key] = source
-                return {"status": "completed", "mounted_to": mount_to, "target_key": target_key}
-            artifact = TaskArtifact(
-                name=node.config.get("name", node.id),
-                kind="retrieval_report",
-                content=source,
-                metadata={"artifact_id": node.config.get("artifact_id", f"{thread_id}:{node.id}")},
-            )
-            record = await self.memory.write_workspace_record(thread_id, task_id=f"{thread_id}:{node.id}", owner_agent="workflow", artifact=artifact)
-            ctx.variables[target_key] = {"artifact_id": record.artifact_id, "report": source}
-            return {"status": "completed", "mounted_to": "artifact", "artifact_id": record.artifact_id, "target_key": target_key}
-
-        async def handle_rag_evaluate(node, ctx):
-            source = ctx.variables.get(node.config.get("from_variable", ""), {})
-            coverage = source.get("coverage", {})
-            evidence = source.get("evidence", [])
-            missing = coverage.get("missing", [])
-            score = float(len(evidence)) - 2.0 * float(len(missing))
-            result = {
-                "status": "completed",
-                "score": score,
-                "coverage": coverage,
-                "evidence_count": len(evidence),
-                "visited_sources": source.get("visited_sources", []),
-            }
-            if output_key := node.config.get("output_key"):
-                ctx.variables[output_key] = result
-            return result
-
-        async def handle_memory(node, ctx):
-            action = node.config.get("action")
-            if action == "remember":
-                await self.memory.remember(
-                    MemoryRecord(
-                        thread_id=thread_id,
-                        kind=node.config.get("kind", "note"),
-                        content=node.config.get("content", ctx.user_input),
-                        tags=node.config.get("tags", []),
-                    )
-                )
-                return {"status": "completed"}
-            if action == "search":
-                return {"status": "completed", "records": await self.memory.search(thread_id=thread_id, query=node.config.get("query"))}
-            return {"status": "completed"}
-
-        async def handle_agent(node, ctx):
-            registered = self.agent_registry.get(node.config["agent_name"])
-            task_input = dict(node.config.get("input", {}))
-            if input_var := node.config.get("input_from_variable"):
-                task_input["retrieval_input"] = ctx.variables.get(input_var, {})
-            task = TaskPacket(
-                task_id=f"{thread_id}:{node.id}",
-                goal=node.config.get("goal", ctx.user_input),
-                input=task_input,
-                context={"workflow_node": node.id, "variables": ctx.variables},
-                expected_output=node.config.get("expected_output"),
-                parent_task_id=node.config.get("parent_task_id"),
-                origin_agent=node.config.get("origin_agent", "workflow"),
-                knowledge_scope=node.config.get("knowledge_scope", registered.spec.allowed_knowledge_scopes),
-                metadata={"thread_id": thread_id, "delegation_depth": 1},
-            )
-            self.tracer.emit(
-                "agent_delegated",
-                {"thread_id": thread_id, "agent_name": registered.spec.name, "task_id": task.task_id, "node_id": node.id},
-            )
-            run_result = await registered.agent.run(
-                task.goal,
-                thread_id=node.config.get("share_thread_id", thread_id) if node.config.get("share_thread_id", True) else task.task_id,
-                metadata={
-                    "task_packet": task.model_dump(),
-                    "_delegated": True,
-                    "agent_role": registered.spec.name,
-                    "knowledge_scope": task.knowledge_scope,
-                    "parent_task_id": task.parent_task_id,
-                    "rag_strategy": node.config.get("rag_strategy"),
-                    "reasoning_strategy": node.config.get("reasoning_strategy"),
-                    "context_strategy": node.config.get("context_strategy"),
-                    "long_horizon_strategy": node.config.get("long_horizon_strategy"),
-                    "cooperation_strategy": node.config.get("cooperation_strategy"),
-                },
-            )
-            result = {
-                "status": run_result.status,
-                "output_text": run_result.output_text,
-                "structured_output": {"messages": [message.model_dump() for message in run_result.messages]},
-                "route": node.config.get("success_route"),
-            }
-            if run_result.status == "waiting_human":
-                result.update(
-                    {
-                        "feedback_id": run_result.feedback_id,
-                        "await_reason": run_result.await_reason,
-                        "requires_response": run_result.requires_response,
-                        "response_schema": run_result.response_schema,
-                    }
-                )
-            if output_key := node.config.get("output_key"):
-                ctx.variables[output_key] = result
-            self.tracer.emit(
-                "agent_completed",
-                {"thread_id": thread_id, "agent_name": registered.spec.name, "task_id": task.task_id, "node_id": node.id},
-            )
-            return result
-
-        async def handle_artifact(node, ctx):
-            payload = ctx.variables.get(node.config.get("from_variable", ""), {})
-            artifact = TaskArtifact(
-                name=node.config.get("name", node.id),
-                kind=node.config.get("artifact_kind", "text"),
-                content=payload,
-                metadata={"artifact_id": node.config.get("artifact_id", f"{thread_id}:{node.id}")},
-            )
-            record = await self.memory.write_workspace_record(thread_id, task_id=f"{thread_id}:{node.id}", owner_agent="workflow", artifact=artifact)
-            self.tracer.emit("artifact_created", {"thread_id": thread_id, "artifact_id": record.artifact_id, "node_id": node.id})
-            return {"status": "completed", "artifact_id": record.artifact_id}
-
-        async def handle_aggregate(node, ctx):
-            sources = node.config.get("sources", [])
-            combined = {source: ctx.variables.get(source, {}) for source in sources}
-            result = {"status": "completed", "summary": json.dumps(combined, ensure_ascii=False), "combined": combined}
-            if output_key := node.config.get("output_key"):
-                ctx.variables[output_key] = result
-            self.tracer.emit("aggregation_completed", {"thread_id": thread_id, "node_id": node.id, "source_count": len(sources)})
-            return result
-
-        async def handle_approval(node, ctx):
-            approved = node.config.get("approved", True)
-            return {
-                "status": "completed",
-                "approved": approved,
-                "route": node.config.get("approved_route", "approved" if approved else "rejected"),
-            }
-
-        async def _resolved_human_response(node, ctx):
-            feedback_id = node.config.get("feedback_id") or ctx.state.get(f"{node.id}:feedback_id")
-            if feedback_id and self.human_feedback is not None:
-                pending = await self.human_feedback.get(feedback_id)
-                if pending is not None and pending.response is not None:
-                    return feedback_id, pending.response
-            return feedback_id, None
-
-        async def handle_human_notify(node, ctx):
-            if self.human_feedback is None:
-                return {"status": "completed", "skipped": True}
-            handle = await self.human_feedback.notify(
-                kind=node.config.get("kind", FeedbackKind.PROGRESS_UPDATE),
-                title=node.config.get("title", node.id),
-                message=node.config.get("message", ctx.user_input),
-                task_id=f"{thread_id}:{node.id}",
-                metadata={"workflow_node_id": node.id},
-            )
-            return {"status": "completed", "feedback_id": handle.feedback_id}
-
-        async def handle_human_input(node, ctx):
-            if self.human_feedback is None:
-                return {"status": "failed", "error": "human_feedback_not_configured"}
-            feedback_id, response = await _resolved_human_response(node, ctx)
-            if response is not None:
-                result = {"status": "completed", "feedback_id": feedback_id, "response": response.content}
-                if output_key := node.config.get("output_key"):
-                    ctx.variables[output_key] = result
-                return result
-            handle = await self.human_feedback.request_input(
-                title=node.config.get("title", node.id),
-                message=node.config.get("message", ctx.user_input),
-                response_schema=node.config.get("response_schema"),
-                task_id=f"{thread_id}:{node.id}",
-                metadata={
-                    "workflow_node_id": node.id,
-                    "resume_from": node.id,
-                    "workflow_state": dict(ctx.state),
-                    "workflow_variables": dict(ctx.variables),
-                },
-                blocking=True,
-            )
-            ctx.state[f"{node.id}:feedback_id"] = handle.feedback_id
-            return {
-                "status": "waiting_human",
-                "feedback_id": handle.feedback_id,
-                "await_reason": node.config.get("title", node.id),
-                "requires_response": True,
-                "response_schema": node.config.get("response_schema"),
-                "resume_from": node.id,
-                "workflow_state": dict(ctx.state),
-                "workflow_variables": dict(ctx.variables),
-            }
-
-        async def handle_human_approval(node, ctx):
-            if self.human_feedback is None:
-                return {"status": "failed", "error": "human_feedback_not_configured"}
-            feedback_id, response = await _resolved_human_response(node, ctx)
-            if response is not None:
-                approved = bool(response.content.get("approved")) if isinstance(response.content, dict) else bool(response.content)
-                return {
-                    "status": "completed",
-                    "feedback_id": feedback_id,
-                    "approved": approved,
-                    "response": response.content,
-                    "route": node.config.get("approved_route", "approved" if approved else "rejected"),
-                }
-            handle = await self.human_feedback.request_approval(
-                title=node.config.get("title", node.id),
-                message=node.config.get("message", ctx.user_input),
-                response_schema=node.config.get("response_schema"),
-                task_id=f"{thread_id}:{node.id}",
-                metadata={
-                    "workflow_node_id": node.id,
-                    "resume_from": node.id,
-                    "workflow_state": dict(ctx.state),
-                    "workflow_variables": dict(ctx.variables),
-                },
-                blocking=True,
-            )
-            ctx.state[f"{node.id}:feedback_id"] = handle.feedback_id
-            return {
-                "status": "waiting_human",
-                "feedback_id": handle.feedback_id,
-                "await_reason": node.config.get("title", node.id),
-                "requires_response": True,
-                "response_schema": node.config.get("response_schema"),
-                "resume_from": node.id,
-                "workflow_state": dict(ctx.state),
-                "workflow_variables": dict(ctx.variables),
-            }
-
-        runner = WorkflowRunner(
-            handlers={
-                "agent": handle_agent,
-                "aggregate": handle_aggregate,
-                "approval": handle_approval,
-                "artifact": handle_artifact,
-                "human_approval": handle_human_approval,
-                "human_input": handle_human_input,
-                "human_notify": handle_human_notify,
-                "memory": handle_memory,
-                "model": handle_model,
-                "rag_evaluate": handle_rag_evaluate,
-                "rag_mount": handle_rag_mount,
-                "rag_router": handle_rag_router,
-                "retrieve": handle_retrieve,
-                "router": handle_router,
-                "tool": handle_tool,
-            }
-        )
-        return await runner.run(workflow, context)
 
     def _next_workflow_node(self, workflow: Workflow, node_id: str) -> str | None:
         for edge in workflow.get_edges(node_id):
@@ -2089,41 +2292,4 @@ class Runtime:
         }
 
     async def _promote_candidate_collective_memory(self, thread_id: str, task_id: str) -> None:
-        candidate_notes = await self.memory.collect_candidate_notes(thread_id, task_id=task_id)
-        grouped: dict[tuple[str, str], list[SharedNote]] = {}
-        for note in candidate_notes:
-            candidate = dict(note.metadata.get("collective_memory") or {})
-            if not candidate:
-                candidate = {
-                    "kind": note.metadata.get("memory_kind", "lesson_learned"),
-                    "content": note.content,
-                    "tags": note.metadata.get("tags", []),
-                    "scope": note.metadata.get("scope"),
-                }
-            key = (candidate.get("kind", "lesson_learned"), candidate.get("content", "").strip().lower())
-            if key[1]:
-                grouped.setdefault(key, []).append(note)
-
-        for (kind, normalized_content), notes in grouped.items():
-            source_agents = sorted({note.author_agent for note in notes if note.author_agent})
-            task_ids = {note.task_id for note in notes if note.task_id}
-            if len(source_agents) < 2 and len(task_ids) < 2:
-                continue
-            representative = notes[0]
-            candidate = dict(representative.metadata.get("collective_memory") or {})
-            content = candidate.get("content") or representative.content
-            tags = candidate.get("tags") or representative.metadata.get("tags", [])
-            scope = candidate.get("scope") or representative.metadata.get("scope")
-            confidence = min(0.95, 0.6 + 0.1 * len(source_agents) + 0.05 * max(len(task_ids) - 1, 0))
-            existing = await self.memory.search_collective_memory(query=content, thread_id=thread_id, status=None, limit=20)
-            if any(item["kind"] == kind and item["content"].strip().lower() == normalized_content for item in existing):
-                continue
-            await self.memory.promote_collective_memory(
-                thread_id=thread_id,
-                kind=kind,
-                content=content,
-                tags=tags,
-                source_agents=source_agents,
-                confidence=confidence,
-                scope=scope,
-            )
+        await self.context_kernel.promote_candidate_shared_memory(thread_id=thread_id, task_id=task_id)

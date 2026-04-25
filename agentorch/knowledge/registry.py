@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from agentorch._component_registry import ComponentRegistry
+
 
 @dataclass
 class KnowledgeRegistration:
@@ -11,28 +13,18 @@ class KnowledgeRegistration:
     factory: Callable[..., Any] | None = None
 
 
-class _KnowledgeRegistry:
+class _KnowledgeRegistry(ComponentRegistry[KnowledgeRegistration, type]):
     def __init__(self) -> None:
-        self._items: dict[str, KnowledgeRegistration] = {}
+        super().__init__(
+            KnowledgeRegistration,
+            implementation_attr="component_cls",
+            register_error="A component class or factory is required.",
+            unsupported_error="Unsupported knowledge component kind: {kind}",
+            missing_implementation_error="Knowledge component '{kind}' has no implementation class.",
+        )
 
     def register(self, kind: str, component_cls: type | None = None, *, factory: Callable[..., Any] | None = None) -> None:
-        if component_cls is None and factory is None:
-            raise ValueError("A component class or factory is required.")
-        self._items[kind] = KnowledgeRegistration(kind=kind, component_cls=component_cls, factory=factory)
-
-    def create(self, kind: str, **kwargs: Any) -> Any:
-        try:
-            registration = self._items[kind]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported knowledge component kind: {kind}") from exc
-        if registration.factory is not None:
-            return registration.factory(**kwargs)
-        if registration.component_cls is None:
-            raise ValueError(f"Knowledge component '{kind}' has no implementation class.")
-        return registration.component_cls(**kwargs)
-
-    def list(self) -> list[str]:
-        return sorted(self._items.keys())
+        super().register(kind, component_cls, factory=factory)
 
 
 chunking_registry = _KnowledgeRegistry()

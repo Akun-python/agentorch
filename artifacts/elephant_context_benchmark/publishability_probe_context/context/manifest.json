@@ -1,0 +1,27 @@
+{
+  "run_id": "context",
+  "quick": true,
+  "variants": [
+    "elephant_full",
+    "multi_agent_default_context",
+    "single_agent_long_context",
+    "elephant_rule_only",
+    "elephant_flat_attention",
+    "elephant_no_redundancy",
+    "elephant_drop_only",
+    "elephant_distributed_routing"
+  ],
+  "budgets": [
+    12000
+  ],
+  "case_ids": [
+    "rule_preservation_01",
+    "evidence_competition_01",
+    "delegation_handoff_01",
+    "tool_conflict_01",
+    "late_synthesis_01"
+  ],
+  "record_count": 40,
+  "generated_at": "2026-04-23T11:20:59.421523",
+  "output_dir": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\artifacts\\elephant_context_benchmark\\publishability_probe_context\\context"
+}

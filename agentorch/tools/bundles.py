@@ -7,6 +7,7 @@ from agentorch.sandbox import SandboxManager, SandboxPolicy
 from .execution import register_execution_tools
 from .filesystem import register_filesystem_tools
 from .git_tools import register_git_tools
+from .media import register_media_tools
 from .web import register_web_tools
 
 
@@ -20,7 +21,9 @@ def register_default_agent_tools(
     include_execution: bool = True,
     include_git: bool = True,
     include_web: bool = False,
+    include_media: bool = False,
     brave_api_key: str | None = None,
+    model=None,
 ) -> None:
     if include_filesystem:
         register_filesystem_tools(registry, workspace_root)
@@ -30,3 +33,7 @@ def register_default_agent_tools(
         register_git_tools(registry, workspace_root)
     if include_web:
         register_web_tools(registry, brave_api_key=brave_api_key)
+    if include_media:
+        if model is None:
+            raise ValueError("Media tool bundles require a model instance with at least one media capability.")
+        register_media_tools(registry, model=model, workspace_root=workspace_root)

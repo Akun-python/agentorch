@@ -8,50 +8,11 @@ from pydantic import BaseModel
 
 from agentorch.core import RunResult, RunStreamEvent
 from agentorch.parsing import OutputParser, ParsedRunResult, TextParser
+from agentorch.skills import SkillRequest
 from agentorch.workflow import Workflow
 
+from ._export_support import _safe_export, _workflow_summary
 from .runtime import Runtime
-
-
-def _safe_export(value: Any) -> Any:
-    if isinstance(value, BaseModel):
-        return {key: _safe_export(item) for key, item in value.model_dump(exclude_none=True).items()}
-    if isinstance(value, dict):
-        return {str(key): _safe_export(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_safe_export(item) for item in value]
-    if hasattr(value, "value") and not isinstance(value, str):
-        try:
-            return value.value
-        except AttributeError:
-            pass
-    if hasattr(value, "as_posix"):
-        return str(value)
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return repr(value)
-
-
-def _workflow_summary(workflow: Workflow | None) -> dict[str, Any] | None:
-    if workflow is None:
-        return None
-    return {
-        "entry_node": workflow.entry_node,
-        "max_steps": workflow.max_steps,
-        "nodes": [
-            {"id": node.id, "kind": node.kind, "config": _safe_export(node.config)}
-            for node in workflow.nodes
-        ],
-        "edges": [
-            {
-                "source": edge.source,
-                "target": edge.target,
-                "kind": edge.kind,
-                "condition": edge.condition,
-            }
-            for edge in workflow.edges
-        ],
-    }
 
 
 def _tool_names(runtime: Runtime) -> list[str]:
@@ -69,33 +30,42 @@ def _model_summary(runtime: Runtime) -> dict[str, Any]:
     config = getattr(model, "config", None)
     return {
         "adapter": model.__class__.__name__,
-        "config": _safe_export(config) if config is not None else None,
+        "config": _safe_export(config, config=runtime.config.redaction, unsafe=runtime.config.unsafe_export) if config is not None else None,
     }
 
 
 def _resolved_strategy_summary(runtime: Runtime) -> dict[str, Any]:
     config = runtime.config
     return {
-        "orchestration_profile": config.orchestration_profile,
-        "context": _safe_export(config.context_strategy),
-        "long_horizon": _safe_export(config.long_horizon_strategy),
-        "cooperation": _safe_export(config.cooperation_strategy),
-        "memory_governance": _safe_export(config.memory_governance_strategy),
+        "context": _safe_export(config.context_policy, config=config.redaction, unsafe=config.unsafe_export),
+        "state": _safe_export(config.state_policy, config=config.redaction, unsafe=config.unsafe_export),
+        "coordination": _safe_export(config.coordination_policy, config=config.redaction, unsafe=config.unsafe_export),
+        "memory": _safe_export(config.memory_policy, config=config.redaction, unsafe=config.unsafe_export),
     }
 
 
 def _runtime_summary(runtime: Runtime) -> dict[str, Any]:
     return {
-        "config": _safe_export(runtime.config),
+        "config": _safe_export(runtime.config, config=runtime.config.redaction, unsafe=runtime.config.unsafe_export),
         "model": _model_summary(runtime),
         "tools": _tool_names(runtime),
         "skills": _skill_names(runtime),
         "knowledge_base": runtime.knowledge_base.__class__.__name__ if runtime.knowledge_base is not None else None,
         "memory": runtime.memory.__class__.__name__ if runtime.memory is not None else None,
         "sandbox": runtime.sandbox.__class__.__name__ if runtime.sandbox is not None else None,
+        "extensions": runtime.extensions.names(),
         "has_supervisor": runtime.supervisor is not None,
         "registered_agents": [spec.name for spec in runtime.agent_registry.list_specs()],
-        "resolved_strategies": _resolved_strategy_summary(runtime),
+        "resolved_policies": _resolved_strategy_summary(runtime),
+    }
+
+
+def _resource_state(runtime: Runtime) -> dict[str, Any]:
+    return {
+        "closed": getattr(runtime, "_closed", False),
+        "has_sandbox": runtime.sandbox is not None,
+        "has_observability": runtime.observability.enabled,
+        "background_managed": getattr(runtime, "_background_managed", False),
     }
 
 
@@ -105,6 +75,8 @@ def _core_assembly(runtime: Runtime, workflow: Workflow | None, blueprint: dict[
         "runtime_constructor": "Runtime.create(...)",
         "runtime": _runtime_summary(runtime),
         "workflow": _workflow_summary(workflow),
+        "redaction_applied": not getattr(runtime.config, "unsafe_export", False),
+        "resource_state": _resource_state(runtime),
     }
     if blueprint is not None:
         assembly["facade"] = blueprint.get("facade", "core")
@@ -154,13 +126,17 @@ class Agent:
         *,
         thread_id: str,
         metadata: dict[str, Any] | None = None,
+        skill_request: SkillRequest | dict[str, Any] | None = None,
         stream: bool = False,
     ) -> Any:
+        merged_metadata = dict(metadata or {})
+        if skill_request is not None:
+            merged_metadata["skill_request"] = SkillRequest.from_any(skill_request).model_dump()
         return self.runtime.run(
             user_input,
             thread_id=thread_id,
             workflow=self.workflow,
-            metadata=metadata,
+            metadata=merged_metadata,
             stream=stream,
         )
 
@@ -170,6 +146,7 @@ class Agent:
         *,
         thread_id: str,
         metadata: dict[str, Any] | None = None,
+        skill_request: SkillRequest | dict[str, Any] | None = None,
         stream: bool = False,
     ) -> RunResult:
         if stream:
@@ -177,7 +154,7 @@ class Agent:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(self.run(user_input, thread_id=thread_id, metadata=metadata, stream=False))
+            return asyncio.run(self.run(user_input, thread_id=thread_id, metadata=metadata, skill_request=skill_request, stream=False))
         raise RuntimeError(
             "Agent.run_sync() cannot be used inside a running event loop such as Jupyter. "
             "Use 'await agent.run(...)' in notebooks and async applications."
@@ -190,10 +167,11 @@ class Agent:
         thread_id: str,
         parser: OutputParser[Any] | None = None,
         metadata: dict[str, Any] | None = None,
+        skill_request: SkillRequest | dict[str, Any] | None = None,
     ) -> ParsedRunResult[Any]:
         selected_parser = parser or TextParser()
         prompt = selected_parser.with_prompt(user_input)
-        raw = await self.run(prompt, thread_id=thread_id, metadata=metadata, stream=False)
+        raw = await self.run(prompt, thread_id=thread_id, metadata=metadata, skill_request=skill_request, stream=False)
         parsed = await selected_parser.parse(raw.output_text)
         return ParsedRunResult(raw=raw, parsed=parsed, parser_name=selected_parser.__class__.__name__)
 
@@ -204,25 +182,28 @@ class Agent:
         thread_id: str,
         parser: OutputParser[Any] | None = None,
         metadata: dict[str, Any] | None = None,
+        skill_request: SkillRequest | dict[str, Any] | None = None,
     ) -> ParsedRunResult[Any]:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(self.run_parsed(user_input, thread_id=thread_id, parser=parser, metadata=metadata))
+            return asyncio.run(self.run_parsed(user_input, thread_id=thread_id, parser=parser, metadata=metadata, skill_request=skill_request))
         raise RuntimeError(
             "Agent.run_parsed_sync() cannot be used inside a running event loop such as Jupyter. "
             "Use 'await agent.run_parsed(...)' in notebooks and async applications."
         )
 
     def bind_blueprint(self, blueprint: dict[str, Any]) -> "Agent":
-        self._assembly_blueprint = _safe_export(blueprint)
+        self._assembly_blueprint = _safe_export(blueprint, config=self.runtime.config.redaction, unsafe=self.runtime.config.unsafe_export)
         return self
 
     def export_config(self) -> dict[str, Any]:
         base = {
             "model": _model_summary(self.runtime),
-            "runtime": _safe_export(self.runtime.config),
+            "runtime": _safe_export(self.runtime.config, config=self.runtime.config.redaction, unsafe=self.runtime.config.unsafe_export),
             "workflow": _workflow_summary(self.workflow),
+            "redaction_applied": not getattr(self.runtime.config, "unsafe_export", False),
+            "resource_state": _resource_state(self.runtime),
         }
         if self._assembly_blueprint is not None:
             base["facade"] = self._assembly_blueprint.get("facade")
@@ -230,12 +211,14 @@ class Agent:
 
     def export_blueprint(self) -> dict[str, Any]:
         if self._assembly_blueprint is not None:
-            return _safe_export(self._assembly_blueprint)
+            return _safe_export(self._assembly_blueprint, config=self.runtime.config.redaction, unsafe=self.runtime.config.unsafe_export)
         return {
             "facade": "core",
             "kind": "multi_agent" if self.runtime.supervisor is not None else "single_agent",
             "runtime": _runtime_summary(self.runtime),
             "workflow": _workflow_summary(self.workflow),
+            "redaction_applied": not getattr(self.runtime.config, "unsafe_export", False),
+            "resource_state": _resource_state(self.runtime),
         }
 
     def inspect(self) -> dict[str, Any]:
@@ -246,6 +229,12 @@ class Agent:
     def export_core_assembly(self) -> dict[str, Any]:
         return _core_assembly(self.runtime, self.workflow, self._assembly_blueprint)
 
+    async def aclose(self) -> None:
+        await self.runtime.aclose()
+
+    def close(self) -> None:
+        self.runtime.close()
+
     def describe(self) -> str:
         blueprint = self.export_blueprint()
         runtime_summary = blueprint.get("runtime", {})
@@ -255,13 +244,13 @@ class Agent:
             f"model={runtime_summary.get('model', {}).get('adapter', self.runtime.model.__class__.__name__)}",
             f"tools={', '.join(runtime_summary.get('tools', [])) or 'none'}",
         ]
-        strategy_summary = runtime_summary.get("resolved_strategies", {})
-        context_strategy = strategy_summary.get("context") or {}
-        memory_strategy = strategy_summary.get("memory_governance") or {}
-        if context_strategy.get("kind"):
-            lines.append(f"context_strategy={context_strategy['kind']}")
-        if memory_strategy.get("kind"):
-            lines.append(f"memory_governance={memory_strategy['kind']}")
+        strategy_summary = runtime_summary.get("resolved_policies", {})
+        context_policy = strategy_summary.get("context") or {}
+        memory_policy = strategy_summary.get("memory") or {}
+        if context_policy.get("selection_mode"):
+            lines.append(f"context_policy={context_policy['selection_mode']}")
+        if memory_policy.get("recall_mode"):
+            lines.append(f"memory_policy={memory_policy['recall_mode']}")
         if runtime_summary.get("registered_agents"):
             lines.append(f"registered_agents={', '.join(runtime_summary['registered_agents'])}")
         if blueprint.get("members"):

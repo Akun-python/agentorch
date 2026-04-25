@@ -6,17 +6,29 @@ custom provider registrations for non-SDK HTTP services.
 """
 
 from .base import BaseModelAdapter
+from .bootstrap import bootstrap_model_defaults
+from .embedding import EmbeddingCapableModelAdapter
+from .media import (
+    ImageGenerationCapableModelAdapter,
+    ImageGenerationResult,
+    VideoAnalysisCapableModelAdapter,
+)
 from .openai_compatible_http import OpenAICompatibleHTTPModel
 from .openai_model import OpenAIModel
 from .registry import create_model_adapter, list_model_providers, register_model_provider
-
-register_model_provider("openai", OpenAIModel.from_config)
-register_model_provider("openai_http", OpenAICompatibleHTTPModel.from_config)
+from .speech import SpeechCapableModelAdapter, SpeechSynthesisResult
 
 __all__ = [
     "BaseModelAdapter",
+    "bootstrap_model_defaults",
+    "EmbeddingCapableModelAdapter",
+    "ImageGenerationCapableModelAdapter",
+    "ImageGenerationResult",
     "OpenAICompatibleHTTPModel",
     "OpenAIModel",
+    "SpeechCapableModelAdapter",
+    "SpeechSynthesisResult",
+    "VideoAnalysisCapableModelAdapter",
     "create_model_adapter",
     "list_model_providers",
     "register_model_provider",

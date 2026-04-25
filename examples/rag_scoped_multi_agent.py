@@ -26,7 +26,13 @@ KNOWLEDGE_BASE = InMemoryKnowledgeBase()
 class ScopedSupervisor(Supervisor):
     async def create_plan(self, task: TaskPacket):
         decision: AgentRouteDecision = await self.policy.select_agents(task, self.registry)
-        task_plan = self.planner.build_plan(task, decision.selected_agents, reason=decision.reason)
+        task_plan = self.planner.build_plan(
+            task,
+            decision.selected_agents,
+            registry=self.registry,
+            reason=decision.reason,
+            scores=decision.scores,
+        )
         invocations = []
         for step in task_plan.steps:
             registered = self.registry.get(step.assigned_agent or "")

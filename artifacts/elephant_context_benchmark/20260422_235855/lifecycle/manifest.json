@@ -1,0 +1,33 @@
+{
+  "run_id": "lifecycle",
+  "quick": false,
+  "variants": [
+    "mgcm_full",
+    "mgcm_thread_local_memory",
+    "mgcm_no_persistent_inheritance",
+    "mgcm_no_cross_thread",
+    "mgcm_no_collective_governance",
+    "mgcm_no_conflict_resolution",
+    "mgcm_no_temporal_decay"
+  ],
+  "case_ids": [
+    "succession_01",
+    "cross_thread_01",
+    "promotion_validation_01",
+    "conflict_01",
+    "temporal_decay_01",
+    "succession_02",
+    "cross_thread_02",
+    "promotion_validation_02",
+    "conflict_02",
+    "temporal_decay_02",
+    "succession_03",
+    "cross_thread_03",
+    "promotion_validation_03",
+    "conflict_03",
+    "temporal_decay_03"
+  ],
+  "record_count": 105,
+  "generated_at": "2026-04-23T00:00:54.187255",
+  "output_dir": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\artifacts\\elephant_context_benchmark\\20260422_235855\\lifecycle"
+}

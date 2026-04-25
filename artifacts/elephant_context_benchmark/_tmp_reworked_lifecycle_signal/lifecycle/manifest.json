@@ -1,0 +1,22 @@
+{
+  "run_id": "lifecycle",
+  "quick": false,
+  "dataset": "lifecycle_synth",
+  "model_backend": "probe",
+  "seeds": [
+    0
+  ],
+  "report_level": "full",
+  "variants": [
+    "mgcm_full",
+    "mgcm_no_cross_thread",
+    "mgcm_no_temporal_decay"
+  ],
+  "case_ids": [
+    "cross_thread_01",
+    "temporal_decay_01"
+  ],
+  "record_count": 6,
+  "generated_at": "2026-04-23T12:07:11.965452",
+  "output_dir": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\artifacts\\elephant_context_benchmark\\_tmp_reworked_lifecycle_signal\\lifecycle"
+}

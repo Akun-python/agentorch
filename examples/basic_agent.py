@@ -1,3 +1,5 @@
+"""Recommended facade example: start here for a minimal single-agent setup."""
+
 from pydantic import BaseModel
 
 from agentorch import OpenAIModel, ToolRegistry, create_agent, tool

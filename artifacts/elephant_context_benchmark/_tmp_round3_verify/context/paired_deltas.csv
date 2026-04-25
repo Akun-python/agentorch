@@ -1,0 +1,9 @@
+variant,budget,metric,pair_count,mean_delta_vs_elephant_full
+multi_agent_default_context,12000,task_success,10,-0.4
+multi_agent_default_context,12000,context_precision,10,-0.004762
+multi_agent_default_context,12000,context_recall,10,-0.1
+multi_agent_default_context,12000,key_evidence_retention_rate,10,-0.2
+multi_agent_default_context,12000,stage_focus_hit_rate,10,-0.2
+multi_agent_default_context,12000,redundancy_ratio,10,0.083333
+multi_agent_default_context,12000,budget_utilization,10,0.0
+multi_agent_default_context,12000,compaction_gain,10,-0.03851

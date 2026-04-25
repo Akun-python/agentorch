@@ -1,0 +1,17 @@
+variant,budget,metric,count,mean,std,ci95
+elephant_full,12000,task_success,10,1.0,0.0,0.0
+elephant_full,12000,context_precision,10,0.204762,0.070273,0.043555
+elephant_full,12000,context_recall,10,0.666667,0.293972,0.182206
+elephant_full,12000,key_evidence_retention_rate,10,0.7,0.421637,0.261333
+elephant_full,12000,stage_focus_hit_rate,10,0.6,0.394405,0.244455
+elephant_full,12000,redundancy_ratio,10,0.25,0.0,0.0
+elephant_full,12000,budget_utilization,10,1.0,0.0,0.0
+elephant_full,12000,compaction_gain,10,0.463511,0.113195,0.070159
+multi_agent_default_context,12000,task_success,10,0.6,0.516398,0.320067
+multi_agent_default_context,12000,context_precision,10,0.2,0.070273,0.043555
+multi_agent_default_context,12000,context_recall,10,0.566667,0.238307,0.147704
+multi_agent_default_context,12000,key_evidence_retention_rate,10,0.5,0.471405,0.29218
+multi_agent_default_context,12000,stage_focus_hit_rate,10,0.4,0.394405,0.244455
+multi_agent_default_context,12000,redundancy_ratio,10,0.333333,0.0,0.0
+multi_agent_default_context,12000,budget_utilization,10,1.0,0.0,0.0
+multi_agent_default_context,12000,compaction_gain,10,0.425,0.108227,0.06708

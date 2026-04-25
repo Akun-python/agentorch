@@ -1,0 +1,24 @@
+{
+  "run_id": "lifecycle",
+  "quick": true,
+  "dataset": "real_task_x",
+  "model_backend": "probe",
+  "seeds": [
+    0
+  ],
+  "report_level": "brief",
+  "variants": [
+    "mgcm_full",
+    "mgcm_thread_local_memory"
+  ],
+  "case_ids": [
+    "succession_real_01",
+    "cross_thread_real_01",
+    "promotion_validation_real_01",
+    "conflict_real_01",
+    "temporal_decay_real_01"
+  ],
+  "record_count": 10,
+  "generated_at": "2026-04-23T15:30:25.215167",
+  "output_dir": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\artifacts\\elephant_context_benchmark\\_tmp_real_task_full_v2\\lifecycle"
+}

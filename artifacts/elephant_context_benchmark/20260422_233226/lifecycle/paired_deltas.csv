@@ -1,0 +1,6 @@
+variant,metric,pair_count,mean_delta_vs_mgcm_full
+mgcm_thread_local_memory,task_success,5,-0.4
+mgcm_thread_local_memory,mechanism_success,5,-0.4
+mgcm_thread_local_memory,retrieval_success,5,-0.2
+mgcm_thread_local_memory,state_integrity,5,-0.2
+mgcm_thread_local_memory,ordering_success,5,0.0

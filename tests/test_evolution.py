@@ -4,13 +4,30 @@ from agentorch import (
     EvaluationResult,
     EvolutionConfig,
     EvolutionManager,
+    EvolutionSession,
     Genome,
     SearchSpace,
     candidate_from_genome,
+    create_agent_evolution,
+    create_multi_agent_evolution,
     list_evolution_algorithms,
     rag_strategy_from_genome,
     reasoning_strategy_from_genome,
+    runtime_config_from_genome,
+    workflow_from_genome,
 )
+from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
+from agentorch.models.base import BaseModelAdapter
+
+
+class EchoModel(BaseModelAdapter):
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        return ModelResponse(
+            message=Message(role="assistant", content="ok"),
+            content="ok",
+            finish_reason="stop",
+            usage=UsageInfo(total_tokens=1),
+        )
 
 
 async def _build_candidate(genome: Genome) -> dict:
@@ -128,8 +145,13 @@ async def _test_multiple_evolution_algorithms_and_genome_helpers():
     )
     assert reasoning_strategy_from_genome(genome).kind.value == "plan_execute"
     assert rag_strategy_from_genome(genome).mode == "hybrid"
+    runtime_config = runtime_config_from_genome(genome)
+    assert runtime_config.reasoning_strategy.kind.value == "plan_execute"
     candidate = candidate_from_genome(genome)
     assert candidate["workflow_template"] == "retrieve_plan_review"
+    workflow = workflow_from_genome(genome)
+    assert workflow is not None
+    assert [node.kind for node in workflow.nodes][:2] == ["retrieve", "model"]
 
     for algorithm_kind in ("random_search", "hill_climb", "beam_search"):
         manager = EvolutionManager(
@@ -153,3 +175,65 @@ async def _test_multiple_evolution_algorithms_and_genome_helpers():
         )
         result = await manager.evolve(tasks=["a", "b"])
         assert result.best_genome is not None
+
+
+def test_create_agent_evolution_builds_best_agent_from_real_workflow_template():
+    asyncio.run(_test_create_agent_evolution_builds_best_agent_from_real_workflow_template())
+
+
+async def _test_create_agent_evolution_builds_best_agent_from_real_workflow_template():
+    session = create_agent_evolution(
+        model=EchoModel(),
+        search_space=SearchSpace(
+            {
+                "reasoning.kind": ["react", "plan_execute"],
+                "workflow.template": ["classic_inline_answer", "retrieve_plan_review"],
+            }
+        ),
+        evolution_config=EvolutionConfig(population_size=2, generations=1, seed=11),
+        evaluator=lambda genome, candidate, tasks: EvaluationResult(
+            genome_id=genome.id,
+            fitness=5.0 if candidate.workflow and any(node.kind == "retrieve" for node in candidate.workflow.nodes) else 1.0,
+        ),
+    )
+
+    result = await session.evolve(tasks=["plan"])
+    best_agent = await session.build_best_candidate(result)
+
+    assert isinstance(session, EvolutionSession)
+    assert best_agent.workflow is not None
+    assert best_agent.workflow.nodes[0].kind == "retrieve"
+    assert best_agent.runtime.config.reasoning_strategy.kind.value in {"react", "plan_execute"}
+    await best_agent.aclose()
+
+
+def test_create_multi_agent_evolution_builds_multi_agent_candidate():
+    asyncio.run(_test_create_multi_agent_evolution_builds_multi_agent_candidate())
+
+
+async def _test_create_multi_agent_evolution_builds_multi_agent_candidate():
+    session = create_multi_agent_evolution(
+        roles=[
+            {
+                "name": "planner",
+                "role": "planner",
+                "model": EchoModel(),
+                "system_prompt": "plan",
+            }
+        ],
+        model=EchoModel(),
+        search_space=SearchSpace({"workflow.template": ["classic_inline_answer"]}),
+        evolution_config=EvolutionConfig(population_size=1, generations=1, seed=3),
+        evaluator=lambda genome, candidate, tasks: EvaluationResult(
+            genome_id=genome.id,
+            fitness=2.0 if candidate.export_blueprint()["kind"] == "multi_agent" else 0.0,
+        ),
+    )
+
+    result = await session.evolve(tasks=["orchestrate"])
+    best_system = await session.build_best_candidate(result)
+
+    assert best_system.export_blueprint()["kind"] == "multi_agent"
+    assert best_system.workflow is not None
+    assert best_system.workflow.nodes[0].kind == "model"
+    await best_system.aclose()

@@ -56,6 +56,7 @@ def create_git_status_tool(workspace_root: str | Path, *, name: str = "git_statu
             "entries": lines,
             "clean": len(lines) == 0,
             "branch": branch,
+            "summary": f"Git status for {target.relative_to(root).as_posix() if target != root else '.'}: {'clean' if len(lines) == 0 else f'{len(lines)} change(s)'}",
         }
 
     return FunctionTool(

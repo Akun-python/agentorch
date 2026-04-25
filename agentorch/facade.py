@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import atexit
-import threading
 from pathlib import Path
 from typing import Any
 
 from agentorch.agents import (
     AggregationPolicy,
-    AgentCapability,
     AgentRegistry,
-    AgentSpec,
     BudgetManager,
     Coordinator,
     EscalationPolicy,
@@ -20,274 +16,71 @@ from agentorch.agents import (
     SupervisorPolicy,
 )
 from agentorch.config import ModelConfig, ObservabilityConfig, RuntimeConfig
+from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
+from agentorch.evolution import EvolutionConfig, EvolutionSession, SearchSpace
+from agentorch.evolution.helpers import runtime_config_from_genome, workflow_from_genome
+from agentorch.extensions import RuntimeExtension
 from agentorch.knowledge import KnowledgeBase, RagStrategyConfig
 from agentorch.memory import MemoryManager
+from agentorch.models import (
+    BaseModelAdapter,
+    ImageGenerationCapableModelAdapter,
+    SpeechCapableModelAdapter,
+    VideoAnalysisCapableModelAdapter,
+    create_model_adapter,
+)
 from agentorch.reasoning import ReasoningStrategyConfig
 from agentorch.runtime import Agent, Runtime
-from agentorch.runtime.agent import _runtime_summary, _safe_export, _workflow_summary
+from agentorch.runtime._export_support import _safe_export
 from agentorch.sandbox import SandboxManager
-from agentorch.skills import SkillRegistry
+from agentorch.skills import SkillCatalog, SkillCatalogConfig, SkillRegistry, SkillRoutingConfig
 from agentorch.strategies import (
-    BaseContextStrategy,
-    BaseCooperationStrategy,
-    BaseLongHorizonStrategy,
-    BaseMemoryGovernanceStrategy,
-    ContextStrategyConfig,
-    CooperationStrategyConfig,
-    LongHorizonStrategyConfig,
-    MemoryGovernanceStrategyConfig,
+    ContextPolicy,
+    CoordinationPolicy,
+    MemoryEvaluator,
+    MemoryPolicy,
+    RoutePlanner,
+    ContextSelector,
+    StatePolicy,
 )
 from agentorch.tools import BaseTool, ToolRegistry
 from agentorch.workflow import Workflow
+from agentorch._facade_support import (
+    BackgroundRuntimeBridge,
+    build_facade_evolution_session as _build_facade_evolution_session,
+    build_multi_agent_blueprint as _build_multi_agent_blueprint,
+    build_single_agent_blueprint as _build_single_agent_blueprint,
+    coerce_model_inputs as _coerce_model_inputs,
+    coerce_tool_registry as _coerce_tool_registry,
+    normalize_tool_bundles as _normalize_tool_bundles,
+    profile_defaults as _profile_defaults,
+    resolve_multi_agent_member as _resolve_multi_agent_member,
+    resolve_facade_runtime_config as _resolve_facade_runtime_config,
+    resolve_reasoning_input as _resolve_reasoning_input,
+    materialize_shared_knowledge_base as _materialize_shared_knowledge_base,
+    split_shared_knowledge_input as _split_shared_knowledge_input,
+)
 
-
-_BACKGROUND_LOOP: asyncio.AbstractEventLoop | None = None
-_BACKGROUND_LOOP_THREAD: threading.Thread | None = None
-_BACKGROUND_LOOP_LOCK = threading.Lock()
 _ALLOWED_MULTI_AGENT_TOPOLOGIES = {"supervisor"}
+_BACKGROUND_BRIDGE = BackgroundRuntimeBridge()
 
 
-def _compact_dict(payload: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in payload.items() if value is not None}
+class _SupervisorRuntimeModelAdapter(BaseModelAdapter):
+    """Internal placeholder model for supervisor-root runtimes.
 
+    The coordinator runtime should not borrow a member model by default. That
+    creates hidden ownership coupling and can close externally managed member
+    resources when the team runtime shuts down.
+    """
 
-def _is_default_value(runtime_config: RuntimeConfig, default_config: RuntimeConfig, field_name: str) -> bool:
-    current = _safe_export(getattr(runtime_config, field_name))
-    default = _safe_export(getattr(default_config, field_name))
-    return current == default
+    def __init__(self) -> None:
+        self.config = {"provider": "internal", "model": "supervisor-runtime-placeholder"}
 
-
-def _apply_if_unset(
-    runtime_config: RuntimeConfig,
-    default_config: RuntimeConfig,
-    runtime_config_supplied: bool,
-    field_name: str,
-    value: Any,
-) -> RuntimeConfig:
-    if value is None:
-        return runtime_config
-    if runtime_config_supplied and not _is_default_value(runtime_config, default_config, field_name):
-        return runtime_config
-    return runtime_config.model_copy(update={field_name: value})
-
-
-def _finalize_runtime_config(runtime_config: RuntimeConfig) -> RuntimeConfig:
-    # Re-validate after incremental model_copy(update=...) assembly so
-    # orchestration_profile and nested strategy defaults are fully expanded.
-    return RuntimeConfig.model_validate(runtime_config.model_dump())
-
-
-def _resolve_reasoning_input(
-    reasoning: ReasoningStrategyConfig | str | dict[str, Any] | None,
-    reasoning_framework: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
-) -> ReasoningStrategyConfig | None:
-    if reasoning is not None and reasoning_framework is not None:
-        left = _safe_export(ReasoningStrategyConfig.from_any(reasoning))
-        right = _safe_export(ReasoningStrategyConfig.from_any(reasoning_framework))
-        if left != right:
-            raise ValueError("Pass only one of 'reasoning' or 'reasoning_framework'.")
-    selected = reasoning if reasoning is not None else reasoning_framework
-    return ReasoningStrategyConfig.from_any(selected) if selected is not None else None
-
-
-def _coerce_model_inputs(model: Any) -> tuple[Any | None, ModelConfig | dict[str, Any] | str | None]:
-    if model is None:
-        return None, None
-    if isinstance(model, (str, ModelConfig, dict)):
-        return None, model
-    return model, None
-
-
-def _coerce_tool_registry(
-    tools: ToolRegistry | list[BaseTool] | tuple[BaseTool, ...] | None,
-) -> ToolRegistry:
-    registry = ToolRegistry.empty()
-    if tools is None:
-        return registry
-    if isinstance(tools, ToolRegistry):
-        registry.extend(tools)
-        return registry
-    for tool in tools:
-        registry.register(tool)
-    return registry
-
-
-def _normalize_tool_bundles(
-    tool_bundles: bool | dict[str, Any] | None,
-    *,
-    workspace_root: str | Path,
-    sandbox: SandboxManager | None,
-) -> ToolRegistry:
-    if not tool_bundles:
-        return ToolRegistry.empty()
-    if tool_bundles is True:
-        return ToolRegistry.with_bundles(
-            workspace_root=workspace_root,
-            sandbox=sandbox,
-            include_execution=sandbox is not None,
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        raise RuntimeError(
+            "The root runtime of a multi-agent supervisor system does not support direct model generation "
+            "without an explicit coordinator model."
         )
-    payload = dict(tool_bundles)
-    return ToolRegistry.with_bundles(
-        workspace_root=payload.pop("workspace_root", workspace_root),
-        sandbox=payload.pop("sandbox", sandbox),
-        include_filesystem=payload.pop("include_filesystem", True),
-        include_execution=payload.pop("include_execution", sandbox is not None),
-        include_git=payload.pop("include_git", True),
-        include_web=payload.pop("include_web", False),
-        brave_api_key=payload.pop("brave_api_key", None),
-    )
-
-
-def _normalize_capabilities(capabilities: list[AgentCapability | str] | None, agent: Agent) -> list[AgentCapability]:
-    values: list[AgentCapability] = []
-    for item in capabilities or []:
-        values.append(item if isinstance(item, AgentCapability) else AgentCapability(item))
-    if getattr(agent.runtime.tools, "_tools", {}):
-        if AgentCapability.TOOL_USE not in values:
-            values.append(AgentCapability.TOOL_USE)
-    if agent.runtime.knowledge_base is not None and AgentCapability.RETRIEVE not in values:
-        values.append(AgentCapability.RETRIEVE)
-    if agent.runtime.supervisor is not None and AgentCapability.DELEGATE not in values:
-        values.append(AgentCapability.DELEGATE)
-    return values
-
-
-def _agent_member_summary(
-    agent: Agent,
-    *,
-    name: str,
-    role: str | None,
-    description: str | None,
-    capabilities: list[AgentCapability] | None,
-    knowledge_scope: list[str] | None,
-) -> dict[str, Any]:
-    exported = agent.export_blueprint()
-    return {
-        "name": name,
-        "role": role or name,
-        "description": description or exported.get("description") or name,
-        "capabilities": [item.value if isinstance(item, AgentCapability) else str(item) for item in (capabilities or [])],
-        "knowledge_scope": list(knowledge_scope or agent.runtime.config.default_knowledge_scope),
-        "agent_blueprint": exported,
-    }
-
-
-def _profile_defaults(profile: str, *, sandbox: SandboxManager | None) -> dict[str, Any]:
-    normalized = (profile or "default").strip().lower()
-    if normalized == "default":
-        return {"orchestration_profile": "default_safe"}
-    if normalized == "research":
-        from agentorch.presets import build_deep_research_system_prompt
-
-        return {
-            "system_prompt": build_deep_research_system_prompt(),
-            "orchestration_profile": "deep_research",
-            "reasoning": ReasoningStrategyConfig.plan_execute(config={"max_planning_steps": 5, "max_execution_steps": 8}),
-            "rag": RagStrategyConfig.for_hybrid(mount="inline", injection_policy="full_report", max_steps=4),
-            "enable_rag": True,
-        }
-    if normalized == "coding":
-        return {
-            "system_prompt": (
-                "You are a careful coding agent. Use tools when they improve accuracy, explain important tradeoffs, "
-                "and prefer safe, minimal changes."
-            ),
-            "orchestration_profile": "coding_agent",
-            "enable_tools": True,
-            "tool_bundles": {
-                "include_filesystem": True,
-                "include_execution": sandbox is not None,
-                "include_git": True,
-                "include_web": False,
-            },
-        }
-    if normalized == "workflow":
-        return {
-            "system_prompt": (
-                "You are a workflow-oriented agent. Follow configured workflow steps carefully, keep state explicit, "
-                "and make transitions easy to inspect."
-            ),
-            "orchestration_profile": "workflow_oriented",
-            "reasoning": "react",
-        }
-    raise ValueError(f"Unsupported create_agent profile '{profile}'.")
-
-
-def _build_single_agent_blueprint(
-    *,
-    name: str | None,
-    description: str | None,
-    profile: str,
-    runtime: Runtime,
-    workflow: Workflow | None,
-    facade_inputs: dict[str, Any],
-    resolved_defaults: dict[str, Any],
-    runtime_source: str = "assembled",
-) -> dict[str, Any]:
-    return {
-        "facade": "create_agent",
-        "kind": "single_agent",
-        "name": name or "agent",
-        "description": description,
-        "profile": profile,
-        "runtime_source": runtime_source,
-        "runtime": _runtime_summary(runtime),
-        "workflow": _workflow_summary(workflow),
-        "facade_inputs": _safe_export(_compact_dict(facade_inputs)),
-        "resolved_defaults": _safe_export(_compact_dict(resolved_defaults)),
-    }
-
-
-def _ensure_background_loop() -> asyncio.AbstractEventLoop:
-    global _BACKGROUND_LOOP, _BACKGROUND_LOOP_THREAD
-    with _BACKGROUND_LOOP_LOCK:
-        if _BACKGROUND_LOOP is not None and _BACKGROUND_LOOP.is_running():
-            return _BACKGROUND_LOOP
-
-        ready = threading.Event()
-        holder: dict[str, asyncio.AbstractEventLoop] = {}
-
-        def _runner() -> None:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            holder["loop"] = loop
-            ready.set()
-            loop.run_forever()
-            pending = asyncio.all_tasks(loop)
-            for task in pending:
-                task.cancel()
-            if pending:
-                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            loop.close()
-
-        thread = threading.Thread(target=_runner, name="agentorch-facade-loop", daemon=True)
-        thread.start()
-        ready.wait()
-        _BACKGROUND_LOOP = holder["loop"]
-        _BACKGROUND_LOOP_THREAD = thread
-        return _BACKGROUND_LOOP
-
-
-def _shutdown_background_loop() -> None:
-    global _BACKGROUND_LOOP, _BACKGROUND_LOOP_THREAD
-    loop = _BACKGROUND_LOOP
-    thread = _BACKGROUND_LOOP_THREAD
-    if loop is None or thread is None:
-        return
-    if loop.is_running():
-        loop.call_soon_threadsafe(loop.stop)
-    thread.join(timeout=1.0)
-    _BACKGROUND_LOOP = None
-    _BACKGROUND_LOOP_THREAD = None
-
-
-atexit.register(_shutdown_background_loop)
-
-
-def _run_async_in_background(coro: Any) -> Any:
-    loop = _ensure_background_loop()
-    future = asyncio.run_coroutine_threadsafe(coro, loop)
-    return future.result()
 
 
 def _create_agent_instance(*, workflow: Workflow | None = None, **runtime_kwargs: Any) -> Agent:
@@ -295,8 +88,11 @@ def _create_agent_instance(*, workflow: Workflow | None = None, **runtime_kwargs
         asyncio.get_running_loop()
     except RuntimeError:
         return Agent.create(workflow=workflow, **runtime_kwargs)
-    runtime = _run_async_in_background(Runtime.acreate(**runtime_kwargs))
-    return Agent(runtime=runtime, workflow=workflow)
+    runtime = _BACKGROUND_BRIDGE.run(Runtime.acreate(**runtime_kwargs))
+    runtime._background_managed = True
+    agent = Agent(runtime=runtime, workflow=workflow)
+    _BACKGROUND_BRIDGE.track(agent)
+    return agent
 
 
 def _create_runtime_instance(**runtime_kwargs: Any) -> Runtime:
@@ -304,7 +100,10 @@ def _create_runtime_instance(**runtime_kwargs: Any) -> Runtime:
         asyncio.get_running_loop()
     except RuntimeError:
         return Runtime.create(**runtime_kwargs)
-    return _run_async_in_background(Runtime.acreate(**runtime_kwargs))
+    runtime = _BACKGROUND_BRIDGE.run(Runtime.acreate(**runtime_kwargs))
+    runtime._background_managed = True
+    _BACKGROUND_BRIDGE.track(runtime)
+    return runtime
 
 
 def create_agent(
@@ -328,16 +127,21 @@ def create_agent(
     workflow: Workflow | None = None,
     reasoning: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
     reasoning_framework: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
-    orchestration_profile: str | None = None,
     sandbox: SandboxManager | None = None,
     enable_streaming: bool | None = None,
     human_feedback: Any | None = None,
     observability: ObservabilityConfig | dict[str, Any] | None = None,
-    skills: SkillRegistry | None = None,
-    context_strategy: ContextStrategyConfig | BaseContextStrategy | str | dict[str, Any] | None = None,
-    long_horizon_strategy: LongHorizonStrategyConfig | BaseLongHorizonStrategy | str | dict[str, Any] | None = None,
-    cooperation_strategy: CooperationStrategyConfig | BaseCooperationStrategy | str | dict[str, Any] | None = None,
-    memory_governance_strategy: MemoryGovernanceStrategyConfig | BaseMemoryGovernanceStrategy | str | dict[str, Any] | None = None,
+    extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
+    skills: SkillRegistry | SkillCatalog | str | Path | list[str | Path] | tuple[str | Path, ...] | None = None,
+    skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None,
+    skill_routing: SkillRoutingConfig | str | dict[str, Any] | None = None,
+    context_policy: ContextPolicy | dict[str, Any] | None = None,
+    state_policy: StatePolicy | dict[str, Any] | None = None,
+    coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
+    memory_policy: MemoryPolicy | dict[str, Any] | None = None,
+    context_selector: ContextSelector | None = None,
+    route_planner: RoutePlanner | None = None,
+    memory_evaluator: MemoryEvaluator | None = None,
     runtime: Runtime | None = None,
     runtime_config: RuntimeConfig | dict[str, Any] | None = None,
     overrides: dict[str, Any] | None = None,
@@ -346,23 +150,32 @@ def create_agent(
         conflicting = [
             model,
             system_prompt,
+            enable_tools,
             tools,
             tool_bundles,
+            enable_rag,
             knowledge_base,
             knowledge_paths,
             rag,
+            enable_memory,
             memory,
             reasoning,
             reasoning_framework,
-            orchestration_profile,
             sandbox,
+            enable_streaming,
             human_feedback,
             observability,
+            extensions,
             skills,
-            context_strategy,
-            long_horizon_strategy,
-            cooperation_strategy,
-            memory_governance_strategy,
+            skill_catalog,
+            skill_routing,
+            context_policy,
+            state_policy,
+            coordination_policy,
+            memory_policy,
+            context_selector,
+            route_planner,
+            memory_evaluator,
             runtime_config,
             overrides,
         ]
@@ -399,9 +212,6 @@ def create_agent(
     if system_prompt is None and "system_prompt" in profile_defaults:
         system_prompt = profile_defaults["system_prompt"]
         resolved_defaults["system_prompt"] = system_prompt
-    if orchestration_profile is None and "orchestration_profile" in profile_defaults:
-        orchestration_profile = profile_defaults["orchestration_profile"]
-        resolved_defaults["orchestration_profile"] = orchestration_profile
     if enable_rag is None and "enable_rag" in profile_defaults:
         enable_rag = bool(profile_defaults["enable_rag"])
         resolved_defaults["enable_rag"] = enable_rag
@@ -411,6 +221,18 @@ def create_agent(
     if reasoning is None and "reasoning" in profile_defaults:
         reasoning = profile_defaults["reasoning"]
         resolved_defaults["reasoning"] = reasoning
+    if context_policy is None and "context_policy" in profile_defaults:
+        context_policy = profile_defaults["context_policy"]
+        resolved_defaults["context_policy"] = _safe_export(context_policy)
+    if state_policy is None and "state_policy" in profile_defaults:
+        state_policy = profile_defaults["state_policy"]
+        resolved_defaults["state_policy"] = _safe_export(state_policy)
+    if coordination_policy is None and "coordination_policy" in profile_defaults:
+        coordination_policy = profile_defaults["coordination_policy"]
+        resolved_defaults["coordination_policy"] = _safe_export(coordination_policy)
+    if memory_policy is None and "memory_policy" in profile_defaults:
+        memory_policy = profile_defaults["memory_policy"]
+        resolved_defaults["memory_policy"] = _safe_export(memory_policy)
 
     if not enable_tools and (tools is not None or tool_bundles):
         raise ValueError("enable_tools=False conflicts with explicit tools or tool_bundles.")
@@ -418,10 +240,6 @@ def create_agent(
         raise ValueError("enable_rag=False conflicts with knowledge_base, knowledge_paths, rag, or knowledge_scope.")
     if not enable_memory and memory is not None:
         raise ValueError("enable_memory=False conflicts with an explicit memory manager.")
-
-    runtime_config_supplied = runtime_config is not None
-    resolved_runtime_config = RuntimeConfig.from_any(runtime_config)
-    default_runtime_config = RuntimeConfig()
 
     rag_enabled = bool(enable_rag) or knowledge_base is not None or bool(knowledge_paths) or rag is not None
     rag_config = None
@@ -431,88 +249,46 @@ def create_agent(
             rag_config = rag_config.with_scope(*knowledge_scope)
 
     resolved_reasoning = _resolve_reasoning_input(reasoning, reasoning_framework)
+    runtime_config_supplied = runtime_config is not None
+    resolved_runtime_config = _resolve_facade_runtime_config(
+        runtime_config,
+        system_prompt=system_prompt,
+        enable_streaming=enable_streaming,
+        reasoning_strategy=resolved_reasoning,
+        skill_catalog=skill_catalog,
+        skill_routing=skill_routing,
+        context_policy=context_policy,
+        state_policy=state_policy,
+        coordination_policy=coordination_policy,
+        memory_policy=memory_policy,
+        context_selector=context_selector,
+        route_planner=route_planner,
+        memory_evaluator=memory_evaluator,
+        observability=observability,
+        default_knowledge_scope=list(knowledge_scope or []),
+        apply_default_knowledge_scope=True,
+        rag_config=rag_config,
+        overrides=overrides,
+    )
 
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "system_prompt",
-        system_prompt,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "reasoning_strategy",
-        resolved_reasoning,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "orchestration_profile",
-        orchestration_profile,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "context_strategy",
-        ContextStrategyConfig.from_any(context_strategy) if context_strategy is not None and not isinstance(context_strategy, BaseContextStrategy) else context_strategy,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "long_horizon_strategy",
-        LongHorizonStrategyConfig.from_any(long_horizon_strategy) if long_horizon_strategy is not None and not isinstance(long_horizon_strategy, BaseLongHorizonStrategy) else long_horizon_strategy,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "cooperation_strategy",
-        CooperationStrategyConfig.from_any(cooperation_strategy) if cooperation_strategy is not None and not isinstance(cooperation_strategy, BaseCooperationStrategy) else cooperation_strategy,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "memory_governance_strategy",
-        MemoryGovernanceStrategyConfig.from_any(memory_governance_strategy) if memory_governance_strategy is not None and not isinstance(memory_governance_strategy, BaseMemoryGovernanceStrategy) else memory_governance_strategy,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "observability",
-        ObservabilityConfig.from_any(observability) if observability is not None else None,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config_supplied,
-        "default_knowledge_scope",
-        list(knowledge_scope or []),
-    )
-    if rag_config is not None:
-        resolved_runtime_config = _apply_if_unset(
-            resolved_runtime_config,
-            default_runtime_config,
-            runtime_config_supplied,
-            "rag_strategy",
-            rag_config,
-        )
-        resolved_runtime_config = _apply_if_unset(
-            resolved_runtime_config,
-            default_runtime_config,
-            runtime_config_supplied,
-            "enable_retrieval",
-            rag_config.mode != "off",
-        )
-    if overrides:
-        resolved_runtime_config = resolved_runtime_config.model_copy(update=overrides)
-    resolved_runtime_config = _finalize_runtime_config(resolved_runtime_config)
+    selected_model, selected_model_config = _coerce_model_inputs(model)
+    include_media_tools = bool(enable_tools) and isinstance(tool_bundles, dict) and bool(tool_bundles.get("include_media"))
+    if include_media_tools:
+        if selected_model is None:
+            selected_model = create_model_adapter(selected_model_config)
+            selected_model_config = None
+        if not any(
+            isinstance(selected_model, capability)
+            for capability in (
+                SpeechCapableModelAdapter,
+                ImageGenerationCapableModelAdapter,
+                VideoAnalysisCapableModelAdapter,
+            )
+        ):
+            raise ValueError(
+                "tool_bundles.include_media requires a model with at least one media capability. "
+                "Use OpenAIModel, OpenAICompatibleHTTPModel, or a custom media-capable adapter."
+            )
 
     selected_tools = ToolRegistry.empty()
     if enable_tools:
@@ -522,15 +298,16 @@ def create_agent(
                 tool_bundles,
                 workspace_root=selected_workspace_root,
                 sandbox=sandbox,
+                model=selected_model,
             )
         )
 
-    selected_model, selected_model_config = _coerce_model_inputs(model)
     runtime_kwargs = {
         "model": selected_model,
         "model_config": selected_model_config,
         "tools": selected_tools,
         "skills": skills,
+        "workspace_root": selected_workspace_root,
         "memory": memory if enable_memory else None,
         "knowledge_base": knowledge_base,
         "knowledge_paths": knowledge_paths,
@@ -538,6 +315,7 @@ def create_agent(
         "sandbox": sandbox,
         "config": resolved_runtime_config,
         "human_feedback": human_feedback,
+        "extensions": extensions,
     }
     agent = _create_agent_instance(workflow=workflow, **runtime_kwargs)
     facade_inputs = {
@@ -554,10 +332,14 @@ def create_agent(
         "enable_memory": enable_memory,
         "workflow_attached": workflow is not None,
         "reasoning": resolved_reasoning,
-        "orchestration_profile": orchestration_profile,
+        "context_policy": context_policy,
+        "state_policy": state_policy,
+        "coordination_policy": coordination_policy,
+        "memory_policy": memory_policy,
         "enable_streaming": bool(enable_streaming),
         "human_feedback": human_feedback is not None,
         "observability": observability,
+        "extensions": [extension.extension_name for extension in extensions] if extensions else None,
         "runtime_config_supplied": runtime_config_supplied,
     }
     return agent.bind_blueprint(
@@ -586,13 +368,20 @@ def create_multi_agent(
     shared_knowledge: KnowledgeBase | dict[str, Any] | None = None,
     shared_memory: MemoryManager | None = None,
     reasoning: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
-    cooperation_strategy: CooperationStrategyConfig | BaseCooperationStrategy | str | dict[str, Any] | None = None,
+    context_policy: ContextPolicy | dict[str, Any] | None = None,
+    state_policy: StatePolicy | dict[str, Any] | None = None,
+    coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
+    memory_policy: MemoryPolicy | dict[str, Any] | None = None,
+    context_selector: ContextSelector | None = None,
+    route_planner: RoutePlanner | None = None,
+    memory_evaluator: MemoryEvaluator | None = None,
     aggregation_policy: AggregationPolicy | None = None,
     name: str | None = None,
     description: str | None = None,
     sandbox: SandboxManager | None = None,
     human_feedback: Any | None = None,
     observability: ObservabilityConfig | dict[str, Any] | None = None,
+    extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
     runtime_config: RuntimeConfig | dict[str, Any] | None = None,
     overrides: dict[str, Any] | None = None,
 ) -> Agent:
@@ -605,144 +394,281 @@ def create_multi_agent(
         raise ValueError(f"Unsupported multi-agent topology '{resolved_topology}'. Supported values: {supported}.")
 
     registry = AgentRegistry()
-    members: list[dict[str, Any]] = []
-    shared_knowledge_base = shared_knowledge if isinstance(shared_knowledge, KnowledgeBase) else None
-    shared_knowledge_payload = shared_knowledge if isinstance(shared_knowledge, dict) else {}
-
-    for index, item in enumerate(member_inputs, start=1):
-        if isinstance(item, Agent):
-            member_agent = item
-            member_name = item.export_blueprint().get("name") or f"agent_{index}"
-            member_role = member_name
-            member_description = item.export_blueprint().get("description") or member_name
-            member_capabilities = _normalize_capabilities(None, item)
-            member_scope = item.runtime.config.default_knowledge_scope
-        else:
-            payload = dict(item)
-            existing_agent = payload.pop("agent", None)
-            role_name = payload.pop("role", None)
-            member_name = payload.pop("name", None) or role_name or f"agent_{index}"
-            member_role = role_name or member_name
-            member_description = payload.pop("description", None) or f"{member_name} specialist"
-            requested_capabilities = payload.pop("capabilities", None)
-            if existing_agent is not None:
-                member_agent = existing_agent
-                member_scope = payload.pop("knowledge_scope", None) or member_agent.runtime.config.default_knowledge_scope
-                member_capabilities = _normalize_capabilities(requested_capabilities, member_agent)
-            else:
-                if shared_memory is not None and "memory" not in payload:
-                    payload["memory"] = shared_memory
-                if shared_knowledge_base is not None and "knowledge_base" not in payload:
-                    payload["knowledge_base"] = shared_knowledge_base
-                if shared_knowledge_payload:
-                    for key in ("knowledge_paths", "knowledge_scope", "rag", "enable_rag"):
-                        payload.setdefault(key, shared_knowledge_payload.get(key))
-                payload.setdefault("model", model)
-                payload.setdefault("sandbox", sandbox)
-                payload.setdefault("name", member_name)
-                payload.setdefault("description", member_description)
-                member_agent = create_agent(**payload)
-                member_scope = payload.get("knowledge_scope") or member_agent.runtime.config.default_knowledge_scope
-                member_capabilities = _normalize_capabilities(requested_capabilities, member_agent)
-
-        spec = AgentSpec.assistant(
-            member_name,
-            description=member_description,
-            capabilities=member_capabilities,
-            tools=sorted(getattr(member_agent.runtime.tools, "_tools", {}).keys()),
-            knowledge_scopes=list(member_scope or []),
+    shared_knowledge_base, shared_knowledge_payload = _split_shared_knowledge_input(shared_knowledge)
+    shared_knowledge_base = _materialize_shared_knowledge_base(
+        shared_knowledge_base,
+        shared_knowledge_payload,
+        run_async=_BACKGROUND_BRIDGE.run,
+    )
+    resolved_shared_knowledge: KnowledgeBase | dict[str, Any] | None = shared_knowledge_base
+    if shared_knowledge_payload:
+        resolved_shared_knowledge = (
+            {"knowledge_base": shared_knowledge_base, **shared_knowledge_payload}
+            if shared_knowledge_base is not None
+            else dict(shared_knowledge_payload)
         )
-        registry.register(spec, member_agent)
-        members.append(
-            _agent_member_summary(
-                member_agent,
-                name=member_name,
-                role=member_role,
-                description=member_description,
-                capabilities=member_capabilities,
-                knowledge_scope=list(member_scope or []),
-            )
+    assembled_members = [
+        _resolve_multi_agent_member(
+            item,
+            index=index,
+            create_agent_fn=create_agent,
+            model=model,
+            sandbox=sandbox,
+            shared_memory=shared_memory,
+            shared_knowledge=resolved_shared_knowledge,
         )
+        for index, item in enumerate(member_inputs, start=1)
+    ]
+    members = [entry.summary for entry in assembled_members]
+    managed_member_agents = [entry.agent for entry in assembled_members if entry.managed]
+    resolved_coordination = CoordinationPolicy.from_any(coordination_policy) if coordination_policy is not None else CoordinationPolicy()
+
+    for entry in assembled_members:
+        registry.register(entry.spec, entry.agent)
 
     resolved_supervisor = supervisor or Supervisor(registry=registry, policy=routing_policy)
     resolved_coordinator = Coordinator(
-        execution_policy=ExecutionPolicy(),
+        execution_policy=ExecutionPolicy(
+            allow_parallel=resolved_coordination.route_mode in {"distributed", "hybrid"},
+            max_parallel_tasks=max(1, len(member_inputs)),
+        ),
         budget_manager=BudgetManager(),
         permission_manager=PermissionManager(),
         escalation_policy=EscalationPolicy(),
         aggregation_policy=aggregation_policy or AggregationPolicy(),
     )
 
-    resolved_runtime_config = RuntimeConfig.from_any(runtime_config)
-    default_runtime_config = RuntimeConfig()
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "system_prompt",
-        system_prompt,
+    resolved_runtime_config = _resolve_facade_runtime_config(
+        runtime_config,
+        system_prompt=system_prompt,
+        reasoning_strategy=_resolve_reasoning_input(reasoning),
+        context_policy=context_policy,
+        state_policy=state_policy,
+        coordination_policy=coordination_policy,
+        memory_policy=memory_policy,
+        context_selector=context_selector,
+        route_planner=route_planner,
+        memory_evaluator=memory_evaluator,
+        observability=observability,
+        default_knowledge_scope=list(shared_knowledge_payload.get("knowledge_scope") or []),
+        apply_default_knowledge_scope=bool(shared_knowledge_payload.get("knowledge_scope")),
+        rag_config=RagStrategyConfig.from_any(shared_knowledge_payload["rag"]) if shared_knowledge_payload.get("rag") is not None else None,
+        overrides=overrides,
     )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "reasoning_strategy",
-        _resolve_reasoning_input(reasoning),
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "cooperation_strategy",
-        CooperationStrategyConfig.from_any(cooperation_strategy) if cooperation_strategy is not None and not isinstance(cooperation_strategy, BaseCooperationStrategy) else cooperation_strategy,
-    )
-    resolved_runtime_config = _apply_if_unset(
-        resolved_runtime_config,
-        default_runtime_config,
-        runtime_config is not None,
-        "observability",
-        ObservabilityConfig.from_any(observability) if observability is not None else None,
-    )
-    if overrides:
-        resolved_runtime_config = resolved_runtime_config.model_copy(update=overrides)
-    resolved_runtime_config = _finalize_runtime_config(resolved_runtime_config)
+    runtime_coordination = CoordinationPolicy.from_any(resolved_runtime_config.coordination_policy)
+    resolved_coordinator.execution_policy.allow_parallel = runtime_coordination.route_mode in {"distributed", "hybrid"}
+    resolved_coordinator.execution_policy.max_parallel_tasks = max(1, len(member_inputs))
 
     selected_model, selected_model_config = _coerce_model_inputs(model)
+    if selected_model is None and selected_model_config is None and registry.list_specs():
+        selected_model = _SupervisorRuntimeModelAdapter()
     runtime = _create_runtime_instance(
         model=selected_model,
         model_config=selected_model_config,
         memory=shared_memory,
+        knowledge_base=shared_knowledge_base,
         sandbox=sandbox,
         agent_registry=registry,
         supervisor=resolved_supervisor,
         coordinator=resolved_coordinator,
         config=resolved_runtime_config,
         human_feedback=human_feedback,
+        extensions=extensions,
+        managed_agents=managed_member_agents,
     )
+    runtime._facade_explicit_shared_memory = shared_memory is not None
+    runtime._facade_explicit_shared_knowledge = shared_knowledge_base is not None
     agent = Agent(runtime=runtime, workflow=workflow)
     return agent.bind_blueprint(
-        {
-            "facade": "create_multi_agent",
-            "kind": "multi_agent",
-            "name": name or "multi_agent_system",
-            "description": description or "Multi-agent system assembled from create_agent members",
-            "topology": resolved_topology,
-            "members": members,
-            "runtime": _runtime_summary(runtime),
-            "workflow": _workflow_summary(workflow),
-            "facade_inputs": _safe_export(
-                _compact_dict(
-                    {
-                        "member_count": len(member_inputs),
-                        "shared_knowledge": shared_knowledge.__class__.__name__ if isinstance(shared_knowledge, KnowledgeBase) else shared_knowledge,
-                        "shared_memory": shared_memory.__class__.__name__ if shared_memory is not None else None,
-                        "reasoning": reasoning,
-                        "cooperation_strategy": cooperation_strategy,
-                        "topology": resolved_topology,
-                        "workflow_attached": workflow is not None,
-                    }
-                )
-            ),
-            "resolved_defaults": {"topology": resolved_topology},
-        }
+        _build_multi_agent_blueprint(
+            name=name,
+            description=description,
+            topology=resolved_topology,
+            members=members,
+            runtime=runtime,
+            workflow=workflow,
+            member_count=len(member_inputs),
+            shared_knowledge=shared_knowledge,
+            shared_memory=shared_memory,
+            reasoning=reasoning,
+            context_policy=context_policy,
+            state_policy=state_policy,
+            coordination_policy=coordination_policy,
+            memory_policy=memory_policy,
+            extensions=extensions,
+        )
+    )
+
+
+def create_agent_evolution(
+    *,
+    search_space: SearchSpace | dict[str, list[Any]],
+    evaluator: Any,
+    tasks: list[Any] | None = None,
+    evolution_config: EvolutionConfig | None = None,
+    workflow_templates: dict[str, Workflow | Any] | None = None,
+    model: Any = None,
+    profile: str = "default",
+    system_prompt: str | None = None,
+    name: str | None = None,
+    description: str | None = None,
+    enable_tools: bool | None = None,
+    tools: ToolRegistry | list[BaseTool] | tuple[BaseTool, ...] | None = None,
+    tool_bundles: bool | dict[str, Any] | None = None,
+    workspace_root: str | Path | None = None,
+    enable_rag: bool | None = None,
+    knowledge_base: KnowledgeBase | None = None,
+    knowledge_paths: list[str | Path] | None = None,
+    rag: RagStrategyConfig | str | dict[str, Any] | None = None,
+    knowledge_scope: list[str] | None = None,
+    enable_memory: bool | None = None,
+    memory: MemoryManager | None = None,
+    workflow: Workflow | None = None,
+    reasoning: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
+    reasoning_framework: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
+    sandbox: SandboxManager | None = None,
+    enable_streaming: bool | None = None,
+    human_feedback: Any | None = None,
+    observability: ObservabilityConfig | dict[str, Any] | None = None,
+    extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
+    skills: SkillRegistry | SkillCatalog | str | Path | list[str | Path] | tuple[str | Path, ...] | None = None,
+    skill_catalog: SkillCatalogConfig | dict[str, Any] | None = None,
+    skill_routing: SkillRoutingConfig | str | dict[str, Any] | None = None,
+    context_policy: ContextPolicy | dict[str, Any] | None = None,
+    state_policy: StatePolicy | dict[str, Any] | None = None,
+    coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
+    memory_policy: MemoryPolicy | dict[str, Any] | None = None,
+    context_selector: ContextSelector | None = None,
+    route_planner: RoutePlanner | None = None,
+    memory_evaluator: MemoryEvaluator | None = None,
+    runtime_config: RuntimeConfig | dict[str, Any] | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> EvolutionSession[Agent]:
+    base_runtime_config = RuntimeConfig.from_any(runtime_config)
+
+    async def build_candidate(genome):
+        return create_agent(
+            model=model,
+            profile=profile,
+            system_prompt=system_prompt,
+            name=name,
+            description=description,
+            enable_tools=enable_tools,
+            tools=tools,
+            tool_bundles=tool_bundles,
+            workspace_root=workspace_root,
+            enable_rag=enable_rag,
+            knowledge_base=knowledge_base,
+            knowledge_paths=knowledge_paths,
+            rag=rag,
+            knowledge_scope=knowledge_scope,
+            enable_memory=enable_memory,
+            memory=memory,
+            workflow=workflow_from_genome(genome, base=workflow, templates=workflow_templates),
+            reasoning=reasoning,
+            reasoning_framework=reasoning_framework,
+            sandbox=sandbox,
+            enable_streaming=enable_streaming,
+            human_feedback=human_feedback,
+            observability=observability,
+            extensions=extensions,
+            skills=skills,
+            skill_catalog=skill_catalog,
+            skill_routing=skill_routing,
+            context_policy=context_policy,
+            state_policy=state_policy,
+            coordination_policy=coordination_policy,
+            memory_policy=memory_policy,
+            context_selector=context_selector,
+            route_planner=route_planner,
+            memory_evaluator=memory_evaluator,
+            runtime_config=runtime_config_from_genome(genome, base=base_runtime_config),
+            overrides=overrides,
+        )
+
+    return _build_facade_evolution_session(
+        search_space=search_space,
+        evaluator=evaluator,
+        tasks=tasks,
+        evolution_config=evolution_config,
+        candidate_kind="agent",
+        builder=build_candidate,
+    )
+
+
+def create_multi_agent_evolution(
+    *,
+    search_space: SearchSpace | dict[str, list[Any]],
+    evaluator: Any,
+    tasks: list[Any] | None = None,
+    evolution_config: EvolutionConfig | None = None,
+    workflow_templates: dict[str, Workflow | Any] | None = None,
+    agents: list[Agent | dict[str, Any]] | None = None,
+    roles: list[dict[str, Any]] | None = None,
+    model: Any = None,
+    system_prompt: str | None = None,
+    workflow: Workflow | None = None,
+    supervisor: Supervisor | None = None,
+    routing_policy: SupervisorPolicy | None = None,
+    topology: str | dict[str, Any] | None = None,
+    shared_knowledge: KnowledgeBase | dict[str, Any] | None = None,
+    shared_memory: MemoryManager | None = None,
+    reasoning: ReasoningStrategyConfig | str | dict[str, Any] | None = None,
+    context_policy: ContextPolicy | dict[str, Any] | None = None,
+    state_policy: StatePolicy | dict[str, Any] | None = None,
+    coordination_policy: CoordinationPolicy | dict[str, Any] | None = None,
+    memory_policy: MemoryPolicy | dict[str, Any] | None = None,
+    context_selector: ContextSelector | None = None,
+    route_planner: RoutePlanner | None = None,
+    memory_evaluator: MemoryEvaluator | None = None,
+    aggregation_policy: AggregationPolicy | None = None,
+    name: str | None = None,
+    description: str | None = None,
+    sandbox: SandboxManager | None = None,
+    human_feedback: Any | None = None,
+    observability: ObservabilityConfig | dict[str, Any] | None = None,
+    extensions: list[RuntimeExtension] | tuple[RuntimeExtension, ...] | None = None,
+    runtime_config: RuntimeConfig | dict[str, Any] | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> EvolutionSession[Agent]:
+    base_runtime_config = RuntimeConfig.from_any(runtime_config)
+
+    async def build_candidate(genome):
+        return create_multi_agent(
+            agents=agents,
+            roles=roles,
+            model=model,
+            system_prompt=system_prompt,
+            workflow=workflow_from_genome(genome, base=workflow, templates=workflow_templates),
+            supervisor=supervisor,
+            routing_policy=routing_policy,
+            topology=topology,
+            shared_knowledge=shared_knowledge,
+            shared_memory=shared_memory,
+            reasoning=reasoning,
+            context_policy=context_policy,
+            state_policy=state_policy,
+            coordination_policy=coordination_policy,
+            memory_policy=memory_policy,
+            context_selector=context_selector,
+            route_planner=route_planner,
+            memory_evaluator=memory_evaluator,
+            aggregation_policy=aggregation_policy,
+            name=name,
+            description=description,
+            sandbox=sandbox,
+            human_feedback=human_feedback,
+            observability=observability,
+            extensions=extensions,
+            runtime_config=runtime_config_from_genome(genome, base=base_runtime_config),
+            overrides=overrides,
+        )
+
+    return _build_facade_evolution_session(
+        search_space=search_space,
+        evaluator=evaluator,
+        tasks=tasks,
+        evolution_config=evolution_config,
+        candidate_kind="multi_agent",
+        builder=build_candidate,
     )

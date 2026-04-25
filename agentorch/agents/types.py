@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agentorch.knowledge import RagStrategyConfig
-from agentorch.strategies import ContextStrategyConfig, CooperationStrategyConfig, LongHorizonStrategyConfig
+from agentorch.strategies import ContextPolicy, CoordinationPolicy, MemoryPolicy, StatePolicy
 
 
 class AgentCapability(str, Enum):
@@ -45,9 +45,10 @@ class AgentPolicyProfile(BaseModel):
     allow_inline_rag_mount: bool = True
     allow_explicit_retrieval_tool: bool = True
     preferred_reasoning_kind: str | None = None
-    default_context_strategy: ContextStrategyConfig | None = None
-    default_long_horizon_strategy: LongHorizonStrategyConfig | None = None
-    default_cooperation_strategy: CooperationStrategyConfig | None = None
+    default_context_policy: ContextPolicy | None = None
+    default_state_policy: StatePolicy | None = None
+    default_coordination_policy: CoordinationPolicy | None = None
+    default_memory_policy: MemoryPolicy | None = None
     notes: dict[str, Any] = Field(default_factory=dict)
 
 

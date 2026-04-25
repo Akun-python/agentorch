@@ -1,3 +1,5 @@
+"""Recommended facade example: multi-agent orchestration via create_multi_agent."""
+
 import asyncio
 
 from pydantic import BaseModel

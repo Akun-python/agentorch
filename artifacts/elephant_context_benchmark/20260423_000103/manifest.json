@@ -1,0 +1,26 @@
+{
+  "run_id": "20260423_000103",
+  "suite": "full",
+  "quick": true,
+  "output_dir": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\artifacts\\elephant_context_benchmark\\20260423_000103",
+  "context": {
+    "run_id": "context",
+    "quick": true,
+    "variants": [
+      "elephant_full"
+    ],
+    "budgets": [
+      12000
+    ],
+    "case_ids": [
+      "rule_preservation_01",
+      "evidence_competition_01",
+      "delegation_handoff_01",
+      "tool_conflict_01",
+      "late_synthesis_01"
+    ],
+    "record_count": 5,
+    "generated_at": "2026-04-23T00:01:04.816392",
+    "output_dir": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\artifacts\\elephant_context_benchmark\\20260423_000103\\context"
+  }
+}

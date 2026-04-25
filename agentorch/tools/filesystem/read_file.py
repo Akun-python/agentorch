@@ -40,6 +40,7 @@ def create_read_file_tool(workspace_root: str | Path, *, name: str = "read_file"
             "content": rendered,
             "line_count": len(lines),
             "truncated": start_index + len(selected) < len(lines),
+            "summary": f"Read {len(selected)} line(s) from {target.relative_to(root).as_posix()} starting at line {input.start_line}.",
         }
 
     return FunctionTool(

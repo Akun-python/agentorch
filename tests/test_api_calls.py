@@ -188,6 +188,81 @@ async def _test_openai_model_stream_normalizes_delta_and_tool_calls():
     assert fake_client.chat.completions.calls[0]["stream"] is True
 
 
+def test_openai_model_stream_reassembles_fragmented_tool_call_arguments():
+    asyncio.run(_test_openai_model_stream_reassembles_fragmented_tool_call_arguments())
+
+
+async def _test_openai_model_stream_reassembles_fragmented_tool_call_arguments():
+    first_chunk = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason=None,
+                delta=SimpleNamespace(
+                    content="",
+                    tool_calls=[
+                        SimpleNamespace(
+                            id="call-3",
+                            index=0,
+                            function=SimpleNamespace(name="generate_image", arguments=""),
+                        )
+                    ],
+                ),
+            )
+        ]
+    )
+    second_chunk = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason=None,
+                delta=SimpleNamespace(
+                    content="",
+                    tool_calls=[
+                        SimpleNamespace(
+                            id=None,
+                            index=0,
+                            function=SimpleNamespace(name=None, arguments='{"prompt":"yangguo and eagle ally'),
+                        )
+                    ],
+                ),
+            )
+        ]
+    )
+    third_chunk = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason="tool_calls",
+                delta=SimpleNamespace(
+                    content="",
+                    tool_calls=[
+                        SimpleNamespace(
+                            id=None,
+                            index=0,
+                            function=SimpleNamespace(name=None, arguments='","output_path":"artifacts/yangguo.png"}'),
+                        )
+                    ],
+                ),
+            )
+        ]
+    )
+    fake_stream = FakeStreamingResponse([first_chunk, second_chunk, third_chunk])
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=FakeChatCompletions([fake_stream])))
+    model = OpenAIModel(model="gpt-4.1", api_key="test-key", base_url="https://api.openai.com/v1")
+    model._client = fake_client
+
+    request = ModelRequest(messages=[Message(role="user", content="stream tool args")])
+    chunks = [chunk async for chunk in model.stream(request)]
+
+    assert chunks[0].tool_calls[0].name == "generate_image"
+    assert chunks[0].tool_calls[0].arguments == {}
+    assert chunks[1].tool_calls[0].name == "generate_image"
+    assert chunks[1].tool_calls[0].arguments == {}
+    assert chunks[2].tool_calls[0].name == "generate_image"
+    assert chunks[2].tool_calls[0].arguments == {
+        "prompt": "yangguo and eagle ally",
+        "output_path": "artifacts/yangguo.png",
+    }
+
+
 def test_execution_and_filesystem_tools_execute_real_operations(tmp_path: Path):
     asyncio.run(_test_execution_and_filesystem_tools_execute_real_operations(tmp_path))
 

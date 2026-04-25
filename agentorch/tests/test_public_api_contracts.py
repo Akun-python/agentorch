@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+import agentorch
+from agentorch.config import RuntimeConfig
+from agentorch.core import Message, ModelRequest, ModelResponse, UsageInfo
+from agentorch.models.base import BaseModelAdapter
+from agentorch.sandbox import SandboxManager, SandboxPolicy
+from agentorch.strategies import ContextPolicy, CoordinationPolicy
+from agentorch.tools import ToolRegistry
+
+
+class DummyModel(BaseModelAdapter):
+    def __init__(self, *, name: str = "dummy-model") -> None:
+        self.config = {"api_key": "sk-dummy-contract-1234567890", "model": name}
+        self.closed = False
+
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        return ModelResponse(
+            message=Message(role="assistant", content="ok"),
+            content="ok",
+            tool_calls=[],
+            finish_reason="stop",
+            usage=UsageInfo(),
+        )
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+def test_create_agent_runtime_conflict_is_enforced() -> None:
+    runtime = agentorch.Runtime.create(model=DummyModel())
+    with pytest.raises(ValueError):
+        agentorch.create_agent(runtime=runtime, system_prompt="conflict")
+    runtime.close()
+
+
+@pytest.mark.parametrize(
+    "conflict_kwargs",
+    [
+        {"enable_tools": False},
+        {"enable_rag": False},
+        {"enable_memory": False},
+    ],
+)
+def test_create_agent_runtime_rejects_runtime_switch_conflicts(conflict_kwargs: dict[str, bool]) -> None:
+    runtime = agentorch.Runtime.create(model=DummyModel())
+    try:
+        with pytest.raises(ValueError, match="cannot be mixed"):
+            agentorch.create_agent(runtime=runtime, **conflict_kwargs)
+    finally:
+        runtime.close()
+
+
+def test_create_agent_rejects_tool_conflict_when_tools_disabled() -> None:
+    tool_registry = ToolRegistry.with_bundles(workspace_root=Path.cwd(), include_filesystem=True, include_execution=False)
+    with pytest.raises(ValueError):
+        agentorch.create_agent(model=DummyModel(), enable_tools=False, tools=tool_registry)
+
+
+def test_create_agent_rejects_rag_conflict_when_rag_disabled() -> None:
+    with pytest.raises(ValueError):
+        agentorch.create_agent(model=DummyModel(), enable_rag=False, knowledge_paths=[Path.cwd() / "README.md"])
+
+
+def test_create_agent_reasoning_alias_conflict_is_enforced() -> None:
+    with pytest.raises(ValueError):
+        agentorch.create_agent(model=DummyModel(), reasoning="react", reasoning_framework="plan_execute")
+
+
+def test_runtime_config_precedence_beats_facade_defaults() -> None:
+    config = RuntimeConfig(system_prompt="runtime-config-prompt")
+    agent = agentorch.create_agent(model=DummyModel(), profile="coding", system_prompt="facade-prompt", runtime_config=config)
+
+    assert agent.runtime.config.system_prompt == "runtime-config-prompt"
+    agent.close()
+
+
+def test_create_agent_runtime_config_explicit_default_field_beats_profile_defaults() -> None:
+    config = RuntimeConfig(context_policy=ContextPolicy.default())
+    agent = agentorch.create_agent(model=DummyModel(), profile="coding", runtime_config=config)
+
+    assert agent.runtime.config.context_policy.char_budget == ContextPolicy.default().char_budget
+    assert agent.runtime.config.context_policy.char_budget != ContextPolicy.lean().char_budget
+    agent.close()
+
+
+def test_enable_streaming_is_materialized_in_runtime_config() -> None:
+    agent = agentorch.create_agent(model=DummyModel(), enable_streaming=False)
+
+    assert agent.runtime.config.enable_streaming is False
+    assert agent.export_blueprint()["runtime"]["config"]["enable_streaming"] is False
+    agent.close()
+
+
+def test_multi_agent_runtime_config_precedence_beats_facade_values() -> None:
+    config = RuntimeConfig(
+        system_prompt="runtime-team-prompt",
+        coordination_policy=CoordinationPolicy(),
+    )
+    system = agentorch.create_multi_agent(
+        roles=[
+            {
+                "name": "planner",
+                "model": DummyModel(name="planner-model"),
+            }
+        ],
+        system_prompt="facade-team-prompt",
+        coordination_policy=CoordinationPolicy.distributed(),
+        runtime_config=config,
+    )
+
+    assert system.runtime.config.system_prompt == "runtime-team-prompt"
+    assert system.runtime.config.coordination_policy.route_mode == "guided"
+    assert system.runtime.coordinator.execution_policy.allow_parallel is False
+    system.close()
+
+
+def test_coding_profile_without_sandbox_does_not_attach_run_command() -> None:
+    agent = agentorch.create_agent(model=DummyModel(), profile="coding")
+
+    assert "run_command" not in agent.describe()
+    assert "run_command" not in str(agent.export_blueprint()["runtime"]["tools"])
+    agent.close()
+
+
+def test_coding_profile_with_sandbox_attaches_run_command() -> None:
+    sandbox = SandboxManager(policy=SandboxPolicy(allowed_paths=[Path.cwd()], command_allowlist=["powershell"], allow_shell=False))
+    agent = agentorch.create_agent(model=DummyModel(), profile="coding", sandbox=sandbox)
+
+    assert "run_command" in agent.export_blueprint()["runtime"]["tools"]
+    agent.close()
+
+
+def test_tool_registry_with_bundles_omits_execution_without_sandbox() -> None:
+    registry = ToolRegistry.with_bundles(workspace_root=Path.cwd(), sandbox=None, include_execution=True)
+
+    assert "run_command" not in registry
+
+
+def test_create_multi_agent_inline_member_blueprints_work() -> None:
+    system = agentorch.create_multi_agent(
+        roles=[
+            {
+                "name": "planner",
+                "model": DummyModel(name="planner-model"),
+                "system_prompt": "Plan carefully.",
+            }
+        ],
+        name="inline-team",
+    )
+
+    blueprint = system.export_blueprint()
+    assert blueprint["kind"] == "multi_agent"
+    assert blueprint["members"][0]["name"] == "planner"
+    system.close()
+
+
+def test_create_multi_agent_applies_shared_defaults_to_inline_members() -> None:
+    shared_memory = object()
+    system = agentorch.create_multi_agent(
+        roles=[
+            {
+                "name": "planner",
+                "model": DummyModel(name="planner-shared-model"),
+            }
+        ],
+        shared_memory=shared_memory,
+        shared_knowledge={"knowledge_scope": ["shared-scope"]},
+        name="shared-team",
+    )
+
+    member = system.runtime.agent_registry.get("planner").agent
+    blueprint = system.export_blueprint()
+
+    assert member.runtime.memory is shared_memory
+    assert member.runtime.config.default_knowledge_scope == ["shared-scope"]
+    assert blueprint["members"][0]["knowledge_scope"] == ["shared-scope"]
+    system.close()
+
+
+def test_research_profile_is_no_longer_supported() -> None:
+    with pytest.raises(ValueError, match="Unsupported create_agent profile 'research'"):
+        agentorch.create_agent(model=DummyModel(), profile="research")
+
+
+def test_runtime_config_explicit_streaming_flag_beats_facade_value() -> None:
+    config = RuntimeConfig(enable_streaming=False)
+    agent = agentorch.create_agent(model=DummyModel(), enable_streaming=True, runtime_config=config)
+
+    assert agent.runtime.config.enable_streaming is False
+    agent.close()
+
+
+def test_top_level_api_no_longer_exports_research_presets() -> None:
+    assert not hasattr(agentorch, "DeepResearchAgent")
+    assert not hasattr(agentorch, "DeepResearchAgentConfig")

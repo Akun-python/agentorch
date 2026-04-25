@@ -1,0 +1,657 @@
+[
+  {
+    "key": "chan2024chateval",
+    "title": "ChatEval: Towards better LLM-based evaluators through multi-agent debate",
+    "urls": [
+      "https://openreview.net/forum?id=FQepisCUWu"
+    ],
+    "checks": [
+      {
+        "url": "https://openreview.net/forum?id=FQepisCUWu",
+        "final": "https://openreview.net/forum?id=FQepisCUWu",
+        "status": 200,
+        "ok": true,
+        "title": "ChatEval: Towards Better LLM-based Evaluators through Multi-Agent Debate | OpenReview",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "brown2020gpt3",
+    "title": "Language models are few-shot learners",
+    "urls": [],
+    "checks": [
+      {
+        "url": null,
+        "ok": false,
+        "reason": "no_url"
+      }
+    ]
+  },
+  {
+    "key": "brea2023episodic",
+    "title": "Computational models of episodic-like memory in food-caching birds",
+    "urls": [
+      "https://doi.org/10.1038/s41467-023-38570-x"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.1038/s41467-023-38570-x",
+        "final": "https://www.nature.com/articles/s41467-023-38570-x",
+        "status": 200,
+        "ok": true,
+        "title": "Computational models of episodic-like memory in food-caching birds | Nature Communications",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "dong2026pear",
+    "title": "PEAR: Plan, execute, assess, and refine: A robust planner-executor-agent benchmark",
+    "urls": [
+      "https://aclanthology.org/2026.findings-eacl.237/"
+    ],
+    "checks": [
+      {
+        "url": "https://aclanthology.org/2026.findings-eacl.237/",
+        "final": "https://aclanthology.org/2026.findings-eacl.237/",
+        "status": 200,
+        "ok": true,
+        "title": "PEAR: Planner-Executor Agent Robustness Benchmark - ACL Anthology",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "edge2024graphrag",
+    "title": "From Local to Global: A Graph RAG Approach to Query-Focused Summarization",
+    "urls": [
+      "https://doi.org/10.48550/arXiv.2404.16130"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.48550/arXiv.2404.16130",
+        "final": "https://arxiv.org/abs/2404.16130",
+        "status": 200,
+        "ok": true,
+        "title": "[2404.16130] From Local to Global: A Graph RAG Approach to Query-Focused Summarization",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "du2025crossteam",
+    "title": "Multi-Agent Collaboration via Cross-Team Orchestration",
+    "urls": [
+      "https://aclanthology.org/2025.findings-acl.541/"
+    ],
+    "checks": [
+      {
+        "url": "https://aclanthology.org/2025.findings-acl.541/",
+        "final": "https://aclanthology.org/2025.findings-acl.541/",
+        "status": 200,
+        "ok": true,
+        "title": "Multi-Agent Collaboration via Cross-Team Orchestration - ACL Anthology",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "devlin2019bert",
+    "title": "BERT: Pre-training of deep bidirectional transformers for language understanding",
+    "urls": [
+      "https://doi.org/10.18653/v1/N19-1423"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.18653/v1/N19-1423",
+        "final": "https://aclanthology.org/N19-1423/",
+        "status": 200,
+        "ok": true,
+        "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding - ACL Anthology",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "gan2025master",
+    "title": "MASTER: A multi-agent system with LLM specialized MCTS",
+    "urls": [
+      "https://aclanthology.org/2025.naacl-long.476/"
+    ],
+    "checks": [
+      {
+        "url": "https://aclanthology.org/2025.naacl-long.476/",
+        "final": "https://aclanthology.org/2025.naacl-long.476/",
+        "status": 200,
+        "ok": true,
+        "title": "MASTER: A Multi-Agent System with LLM Specialized MCTS - ACL Anthology",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "guo2024llmmas",
+    "title": "Large language model based multi-agents: A survey of progress and challenges",
+    "urls": [
+      "https://doi.org/10.24963/ijcai.2024/890"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.24963/ijcai.2024/890",
+        "final": "https://www.ijcai.org/proceedings/2024/890",
+        "status": 200,
+        "ok": true,
+        "title": "Large Language Model Based Multi-agents: A Survey of Progress and Challenges | IJCAI",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "gutierrez2025ragtomemory",
+    "title": "From RAG to Memory: Non-Parametric Continual Learning for Large Language Models",
+    "urls": [
+      "https://arxiv.org/abs/2502.14802"
+    ],
+    "checks": [
+      {
+        "url": "https://arxiv.org/abs/2502.14802",
+        "final": "https://arxiv.org/abs/2502.14802",
+        "status": 200,
+        "ok": true,
+        "title": "[2502.14802] From RAG to Memory: Non-Parametric Continual Learning for Large Language Models",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "hong2024metagpt",
+    "title": "MetaGPT: Meta-programming for a multi-agent collaborative framework",
+    "urls": [
+      "https://openreview.net/forum?id=VtmBAGCN7o"
+    ],
+    "checks": [
+      {
+        "url": "https://openreview.net/forum?id=VtmBAGCN7o",
+        "final": "https://openreview.net/forum?id=VtmBAGCN7o",
+        "status": 200,
+        "ok": true,
+        "title": "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework | OpenReview",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "jiang2023llmlingua",
+    "title": "LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models",
+    "urls": [
+      "https://aclanthology.org/2023.emnlp-main.825/"
+    ],
+    "checks": [
+      {
+        "url": "https://aclanthology.org/2023.emnlp-main.825/",
+        "final": "https://aclanthology.org/2023.emnlp-main.825/",
+        "status": 200,
+        "ok": true,
+        "title": "LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models - ACL Anthology",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "jimenezromero2025swarm",
+    "title": "Multi-agent systems powered by large language models: applications in swarm intelligence",
+    "urls": [
+      "https://doi.org/10.3389/frai.2025.1593017"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.3389/frai.2025.1593017",
+        "final": "https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2025.1593017/full",
+        "status": 200,
+        "ok": true,
+        "title": "Frontiers | Multi-agent systems powered by large language models: applications in swarm intelligence",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "li2023camel",
+    "title": "CAMEL: Communicative agents for ``mind'' exploration of large scale language model society",
+    "urls": [
+      "https://proceedings.neurips.cc/paper_files/paper/2023/hash/a3621ee907def47c1b952ade25c67698-Abstract-Conference.html"
+    ],
+    "checks": [
+      {
+        "url": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/a3621ee907def47c1b952ade25c67698-Abstract-Conference.html",
+        "final": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/a3621ee907def47c1b952ade25c67698-Abstract-Conference.html",
+        "status": 200,
+        "ok": true,
+        "title": "CAMEL: Communicative Agents for &quot;Mind&quot; Exploration of Large Language Model Society",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "li2023selectivecontext",
+    "title": "Compressing Context to Enhance Inference Efficiency of Large Language Models",
+    "urls": [
+      "https://aclanthology.org/2023.emnlp-main.391/"
+    ],
+    "checks": [
+      {
+        "url": "https://aclanthology.org/2023.emnlp-main.391/",
+        "final": "https://aclanthology.org/2023.emnlp-main.391/",
+        "status": 200,
+        "ok": true,
+        "title": "Compressing Context to Enhance Inference Efficiency of Large Language Models - ACL Anthology",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "li2024sbarope",
+    "title": "Extending context window in large language models with segmented base adjustment for rotary position embeddings",
+    "urls": [
+      "https://doi.org/10.3390/app14073076"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.3390/app14073076",
+        "final": "https://www.mdpi.com/2076-3417/14/7/3076",
+        "status": 403,
+        "ok": false,
+        "title": "Access Denied",
+        "reason": "status_403"
+      }
+    ]
+  },
+  {
+    "key": "li2024masworkflow",
+    "title": "A survey on LLM-based multi-agent systems: Workflow, infrastructure, and challenges",
+    "urls": [
+      "https://doi.org/10.1007/s44336-024-00009-2"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.1007/s44336-024-00009-2",
+        "final": "https://link.springer.com/article/10.1007/s44336-024-00009-2",
+        "status": 200,
+        "ok": true,
+        "title": "A survey on LLM-based multi-agent systems: workflow, infrastructure, and challenges | Vicinagearth | Springer Nature Link",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "lan2026publicopinion",
+    "title": "Public opinion dissemination simulation based on large language model multi-agent systems",
+    "urls": [
+      "https://doi.org/10.1038/s41598-026-44206-z"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.1038/s41598-026-44206-z",
+        "final": "https://www.nature.com/articles/s41598-026-44206-z",
+        "status": 200,
+        "ok": true,
+        "title": "Public opinion dissemination simulation based on large language model multi-agent systems | Scientific Reports",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "liu2024agentbench",
+    "title": "AgentBench: Evaluating LLMs as agents",
+    "urls": [
+      "https://openreview.net/forum?id=zAdUB0aCTQ"
+    ],
+    "checks": [
+      {
+        "url": "https://openreview.net/forum?id=zAdUB0aCTQ",
+        "final": "https://openreview.net/forum?id=zAdUB0aCTQ",
+        "status": 200,
+        "ok": true,
+        "title": "AgentBench: Evaluating LLMs as Agents | OpenReview",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "liu2024lostmiddle",
+    "title": "Lost in the Middle: How Language Models Use Long Contexts",
+    "urls": [
+      "https://doi.org/10.48550/arXiv.2307.03172"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.48550/arXiv.2307.03172",
+        "final": "https://arxiv.org/abs/2307.03172",
+        "status": 200,
+        "ok": true,
+        "title": "[2307.03172] Lost in the Middle: How Language Models Use Long Contexts",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "lewis2020rag",
+    "title": "Retrieval-augmented generation for knowledge-intensive NLP tasks",
+    "urls": [],
+    "checks": [
+      {
+        "url": null,
+        "ok": false,
+        "reason": "no_url"
+      }
+    ]
+  },
+  {
+    "key": "openai2023gpt4",
+    "title": "GPT-4 Technical Report",
+    "urls": [
+      "https://doi.org/10.48550/arXiv.2303.08774"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.48550/arXiv.2303.08774",
+        "final": "https://arxiv.org/abs/2303.08774",
+        "status": 200,
+        "ok": true,
+        "title": "[2303.08774] GPT-4 Technical Report",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "ouyang2022instructgpt",
+    "title": "Training language models to follow instructions with human feedback",
+    "urls": [],
+    "checks": [
+      {
+        "url": null,
+        "ok": false,
+        "reason": "no_url"
+      }
+    ]
+  },
+  {
+    "key": "packer2023memgpt",
+    "title": "MemGPT: Towards LLMs as Operating Systems",
+    "urls": [
+      "https://doi.org/10.48550/arXiv.2310.08560"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.48550/arXiv.2310.08560",
+        "final": "https://arxiv.org/abs/2310.08560",
+        "status": 200,
+        "ok": true,
+        "title": "[2310.08560] MemGPT: Towards LLMs as Operating Systems",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "park2023generative",
+    "title": "Generative agents: Interactive simulacra of human behavior",
+    "urls": [
+      "https://doi.org/10.1145/3586183.3606763"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.1145/3586183.3606763",
+        "final": "https://dl.acm.org/doi/10.1145/3586183.3606763",
+        "status": 403,
+        "ok": false,
+        "title": "Just a moment...",
+        "reason": "status_403"
+      }
+    ]
+  },
+  {
+    "key": "qian2024chatdev",
+    "title": "ChatDev: Communicative agents for software development",
+    "urls": [
+      "https://aclanthology.org/2024.acl-long.810/"
+    ],
+    "checks": [
+      {
+        "url": "https://aclanthology.org/2024.acl-long.810/",
+        "final": "https://aclanthology.org/2024.acl-long.810/",
+        "status": 200,
+        "ok": true,
+        "title": "ChatDev: Communicative Agents for Software Development - ACL Anthology",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "qian2025macnet",
+    "title": "Scaling large language model-based multi-agent collaboration",
+    "urls": [
+      "https://openreview.net/forum?id=K3n5jPkrU6"
+    ],
+    "checks": [
+      {
+        "url": "https://openreview.net/forum?id=K3n5jPkrU6",
+        "final": "https://openreview.net/forum?id=K3n5jPkrU6",
+        "status": 200,
+        "ok": true,
+        "title": "Scaling Large Language Model-based Multi-Agent Collaboration | OpenReview",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "shinn2023reflexion",
+    "title": "Reflexion: Language agents with verbal reinforcement learning",
+    "urls": [
+      "https://proceedings.neurips.cc/paper_files/paper/2023/hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html"
+    ],
+    "checks": [
+      {
+        "url": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html",
+        "final": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html",
+        "status": 200,
+        "ok": true,
+        "title": "Reflexion: language agents with verbal reinforcement learning",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "touvron2023llama",
+    "title": "LLaMA: Open and Efficient Foundation Language Models",
+    "urls": [
+      "https://doi.org/10.48550/arXiv.2302.13971"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.48550/arXiv.2302.13971",
+        "final": "https://arxiv.org/abs/2302.13971",
+        "status": 200,
+        "ok": true,
+        "title": "[2302.13971] LLaMA: Open and Efficient Foundation Language Models",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "touvron2023llama2",
+    "title": "Llama 2: Open Foundation and Fine-Tuned Chat Models",
+    "urls": [
+      "https://doi.org/10.48550/arXiv.2307.09288"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.48550/arXiv.2307.09288",
+        "final": "https://arxiv.org/abs/2307.09288",
+        "status": 200,
+        "ok": true,
+        "title": "[2307.09288] Llama 2: Open Foundation and Fine-Tuned Chat Models",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "vaswani2017attention",
+    "title": "Attention Is All You Need",
+    "urls": [],
+    "checks": [
+      {
+        "url": null,
+        "ok": false,
+        "reason": "no_url"
+      }
+    ]
+  },
+  {
+    "key": "wang2024survey",
+    "title": "A survey on large language model based autonomous agents",
+    "urls": [
+      "https://doi.org/10.1007/s11704-024-40231-1"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.1007/s11704-024-40231-1",
+        "final": "https://link.springer.com/article/10.1007/s11704-024-40231-1",
+        "status": 200,
+        "ok": true,
+        "title": "A survey on large language model based autonomous agents | Frontiers of Computer Science | Springer Nature Link",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "wang2024sotopiapi",
+    "title": "SOTOPIA-$\\pi$: Interactive learning of socially intelligent language agents",
+    "urls": [
+      "https://aclanthology.org/2024.acl-long.698/"
+    ],
+    "checks": [
+      {
+        "url": "https://aclanthology.org/2024.acl-long.698/",
+        "final": "https://aclanthology.org/2024.acl-long.698/",
+        "status": 200,
+        "ok": true,
+        "title": "SOTOPIA-π: Interactive Learning of Socially Intelligent Language Agents - ACL Anthology",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "wang2025megaagent",
+    "title": "MegaAgent: Scaling large language model-based multi-agent systems without predefined workflows",
+    "urls": [
+      "https://aclanthology.org/2025.findings-acl.259/"
+    ],
+    "checks": [
+      {
+        "url": "https://aclanthology.org/2025.findings-acl.259/",
+        "final": "https://aclanthology.org/2025.findings-acl.259/",
+        "status": 200,
+        "ok": true,
+        "title": "MegaAgent: A Large-Scale Autonomous LLM-based Multi-Agent System Without Predefined SOPs - ACL Anthology",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "wooldridge2009",
+    "title": "An Introduction to MultiAgent Systems",
+    "urls": [],
+    "checks": [
+      {
+        "url": null,
+        "ok": false,
+        "reason": "no_url"
+      }
+    ]
+  },
+  {
+    "key": "wu2023autogen",
+    "title": "AutoGen: Enabling next-gen LLM applications via multi-agent conversation",
+    "urls": [
+      "https://doi.org/10.48550/arXiv.2308.08155"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.48550/arXiv.2308.08155",
+        "final": "https://arxiv.org/abs/2308.08155",
+        "status": 200,
+        "ok": true,
+        "title": "[2308.08155] AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "zhao2026ragaigc",
+    "title": "Retrieval-Augmented Generation for AI-Generated Content: A Survey",
+    "urls": [
+      "https://doi.org/10.1007/s41019-025-00335-5"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.1007/s41019-025-00335-5",
+        "final": "https://link.springer.com/article/10.1007/s41019-025-00335-5",
+        "status": 200,
+        "ok": true,
+        "title": "Retrieval-Augmented Generation for AI-Generated Content: A Survey | Data Science and Engineering | Springer Nature Link",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "yao2023react",
+    "title": "ReAct: Synergizing reasoning and acting in language models",
+    "urls": [
+      "https://openreview.net/forum?id=WE_vluYUL-X"
+    ],
+    "checks": [
+      {
+        "url": "https://openreview.net/forum?id=WE_vluYUL-X",
+        "final": "https://openreview.net/forum?id=WE_vluYUL-X",
+        "status": 200,
+        "ok": true,
+        "title": "ReAct: Synergizing Reasoning and Acting in Language Models | OpenReview",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "zhong2023memorybank",
+    "title": "MemoryBank: Enhancing Large Language Models with Long-Term Memory",
+    "urls": [
+      "https://doi.org/10.48550/arXiv.2305.10250"
+    ],
+    "checks": [
+      {
+        "url": "https://doi.org/10.48550/arXiv.2305.10250",
+        "final": "https://arxiv.org/abs/2305.10250",
+        "status": 200,
+        "ok": true,
+        "title": "[2305.10250] MemoryBank: Enhancing Large Language Models with Long-Term Memory",
+        "reason": ""
+      }
+    ]
+  },
+  {
+    "key": "zhou2024sotopia",
+    "title": "SOTOPIA: Interactive evaluation for social intelligence in language agents",
+    "urls": [
+      "https://openreview.net/forum?id=mM7VurbA4r"
+    ],
+    "checks": [
+      {
+        "url": "https://openreview.net/forum?id=mM7VurbA4r",
+        "final": "https://openreview.net/forum?id=mM7VurbA4r",
+        "status": 200,
+        "ok": true,
+        "title": "SOTOPIA: Interactive Evaluation for Social Intelligence in Language Agents | OpenReview",
+        "reason": ""
+      }
+    ]
+  }
+]

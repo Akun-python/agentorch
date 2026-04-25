@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+import inspect
 from pathlib import Path
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -33,7 +34,9 @@ class ToolRegistry:
         include_execution: bool = True,
         include_git: bool = True,
         include_web: bool = False,
+        include_media: bool = False,
         brave_api_key: str | None = None,
+        model: Any | None = None,
     ) -> "ToolRegistry":
         from .bundles import register_default_agent_tools
 
@@ -46,7 +49,9 @@ class ToolRegistry:
             include_execution=include_execution,
             include_git=include_git,
             include_web=include_web,
+            include_media=include_media,
             brave_api_key=brave_api_key,
+            model=model,
         )
         return registry
 
@@ -78,6 +83,20 @@ class ToolRegistry:
         except ValidationError as exc:
             raise ToolError(f"Invalid tool arguments for '{name}': {exc}", tool_name=name) from exc
         return await tool.run(input_data)
+
+    async def aclose(self) -> None:
+        for tool in self._tools.values():
+            close_async = getattr(tool, "aclose", None)
+            if callable(close_async):
+                outcome = close_async()
+                if inspect.isawaitable(outcome):
+                    await outcome
+
+    def close(self) -> None:
+        for tool in self._tools.values():
+            close_sync = getattr(tool, "close", None)
+            if callable(close_sync):
+                close_sync()
 
     def __contains__(self, name: str) -> bool:
         return name in self._tools

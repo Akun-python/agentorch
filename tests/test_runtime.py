@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from pydantic import BaseModel
 
 from agentorch.agents import AgentCapability, AgentRegistry, AgentSpec, Supervisor
@@ -9,9 +10,9 @@ from agentorch.models.base import BaseModelAdapter
 from agentorch.memory import MemoryManager
 from agentorch.prompts import ChatPromptTemplate, MessagesPlaceholderCard, TextPromptCard
 from agentorch.runtime import Agent, Runtime
-from agentorch.runtime.context_compaction import compact_task_packet
+from agentorch.runtime.context_compaction import build_handoff_capsule, compact_task_packet
 from agentorch.config import MemoryConfig, RuntimeConfig
-from agentorch.strategies import BaseContextStrategy, ContextStrategyConfig, create_memory_governance_strategy
+from agentorch.strategies import ContextPolicy, CoordinationPolicy, MemoryPolicy, StatePolicy
 from agentorch.tools import ToolRegistry, tool
 from agentorch.knowledge import IndexedKnowledgeBase
 
@@ -59,6 +60,57 @@ class StreamingTextModel(BaseModelAdapter):
         yield StreamChunk(delta_text="streaming world", finish_reason="stop")
 
 
+class StreamingFragmentedToolModel(BaseModelAdapter):
+    def __init__(self) -> None:
+        self.stream_calls = 0
+
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        return ModelResponse(
+            message=Message(role="assistant", content="unused"),
+            content="unused",
+            finish_reason="stop",
+            usage=UsageInfo(total_tokens=1),
+        )
+
+    async def stream(self, request: ModelRequest):
+        self.stream_calls += 1
+        if self.stream_calls == 1:
+            yield StreamChunk(tool_calls=[ToolCall(id="call-2", name="lookup", arguments={})])
+            yield StreamChunk(tool_calls=[ToolCall(id="call-2", name="lookup", arguments={})])
+            yield StreamChunk(tool_calls=[ToolCall(id="call-2", name="lookup", arguments={"query": "weather"})], finish_reason="tool_calls")
+            return
+        yield StreamChunk(delta_text="The weather is sunny.", finish_reason="stop")
+
+
+class InvalidLookupModel(BaseModelAdapter):
+    def __init__(self) -> None:
+        self.calls = 0
+        self.seen_requests: list[ModelRequest] = []
+
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        self.seen_requests.append(request)
+        self.calls += 1
+        if self.calls == 1:
+            return ModelResponse(
+                message=Message(
+                    role="assistant",
+                    content="",
+                    tool_calls=[ToolCall(id="call-invalid", name="lookup", arguments={})],
+                    metadata={},
+                ),
+                content="",
+                tool_calls=[ToolCall(id="call-invalid", name="lookup", arguments={})],
+                finish_reason="tool_calls",
+                usage=UsageInfo(total_tokens=1),
+            )
+        return ModelResponse(
+            message=Message(role="assistant", content="lookup failed"),
+            content="lookup failed",
+            finish_reason="stop",
+            usage=UsageInfo(total_tokens=1),
+        )
+
+
 class LookupInput(BaseModel):
     query: str
 
@@ -104,6 +156,20 @@ async def _test_runtime_stream_emits_model_delta_and_final_result():
     assert event_types[-1] == "final_result"
     assert events[-1].result is not None
     assert events[-1].result.output_text == "Hello streaming world"
+    assert events[-1].payload["output_text"] == "Hello streaming world"
+
+
+def test_runtime_rejects_stream_when_streaming_disabled():
+    asyncio.run(_test_runtime_rejects_stream_when_streaming_disabled())
+
+
+async def _test_runtime_rejects_stream_when_streaming_disabled():
+    runtime = Runtime(model=StreamingTextModel(), config=RuntimeConfig(enable_streaming=False))
+    agent = Agent(runtime=runtime)
+
+    with pytest.raises(RuntimeError, match="Streaming is disabled for this runtime"):
+        async for _event in agent.run("hello", thread_id="stream-disabled", stream=True):
+            pass
 
 
 def test_runtime_stream_emits_tool_events():
@@ -123,6 +189,45 @@ async def _test_runtime_stream_emits_tool_events():
     assert events[-1].event_type == "final_result"
     assert events[-1].result is not None
     assert events[-1].result.output_text == "The weather is sunny."
+
+
+def test_runtime_stream_executes_tool_after_fragmented_arguments_finish():
+    asyncio.run(_test_runtime_stream_executes_tool_after_fragmented_arguments_finish())
+
+
+async def _test_runtime_stream_executes_tool_after_fragmented_arguments_finish():
+    tools = ToolRegistry()
+    tools.register(lookup)
+    runtime = Runtime(model=StreamingFragmentedToolModel(), tools=tools)
+    agent = Agent(runtime=runtime)
+    events = [event async for event in agent.run("what is the weather", thread_id="fragmented-tool-stream", stream=True)]
+    result = events[-1].result
+
+    assert result is not None
+    assert result.output_text == "The weather is sunny."
+    assert len(result.tool_results) == 1
+    assert result.tool_results[0].is_error is False
+    assert result.tool_results[0].output["query"] == "weather"
+
+
+def test_runtime_includes_tool_error_in_followup_tool_message():
+    asyncio.run(_test_runtime_includes_tool_error_in_followup_tool_message())
+
+
+async def _test_runtime_includes_tool_error_in_followup_tool_message():
+    model = InvalidLookupModel()
+    tools = ToolRegistry()
+    tools.register(lookup)
+    runtime = Runtime(model=model, tools=tools)
+    agent = Agent(runtime=runtime)
+    result = await agent.run("what is the weather", thread_id="tool-error-thread")
+
+    assert result.tool_results[0].is_error is True
+    second_request = model.seen_requests[1]
+    tool_messages = [message for message in second_request.messages if message.role == "tool"]
+    assert tool_messages
+    assert "error" in tool_messages[-1].content.lower()
+    assert "field required" in tool_messages[-1].content.lower()
 
 
 def test_runtime_acreate_accepts_custom_tools_and_web_tools():
@@ -336,15 +441,11 @@ def test_runtime_create_and_agent_create_provide_high_level_entrypoints(tmp_path
     assert agent.runtime.reasoning_framework.config.kind.value == "react"
 
 
-class CustomCompactStrategy(BaseContextStrategy):
-    pass
+def test_runtime_reports_resolved_policies_and_context_budget():
+    asyncio.run(_test_runtime_reports_resolved_policies_and_context_budget())
 
 
-def test_runtime_orchestration_profile_expands_and_reasoning_metadata_reports_context_budget():
-    asyncio.run(_test_runtime_orchestration_profile_expands_and_reasoning_metadata_reports_context_budget())
-
-
-async def _test_runtime_orchestration_profile_expands_and_reasoning_metadata_reports_context_budget():
+async def _test_runtime_reports_resolved_policies_and_context_budget():
     class EchoSystemModel(BaseModelAdapter):
         async def generate(self, request: ModelRequest) -> ModelResponse:
             system_message = next(message for message in request.messages if message.role == "system")
@@ -357,25 +458,65 @@ async def _test_runtime_orchestration_profile_expands_and_reasoning_metadata_rep
 
     runtime = Runtime(
         model=EchoSystemModel(),
-        config=RuntimeConfig.agent(orchestration_profile="deep_research"),
+        config=RuntimeConfig.agent(
+            context_policy=ContextPolicy.hybrid_budgeted(),
+            state_policy=StatePolicy(retention_mode="state_plus_memory"),
+            coordination_policy=CoordinationPolicy.hybrid(),
+            memory_policy=MemoryPolicy.long_horizon(),
+        ),
     )
     result = await Agent(runtime=runtime).run("hello", thread_id="profile-runtime")
-    assert runtime.config.context_strategy is not None
-    assert runtime.config.cooperation_strategy is not None
-    assert result.reasoning_metadata["resolved_context_strategy"]["kind"] == "compact"
+    assert runtime.config.context_policy is not None
+    assert runtime.config.coordination_policy is not None
+    assert result.reasoning_metadata["resolved_context_policy"]["selection_mode"] == "hybrid"
     assert "context_budget_report" in result.reasoning_metadata
     assert result.reasoning_metadata["context_budget_report"]["conversation_messages"] >= 1
 
 
-def test_runtime_accepts_custom_context_strategy_instance():
-    config = RuntimeConfig.agent(
-        orchestration_profile="deep_research",
-        context_strategy=CustomCompactStrategy(ContextStrategyConfig.compact(prompt_char_budget=7777)),
+def test_supervisor_collective_memory_recall_uses_memory_policy_top_k():
+    asyncio.run(_test_supervisor_collective_memory_recall_uses_memory_policy_top_k())
+
+
+async def _test_supervisor_collective_memory_recall_uses_memory_policy_top_k():
+    memory = MemoryManager()
+    for index in range(6):
+        await memory.promote_collective_memory(
+            thread_id="elephant-thread",
+            kind="route",
+            content=f"dry riverbed checkpoint route {index}",
+            tags=["route"],
+            source_agents=[f"elder-{index}"],
+            confidence=0.9,
+            scope="planning",
+        )
+
+    runtime = Runtime(
+        model=FakeModel(),
+        memory=memory,
+        config=RuntimeConfig(
+            default_knowledge_scope=["planning"],
+            max_retrieved_chunks=2,
+            memory_policy=MemoryPolicy.long_horizon(thresholds_and_weights={"recall_top_k": 4}),
+        ),
     )
-    assert isinstance(config.context_strategy, CustomCompactStrategy)
+    payload, records = await runtime.context_kernel.prepare_supervisor_task_context(
+        user_input="dry riverbed checkpoint route",
+        thread_id="elephant-thread",
+        coordination_policy=runtime._resolve_coordination_policy(),
+        memory_policy=runtime._resolve_memory_policy(),
+    )
+    assert len(records) == 4
+    assert len(payload["collective_memory_evidence"]) == 4
+
+
+def test_runtime_accepts_custom_context_policy():
+    config = RuntimeConfig.agent(
+        context_policy=ContextPolicy(char_budget=7777, selection_mode="rule"),
+    )
+    assert isinstance(config.context_policy, ContextPolicy)
     runtime = Runtime(model=FakeModel(), config=config)
-    resolved = runtime._resolve_context_strategy()
-    assert resolved.prompt_char_budget == 7777
+    resolved = runtime._resolve_context_policy()
+    assert resolved.char_budget == 7777
 
 
 def test_budget_aware_compaction_prioritizes_high_value_evidence():
@@ -386,15 +527,22 @@ async def _test_budget_aware_compaction_prioritizes_high_value_evidence():
     runtime = Runtime(
         model=FakeModel(),
         config=RuntimeConfig.agent(
-            context_strategy=ContextStrategyConfig.compact(
-                include_retrieval_evidence=True,
-                include_retrieval_citations=True,
-                include_retrieval_report=True,
-                budget_aware_compaction=True,
-                salience_mode="rule",
-                prompt_char_budget=700,
-                retrieval_evidence_max_items=5,
-                citation_max_items=5,
+            context_policy=ContextPolicy(
+                sources={
+                    "memory_summary": True,
+                    "retrieval_summary": True,
+                    "retrieval_evidence": {"enabled": True, "max_items": 5},
+                    "retrieval_citations": {"enabled": True, "max_items": 5},
+                    "retrieval_report": True,
+                    "retrieval_plan": False,
+                    "tool_descriptions": False,
+                    "skill_instructions": True,
+                    "task_packet": {"enabled": True, "representation": "capsule"},
+                    "delegation_context": {"enabled": True, "representation": "capsule"},
+                    "shared_memory": {"enabled": True, "max_items": 4},
+                },
+                char_budget=700,
+                selection_mode="rule",
             )
         ),
     )
@@ -420,18 +568,77 @@ async def _test_budget_aware_compaction_prioritizes_high_value_evidence():
         delegation_context={"handoff": {"from_agent": "supervisor", "to_agent": "evidence_scout", "reason": "keyword_match", "task": {"metadata": {"delegation_depth": 1}}}},
         prompt_variables={"thread_id": "thread-1"},
     )
-    compacted, budget = await runtime._apply_context_strategy_to_prompt_context(
+    compacted, budget = await runtime.context_kernel.context_selector.select(
         prompt_context,
-        context_strategy=runtime._resolve_context_strategy(),
-        long_horizon_strategy=runtime._resolve_long_horizon_strategy(),
+        context_policy=runtime._resolve_context_policy(),
+        state_policy=runtime._resolve_state_policy(),
         stage="plan",
         selected_skill_routes=[],
+        rerank_callback=lambda *_args, **_kwargs: {},
     )
     assert budget["compaction_applied"] is True
     assert budget["estimated_total_chars_after"] < budget["estimated_total_chars_before"]
     assert len(compacted.retrieved_evidence) == 1
     assert len(compacted.citations) == 0
     assert "salience_report" in budget
+
+
+def test_budget_aware_compaction_rule_mode_skips_rerank_callback():
+    asyncio.run(_test_budget_aware_compaction_rule_mode_skips_rerank_callback())
+
+
+async def _test_budget_aware_compaction_rule_mode_skips_rerank_callback():
+    runtime = Runtime(
+        model=FakeModel(),
+        config=RuntimeConfig.agent(
+            context_policy=ContextPolicy(
+                sources={
+                    "memory_summary": True,
+                    "retrieval_summary": True,
+                    "retrieval_evidence": {"enabled": True, "max_items": 5},
+                    "retrieval_citations": {"enabled": True, "max_items": 5},
+                    "retrieval_report": True,
+                    "retrieval_plan": False,
+                    "tool_descriptions": False,
+                    "skill_instructions": True,
+                    "task_packet": {"enabled": True, "representation": "capsule"},
+                    "delegation_context": {"enabled": True, "representation": "capsule"},
+                    "shared_memory": {"enabled": True, "max_items": 4},
+                },
+                char_budget=550,
+                selection_mode="rule",
+            )
+        ),
+    )
+    prompt_context = PromptContext(
+        system_prompt="system",
+        user_input="research evidence about timeout mitigation",
+        conversation=[
+            Message(role="user", content="research timeout mitigation " * 6),
+            Message(role="assistant", content="planning " * 10),
+            Message(role="tool", content='{"result":"' + ("x" * 280) + '"}'),
+        ],
+        retrieved_evidence=[{"source_type": "document", "summary": "relevant evidence " * 12, "content": "timeout mitigation keeps the strongest evidence"}],
+        citations=[{"document_id": "doc-1", "snippet": "citation " * 40}],
+        retrieval_report={"summary": "verbose retrieval report " * 40},
+        skill_instructions=["Skill: deep_research_protocol\nPurpose: evidence-first research guidance"],
+        prompt_variables={"thread_id": "thread-rule"},
+    )
+
+    async def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("rule mode should not invoke rerank_callback")
+
+    compacted, budget = await runtime.context_kernel.context_selector.select(
+        prompt_context,
+        context_policy=runtime._resolve_context_policy(),
+        state_policy=runtime._resolve_state_policy(),
+        stage="plan",
+        selected_skill_routes=[],
+        rerank_callback=fail_if_called,
+    )
+    assert budget["compaction_applied"] is True
+    assert budget["estimated_total_chars_after"] < budget["estimated_total_chars_before"]
+    assert compacted.retrieved_evidence
 
 
 def test_compact_task_packet_preserves_delegated_input_payload():
@@ -454,15 +661,61 @@ def test_compact_task_packet_preserves_delegated_input_payload():
             "context": {
                 "workflow_node": "delegate",
                 "variables": {"retrieved": {"report": "verbose"}},
-                "cooperation_report": {"topology": "solo"},
+                "coordination_report": {"topology": "solo"},
             },
         }
     )
     assert compacted is not None
     assert compacted["input"]["retrieval_input"]["evidence"][0]["content"] == "owner approval required before release"
     assert compacted["metadata"] == {"thread_id": "thread-1", "delegation_depth": 2}
+    assert compacted["context"]["coordination_report"] == {"topology": "solo"}
     assert "expected_output" not in compacted
     assert "artifact_refs" not in compacted
+
+
+def test_compact_task_packet_normalizes_legacy_context_aliases():
+    compacted = compact_task_packet(
+        {
+            "task_id": "task-legacy",
+            "goal": "review inherited context",
+            "context": {
+                "shared_memory_context": "legacy shared memory",
+                "shared_memory_evidence": [{"id": 3, "kind": "route", "content": "legacy route"}],
+                "shared_memory_citations": [{"record_id": 3, "kind": "route"}],
+                "cooperation_report": {"topology": "legacy"},
+            },
+        }
+    )
+    assert compacted is not None
+    assert compacted["context"]["collective_memory_context"] == "legacy shared memory"
+    assert compacted["context"]["collective_memory_evidence"][0]["content"] == "legacy route"
+    assert compacted["context"]["collective_memory_citations"] == [{"record_id": 3, "kind": "route"}]
+    assert compacted["context"]["coordination_report"] == {"topology": "legacy"}
+
+
+def test_build_handoff_capsule_preserves_coordination_summary():
+    capsule = build_handoff_capsule(
+        {
+            "goal": "validate checkpoint route",
+            "knowledge_scope": ["planning"],
+            "context": {
+                "collective_memory_evidence": [{"id": 5, "kind": "route", "content": "follow the riverbed"}],
+                "coordination_report": {
+                    "route_mode": "guided",
+                    "handoff_mode": "summary_plus_artifacts",
+                    "workspace_mode": "artifacts_first",
+                },
+            },
+        },
+        {
+            "from_agent": "supervisor",
+            "to_agent": "planner",
+            "reason": "keyword_match",
+        },
+    )
+    assert capsule["collective_memory"][0]["content"] == "follow the riverbed"
+    assert capsule["coordination_report"]["route_mode"] == "guided"
+    assert capsule["coordination_report"]["handoff_mode"] == "summary_plus_artifacts"
 
 
 class RerankAwareModel(BaseModelAdapter):
@@ -493,9 +746,22 @@ async def _test_budget_aware_compaction_hybrid_mode_records_rerank_adjustment():
     runtime = Runtime(
         model=model,
         config=RuntimeConfig.agent(
-            context_strategy=ContextStrategyConfig.research_heavy(
-                prompt_char_budget=600,
-                salience_rerank_top_k=4,
+            context_policy=ContextPolicy(
+                sources={
+                    "memory_summary": True,
+                    "retrieval_summary": True,
+                    "retrieval_evidence": {"enabled": True, "max_items": 4},
+                    "retrieval_citations": {"enabled": True, "max_items": 4},
+                    "retrieval_report": True,
+                    "retrieval_plan": False,
+                    "tool_descriptions": False,
+                    "skill_instructions": True,
+                    "task_packet": {"enabled": True, "representation": "capsule"},
+                    "delegation_context": {"enabled": True, "representation": "capsule"},
+                    "shared_memory": {"enabled": True, "max_items": 4},
+                },
+                char_budget=600,
+                selection_mode="hybrid",
             )
         ),
     )
@@ -508,10 +774,10 @@ async def _test_budget_aware_compaction_hybrid_mode_records_rerank_adjustment():
         skill_instructions=["Skill: deep_research_protocol\nPurpose: evidence-first research guidance"],
         prompt_variables={"thread_id": "thread-2"},
     )
-    compacted, budget = await runtime._apply_context_strategy_to_prompt_context(
+    compacted, budget = await runtime.context_kernel.context_selector.select(
         prompt_context,
-        context_strategy=runtime._resolve_context_strategy(),
-        long_horizon_strategy=runtime._resolve_long_horizon_strategy(),
+        context_policy=runtime._resolve_context_policy(),
+        state_policy=runtime._resolve_state_policy(),
         stage="plan",
         selected_skill_routes=[
             {
@@ -524,10 +790,64 @@ async def _test_budget_aware_compaction_hybrid_mode_records_rerank_adjustment():
                 },
             }
         ],
+        rerank_callback=lambda segments, top_k: runtime._rerank_context_segments(
+            segments,
+            top_k,
+            user_input=prompt_context.user_input,
+            stage="plan",
+            agent_role=prompt_context.agent_role,
+        ),
     )
     assert compacted.skill_instructions
     assert any(item["segment_id"] == "skill:0" and item["rerank_adjustment"] > 0 for item in budget["segment_scores"])
     assert any(request.metadata.get("purpose") == "context_salience_rerank" for request in model.seen_requests)
+
+
+def test_state_policy_refresh_hooks_fire_on_threshold(tmp_path):
+    asyncio.run(_test_state_policy_refresh_hooks_fire_on_threshold(tmp_path))
+
+
+async def _test_state_policy_refresh_hooks_fire_on_threshold(tmp_path):
+    class EchoUserModel(BaseModelAdapter):
+        async def generate(self, request: ModelRequest) -> ModelResponse:
+            last_user = next(message.content for message in reversed(request.messages) if message.role == "user")
+            return ModelResponse(
+                message=Message(role="assistant", content=f"handled: {last_user}"),
+                content=f"handled: {last_user}",
+                finish_reason="stop",
+                usage=UsageInfo(total_tokens=1),
+            )
+
+    runtime = Runtime(
+        model=EchoUserModel(),
+        memory=MemoryManager(
+            config=MemoryConfig(
+                checkpoint_path=tmp_path / "checkpoints.db",
+                record_path=tmp_path / "records.db",
+            )
+        ),
+        config=RuntimeConfig.agent(
+            state_policy=StatePolicy(
+                summary_refresh_every=2,
+                snapshot_every=2,
+                rollup_every=2,
+            )
+        ),
+    )
+    result = await Agent(runtime=runtime).run("refresh the state", thread_id="state-refresh")
+    refresh_report = result.reasoning_metadata["state_refresh_report"]
+    assert refresh_report["message_count"] == 2
+    assert refresh_report["summary_refresh"] is True
+    assert refresh_report["snapshot"] is True
+    assert refresh_report["rollup"] is True
+
+    runtime_memories = await runtime.memory.get_agent_memory("state-refresh", "runtime")
+    runtime_kinds = {item["kind"] for item in runtime_memories}
+    assert "thread_summary_refresh" in runtime_kinds
+    assert "state_snapshot" in runtime_kinds
+
+    shared_notes = await runtime.memory.get_shared_notes("state-refresh")
+    assert any(note.metadata.get("state_rollup") is True for note in shared_notes)
 
 
 def test_runtime_augments_retrieval_with_persisted_thread_history(tmp_path):
@@ -557,11 +877,11 @@ async def _test_runtime_augments_retrieval_with_persisted_thread_history(tmp_pat
         query="approval required",
         knowledge_scope=["ops"],
         source_filters=[],
-        memory_strategy=create_memory_governance_strategy({"kind": "mgcm"}),
+        memory_policy=MemoryPolicy(),
     )
     assert any(item.source_type == "thread_history" for item in report.evidence)
     assert "thread_history" in report.visited_sources
-    assert memory_recall_report["mechanism"] == "mgcm"
+    assert memory_recall_report["mechanism"] == "memory_policy"
 
 
 def test_runtime_nutcracker_memory_promotes_episodic_capsule_and_reports_metadata(tmp_path):
@@ -593,11 +913,13 @@ async def _test_runtime_nutcracker_memory_promotes_episodic_capsule_and_reports_
         ),
         config=RuntimeConfig.agent(
             rag=RagStrategyConfig.for_classic(knowledge_scope=["ops"], file_types=[".md"]),
-            memory_governance_strategy={"kind": "nutcracker_memory", "capsule_promotion_threshold": 0.2},
+            memory_policy=MemoryPolicy.long_horizon(
+                thresholds_and_weights={"capsule_promotion_threshold": 0.2}
+            ),
         ),
     )
     result = await Agent(runtime=runtime).run("find owner approval", thread_id="nutcracker-thread")
     capsules = await runtime.memory.record_store.search(thread_id="nutcracker-thread", kinds=["episodic_capsule"])
     assert capsules
-    assert result.reasoning_metadata["memory_governance_report"]["kind"] == "nutcracker_memory"
+    assert result.reasoning_metadata["memory_policy_report"]["kind"] == "memory_policy"
     assert result.reasoning_metadata["memory_promotion_trace"][0]["kind"] == "episodic_capsule"

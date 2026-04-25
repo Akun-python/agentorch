@@ -1,0 +1,5 @@
+family,variant,budget,run_count,task_success,context_precision,context_recall,key_evidence_retention_rate,stage_focus_hit_rate,redundancy_ratio,budget_utilization,compaction_gain
+cross-session memory ranking,elephant_full,12000,2,1.0,0.114907,1.0,1.0,1.0,0.125,0.945209,0.211746
+cross-session memory ranking,multi_agent_default_context,12000,2,0.0,0.0,0.0,0.0,0.0,0.0,0.53275,0.0
+public long-context qa,elephant_full,12000,2,0.0,0.077381,0.75,1.0,1.0,0.323215,0.956459,0.378198
+public long-context qa,multi_agent_default_context,12000,2,0.0,0.0,0.0,0.0,0.0,0.0,0.992417,0.0

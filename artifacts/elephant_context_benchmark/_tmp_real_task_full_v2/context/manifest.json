@@ -1,0 +1,24 @@
+{
+  "run_id": "context",
+  "quick": true,
+  "dataset": "real_task_x",
+  "model_backend": "probe",
+  "seeds": [
+    0
+  ],
+  "report_level": "brief",
+  "variants": [
+    "elephant_full",
+    "multi_agent_default_context"
+  ],
+  "budgets": [
+    12000
+  ],
+  "case_ids": [
+    "real_public_qa_01",
+    "real_memory_rank_01"
+  ],
+  "record_count": 4,
+  "generated_at": "2026-04-23T15:30:24.827525",
+  "output_dir": "C:\\Users\\24260\\Desktop\\研究生生涯\\智能体开发范式\\artifacts\\elephant_context_benchmark\\_tmp_real_task_full_v2\\context"
+}

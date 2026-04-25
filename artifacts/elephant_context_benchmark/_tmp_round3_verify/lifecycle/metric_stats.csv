@@ -1,0 +1,11 @@
+variant,metric,count,mean,std,ci95
+mgcm_full,task_success,10,0.9,0.316228,0.196
+mgcm_full,mechanism_success,10,0.9,0.316228,0.196
+mgcm_full,retrieval_success,10,1.0,0.0,0.0
+mgcm_full,state_integrity,10,0.9,0.316228,0.196
+mgcm_full,ordering_success,10,1.0,0.0,0.0
+mgcm_thread_local_memory,task_success,10,0.0,0.0,0.0
+mgcm_thread_local_memory,mechanism_success,10,0.0,0.0,0.0
+mgcm_thread_local_memory,retrieval_success,10,0.4,0.516398,0.320067
+mgcm_thread_local_memory,state_integrity,10,0.8,0.421637,0.261333
+mgcm_thread_local_memory,ordering_success,10,0.8,0.421637,0.261333

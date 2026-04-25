@@ -1,0 +1,79 @@
+{
+  "prefix": "graph-scale-",
+  "scale_factors": [
+    1,
+    2,
+    4
+  ],
+  "repeats": 5,
+  "warmup_rounds": 2,
+  "detail_limit": 3,
+  "embedding_salt": "0",
+  "rows": [
+    {
+      "scale_factor": 1,
+      "prefix": "graph-scale-s01-",
+      "node_count": 360,
+      "edge_count": 3012,
+      "stored_capsule_count": 360,
+      "recall_mean_ms": 99.08,
+      "recall_p95_ms": 120.244,
+      "recall_qps": 10.093,
+      "detail_mean_ms": 3.759,
+      "detail_p95_ms": 4.572,
+      "detail_qps": 266.028
+    },
+    {
+      "scale_factor": 2,
+      "prefix": "graph-scale-s02-",
+      "node_count": 720,
+      "edge_count": 3045,
+      "stored_capsule_count": 720,
+      "recall_mean_ms": 98.422,
+      "recall_p95_ms": 126.376,
+      "recall_qps": 10.16,
+      "detail_mean_ms": 3.672,
+      "detail_p95_ms": 4.185,
+      "detail_qps": 272.331
+    },
+    {
+      "scale_factor": 4,
+      "prefix": "graph-scale-s04-",
+      "node_count": 1440,
+      "edge_count": 2440,
+      "stored_capsule_count": 1440,
+      "recall_mean_ms": 91.602,
+      "recall_p95_ms": 142.437,
+      "recall_qps": 10.917,
+      "detail_mean_ms": 3.674,
+      "detail_p95_ms": 4.029,
+      "detail_qps": 272.183
+    }
+  ],
+  "per_scale_reports": [
+    {
+      "scale_factor": 1,
+      "prefix": "graph-scale-s01-",
+      "seed_report_path": "artifacts\\long_term_memory_graph_scale_latency_full_rerun\\scale_01\\seed\\seed_report.json",
+      "latency_report_path": "artifacts\\long_term_memory_graph_scale_latency_full_rerun\\scale_01\\latency\\recall_latency_report.json",
+      "node_count": 360,
+      "edge_count": 3012
+    },
+    {
+      "scale_factor": 2,
+      "prefix": "graph-scale-s02-",
+      "seed_report_path": "artifacts\\long_term_memory_graph_scale_latency_full_rerun\\scale_02\\seed\\seed_report.json",
+      "latency_report_path": "artifacts\\long_term_memory_graph_scale_latency_full_rerun\\scale_02\\latency\\recall_latency_report.json",
+      "node_count": 720,
+      "edge_count": 3045
+    },
+    {
+      "scale_factor": 4,
+      "prefix": "graph-scale-s04-",
+      "seed_report_path": "artifacts\\long_term_memory_graph_scale_latency_full_rerun\\scale_04\\seed\\seed_report.json",
+      "latency_report_path": "artifacts\\long_term_memory_graph_scale_latency_full_rerun\\scale_04\\latency\\recall_latency_report.json",
+      "node_count": 1440,
+      "edge_count": 2440
+    }
+  ]
+}
