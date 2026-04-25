@@ -1,5 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq3-locomo-formal-001,locomo,LoCoMo,qwen-plus,7,2e00e6e8-f03e-40ce-881f-3e618b2c7abf,rq3_seagull_memory-rq3-locomo-formal-001-rep-0,experiments\results_formal\rq3_seagull_memory\formal_benchmark\multi_agent_naive_memory\qwen-plus\seed-7\observability.db,completed
-rq3-locomo-formal-002,locomo,LoCoMo,qwen-plus,7,227b9e0d-0b5c-4c22-8578-e9acf2358e59,rq3_seagull_memory-rq3-locomo-formal-002-rep-0,experiments\results_formal\rq3_seagull_memory\formal_benchmark\multi_agent_naive_memory\qwen-plus\seed-7\observability.db,completed
-rq3-longmem-formal-001,longmemeval,LongMemEval,qwen-plus,7,c9931225-5cc2-4796-b6ca-6f7499a31a2c,rq3_seagull_memory-rq3-longmem-formal-001-rep-0,experiments\results_formal\rq3_seagull_memory\formal_benchmark\multi_agent_naive_memory\qwen-plus\seed-7\observability.db,completed
-rq3-longmem-formal-002,longmemeval,LongMemEval,qwen-plus,7,7f3cd141-d1e0-49e6-9579-6c277d8de36d,rq3_seagull_memory-rq3-longmem-formal-002-rep-0,experiments\results_formal\rq3_seagull_memory\formal_benchmark\multi_agent_naive_memory\qwen-plus\seed-7\observability.db,completed

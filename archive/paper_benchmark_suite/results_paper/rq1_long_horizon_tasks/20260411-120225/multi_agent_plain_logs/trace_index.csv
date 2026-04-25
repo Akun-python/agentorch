@@ -1,4 +1,0 @@
-task_id,benchmark_id,benchmark_name,run_id,thread_id,sqlite_path,status
-rq1-gaia-local-001,gaia,GAIA,eeb1304f-45ea-4535-a4c2-f7f75172bf32,rq1_long_horizon_tasks-rq1-gaia-local-001-rep-0,,completed
-rq1-hotpotqa-local-001,hotpotqa,HotpotQA,16cd2b7f-7b0d-406e-871c-616f8637e578,rq1_long_horizon_tasks-rq1-hotpotqa-local-001-rep-0,,completed
-rq1-musique-local-001,musique,MuSiQue,a00b804c-b7e2-4bb8-ac81-d9a23c3911f4,rq1_long_horizon_tasks-rq1-musique-local-001-rep-0,,completed

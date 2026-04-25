@@ -1,3 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq2-hotpot-formal-001,hotpotqa,HotpotQA,qwen-plus,7,73deafb2-49e7-4191-b269-388916fbbbd0,rq2_elephant_attention-rq2-hotpot-formal-001-rep-0,experiments\results_formal\rq2_elephant_attention\formal_benchmark\multi_agent_no_elephant\qwen-plus\seed-7\observability.db,completed
-rq2-hotpot-formal-002,hotpotqa,HotpotQA,qwen-plus,7,28b7b7d1-9cfd-4408-a74c-13775a7a4656,rq2_elephant_attention-rq2-hotpot-formal-002-rep-0,experiments\results_formal\rq2_elephant_attention\formal_benchmark\multi_agent_no_elephant\qwen-plus\seed-7\observability.db,completed

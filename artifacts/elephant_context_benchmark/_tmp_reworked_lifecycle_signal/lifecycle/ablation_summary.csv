@@ -1,3 +1,0 @@
-variant,run_count,task_success,mechanism_success,retrieval_success,state_integrity,ordering_success
-mgcm_no_cross_thread,2,0.5,0.5,0.5,1.0,1.0
-mgcm_no_temporal_decay,2,0.5,0.5,1.0,1.0,0.5

@@ -1,2 +1,0 @@
-task_id,run_id,thread_id,sqlite_path,status
-rq4-budget-001,2b9248ea-65ee-4b5f-bdfb-15ed247764e7,rq4_budget_robustness-rq4-budget-001-rep-0,experiments\results_paper\rq4_budget_robustness\20260411-012234\full_framework\observability.db,completed

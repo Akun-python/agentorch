@@ -1,2 +1,0 @@
-task_id,run_id,thread_id,sqlite_path,status
-rq2-context-001,06426dcc-8e9d-435e-a755-86fd236f018a,rq2_elephant_attention-rq2-context-001-rep-0,experiments\results_paper\rq2_elephant_attention\20260411-012231\multi_agent_no_elephant\observability.db,completed

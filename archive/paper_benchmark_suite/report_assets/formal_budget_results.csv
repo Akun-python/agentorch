@@ -1,4 +1,0 @@
-variant,budget,quality_mean,quality_std,quality_ci95_low,quality_ci95_high,retained_context_ratio_mean
-full_framework,3000,0.4446,0.0059,0.4399,0.4493,0.3333
-multi_agent_no_compression,3000,0.3468,0.0046,0.3431,0.3505,0.3333
-multi_agent_no_long_horizon,3000,0.3079,0.0861,0.239,0.3768,0.2777

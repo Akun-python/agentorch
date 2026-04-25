@@ -1,5 +1,0 @@
-variant,success_rate,quality_score,token_usage,latency_ms
-full_framework,1.0,0.0667,40.0,856.0
-single_agent_basic,1.0,0.0667,20.0,300.3333
-multi_agent_no_elephant,1.0,0.0667,40.0,825.0
-multi_agent_plain_logs,1.0,0.0667,40.0,169.6667

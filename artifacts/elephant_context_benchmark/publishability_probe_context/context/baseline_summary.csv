@@ -1,4 +1,0 @@
-variant,budget,run_count,task_success,context_precision,context_recall,key_evidence_retention_rate,stage_focus_hit_rate,redundancy_ratio,budget_utilization,compaction_gain
-elephant_full,12000,5,0.8,0.2,0.666667,0.7,0.6,0.25,1.0,0.432601
-multi_agent_default_context,12000,5,0.0,0.2,0.566667,0.5,0.4,0.333333,1.0,0.425
-single_agent_long_context,12000,5,0.4,0.2,0.566667,0.5,0.5,0.0,1.0,0.417396

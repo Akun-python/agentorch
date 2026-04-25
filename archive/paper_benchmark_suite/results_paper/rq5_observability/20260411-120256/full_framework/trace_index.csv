@@ -1,3 +1,0 @@
-task_id,benchmark_id,benchmark_name,run_id,thread_id,sqlite_path,status
-rq5-failure-001,agentorch_failure_suite,AgentOrch Failure Suite,fe488749-2d8b-4f74-96f9-80ee4ab82020,rq5_observability-rq5-failure-001-rep-0,experiments\results_paper\rq5_observability\20260411-120256\full_framework\observability.db,completed
-rq5-failure-002,agentorch_failure_suite,AgentOrch Failure Suite,bbc3d197-4ee3-4ae6-9f9e-62fae6140d60,rq5_observability-rq5-failure-002-rep-0,experiments\results_paper\rq5_observability\20260411-120256\full_framework\observability.db,completed

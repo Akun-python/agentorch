@@ -1,3 +1,0 @@
-variant,trace_coverage_mean,todo_consistency_mean,diagnostic_accuracy_mean,diagnostic_time_seconds_mean
-full_framework,1.0,1.0,1.0,15.3768
-multi_agent_plain_logs,0.0,0.0,0.0,13.7867

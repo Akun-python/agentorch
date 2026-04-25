@@ -1,3 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq4-longbench-formal-001,longbench,LongBench,gpt-4o-mini,7,49afffa8-852b-416f-aa85-51b99eb9a478,rq4_budget_robustness-rq4-longbench-formal-001-rep-0,experiments\results_formal\rq4_budget_robustness\formal_benchmark\multi_agent_no_long_horizon\gpt-4o-mini\seed-7\observability.db,completed
-rq4-longbench-formal-002,longbench,LongBench,gpt-4o-mini,7,b3301b84-dd32-4e25-973a-8723e6c895fe,rq4_budget_robustness-rq4-longbench-formal-002-rep-0,experiments\results_formal\rq4_budget_robustness\formal_benchmark\multi_agent_no_long_horizon\gpt-4o-mini\seed-7\observability.db,completed

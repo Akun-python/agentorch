@@ -1,2 +1,0 @@
-task_id,run_id,thread_id,sqlite_path,status
-rq5-failure-001,3a7e71e3-c319-4031-b624-6a4307d0ccd5,rq5_observability-rq5-failure-001-rep-0,experiments\results_paper\rq5_observability\20260411-012238\full_framework\observability.db,completed

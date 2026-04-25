@@ -1,4 +1,0 @@
-task_id,benchmark_id,benchmark_name,run_id,thread_id,sqlite_path,status
-rq3-locomo-local-001,locomo,LoCoMo,06449e84-ef5d-403b-94b2-1a5759caadc2,rq3_seagull_memory-rq3-locomo-local-001-rep-0,experiments\results_paper\rq3_seagull_memory\20260411-115940\full_framework\observability.db,completed
-rq3-longmemeval-local-002,longmemeval,LongMemEval,642273d6-c81e-402f-a827-7760ed1b0612,rq3_seagull_memory-rq3-longmemeval-local-002-rep-0,experiments\results_paper\rq3_seagull_memory\20260411-115940\full_framework\observability.db,completed
-rq3-longmemeval-local-003,longmemeval,LongMemEval,1f4d26c0-5265-4acd-86b0-b5d410e19779,rq3_seagull_memory-rq3-longmemeval-local-003-rep-0,experiments\results_paper\rq3_seagull_memory\20260411-115940\full_framework\observability.db,completed

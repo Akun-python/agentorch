@@ -1,4 +1,0 @@
-scale_factor,prefix,node_count,edge_count,stored_capsule_count,recall_mean_ms,recall_p95_ms,recall_qps,detail_mean_ms,detail_p95_ms,detail_qps
-1,graph-scale-s01-,360,3012,360,99.08,120.244,10.093,3.759,4.572,266.028
-2,graph-scale-s02-,720,3045,720,98.422,126.376,10.16,3.672,4.185,272.331
-4,graph-scale-s04-,1440,2440,1440,91.602,142.437,10.917,3.674,4.029,272.183

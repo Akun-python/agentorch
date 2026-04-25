@@ -1,3 +1,0 @@
-variant,run_count,task_success,mechanism_success,retrieval_success,state_integrity,ordering_success
-mgcm_full,15,0.466667,0.466667,0.5,1.0,0.8
-mgcm_thread_local_memory,15,0.133333,0.133333,0.433333,0.666667,0.8

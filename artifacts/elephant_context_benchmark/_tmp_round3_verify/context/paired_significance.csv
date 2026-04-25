@@ -1,5 +1,0 @@
-variant,budget,metric,pair_count,effective_pair_count,positive_count,negative_count,tie_count,mean_delta,std_delta,ci95_delta,sign_test_pvalue
-multi_agent_default_context,12000,task_success,10,4,0,4,6,-0.4,0.516398,0.320067,0.125
-multi_agent_default_context,12000,context_recall,10,2,0,2,8,-0.1,0.210819,0.130667,0.5
-multi_agent_default_context,12000,key_evidence_retention_rate,10,2,0,2,8,-0.2,0.421637,0.261333,0.5
-multi_agent_default_context,12000,stage_focus_hit_rate,10,2,0,2,8,-0.2,0.421637,0.261333,0.5

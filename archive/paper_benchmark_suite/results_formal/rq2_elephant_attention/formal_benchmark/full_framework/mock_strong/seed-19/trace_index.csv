@@ -1,5 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq2-hotpot-formal-001,hotpotqa,HotpotQA,mock:strong,19,983a61a8-a432-4e7a-bc02-9e793ee0156d,rq2_elephant_attention-rq2-hotpot-formal-001-rep-0,experiments\results_formal\rq2_elephant_attention\formal_benchmark\full_framework\mock_strong\seed-19\observability.db,completed
-rq2-hotpot-formal-002,hotpotqa,HotpotQA,mock:strong,19,2a8bcc01-b5ae-4cee-a389-166affd11b05,rq2_elephant_attention-rq2-hotpot-formal-002-rep-0,experiments\results_formal\rq2_elephant_attention\formal_benchmark\full_framework\mock_strong\seed-19\observability.db,completed
-rq2-musique-formal-001,musique,MuSiQue,mock:strong,19,2434d4ed-c5b8-4c6c-8185-f4f8d2dd23f1,rq2_elephant_attention-rq2-musique-formal-001-rep-0,experiments\results_formal\rq2_elephant_attention\formal_benchmark\full_framework\mock_strong\seed-19\observability.db,completed
-rq2-musique-formal-002,musique,MuSiQue,mock:strong,19,787bfa7c-34f7-498a-bd57-afa29405c707,rq2_elephant_attention-rq2-musique-formal-002-rep-0,experiments\results_formal\rq2_elephant_attention\formal_benchmark\full_framework\mock_strong\seed-19\observability.db,completed

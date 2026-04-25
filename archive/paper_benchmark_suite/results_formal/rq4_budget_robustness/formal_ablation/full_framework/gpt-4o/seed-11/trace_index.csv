@@ -1,5 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq4-longbench-formal-001,longbench,LongBench,gpt-4o,11,58c3c4c2-985c-481e-a6b3-8ac2efd7040b,rq4_budget_robustness-rq4-longbench-formal-001-rep-0,experiments\results_formal\rq4_budget_robustness\formal_ablation\full_framework\gpt-4o\seed-11\observability.db,completed
-rq4-longbench-formal-002,longbench,LongBench,gpt-4o,11,55522a51-b61d-472e-a968-51323e04f3a3,rq4_budget_robustness-rq4-longbench-formal-002-rep-0,experiments\results_formal\rq4_budget_robustness\formal_ablation\full_framework\gpt-4o\seed-11\observability.db,completed
-rq4-infinite-formal-001,infinitebench,InfiniteBench,gpt-4o,11,4e16ab35-aa6e-45c0-ba86-65f828b5b046,rq4_budget_robustness-rq4-infinite-formal-001-rep-0,experiments\results_formal\rq4_budget_robustness\formal_ablation\full_framework\gpt-4o\seed-11\observability.db,completed
-rq4-infinite-formal-002,infinitebench,InfiniteBench,gpt-4o,11,264a9394-6411-4f08-bdb7-16f984123b9e,rq4_budget_robustness-rq4-infinite-formal-002-rep-0,experiments\results_formal\rq4_budget_robustness\formal_ablation\full_framework\gpt-4o\seed-11\observability.db,completed

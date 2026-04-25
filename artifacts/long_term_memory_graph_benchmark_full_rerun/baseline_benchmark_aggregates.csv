@@ -1,6 +1,0 @@
-baseline,capsule_recall@k,subgraph_relevance,relation_hit_rate,returned_memory_usefulness,stale_node_injection_rate,conflict_resolution_success,latency_ms,avg_returned_nodes,avg_raw_returned_nodes,avg_returned_edges
-no_long_term_memory,0.0,0.0,0.0,0.0,0.0,0.0,0.0002,0,0,0
-vector_memory,0.125,0.0833,0.0,0.0813,0.1528,0.3333,1.5979,6,12,0
-flat_summary_memory,1.0,0.8333,0.0,0.75,0.0,1.0,1.7513,6,12,0
-naive_graph_memory,0.3958,0.2639,0.0093,0.2625,0.375,1.0,7.5805,6,12,12
-clarks_nutcracker_graph,0.6667,0.4444,0.0324,0.4382,0.0,0.9167,14.7057,6,12,12

@@ -1,3 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq5-formal-001,agentorch_failure_suite,AgentOrch Failure Suite,qwen-plus,7,82719938-f9ed-4a33-8780-b6adeae1e397,rq5_observability-rq5-formal-001-rep-0,experiments\results_formal\rq5_observability\formal_benchmark\full_framework\qwen-plus\seed-7\observability.db,completed
-rq5-formal-002,agentorch_failure_suite,AgentOrch Failure Suite,qwen-plus,7,0311c17e-34c7-4569-bfd9-a9001a37f97c,rq5_observability-rq5-formal-002-rep-0,experiments\results_formal\rq5_observability\formal_benchmark\full_framework\qwen-plus\seed-7\observability.db,completed

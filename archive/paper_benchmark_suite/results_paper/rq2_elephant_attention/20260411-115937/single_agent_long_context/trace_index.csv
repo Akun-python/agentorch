@@ -1,3 +1,0 @@
-task_id,benchmark_id,benchmark_name,run_id,thread_id,sqlite_path,status
-rq2-hotpotqa-local-001,hotpotqa,HotpotQA,eed04301-5b75-426a-a17c-c62e5df33220,rq2_elephant_attention-rq2-hotpotqa-local-001-rep-0,experiments\results_paper\rq2_elephant_attention\20260411-115937\single_agent_long_context\observability.db,completed
-rq2-musique-local-001,musique,MuSiQue,1558651a-72f0-4078-9f7d-d17fe6f4dccf,rq2_elephant_attention-rq2-musique-local-001-rep-0,experiments\results_paper\rq2_elephant_attention\20260411-115937\single_agent_long_context\observability.db,completed

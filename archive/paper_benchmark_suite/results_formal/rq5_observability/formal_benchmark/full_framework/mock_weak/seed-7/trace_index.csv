@@ -1,5 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq5-formal-001,agentorch_failure_suite,AgentOrch Failure Suite,mock:weak,7,786b3e59-6a5c-4c4a-8421-15213c9a569a,rq5_observability-rq5-formal-001-rep-0,experiments\results_formal\rq5_observability\formal_benchmark\full_framework\mock_weak\seed-7\observability.db,completed
-rq5-formal-002,agentorch_failure_suite,AgentOrch Failure Suite,mock:weak,7,10cd5d10-aeee-46d0-bfa1-d73408d95c52,rq5_observability-rq5-formal-002-rep-0,experiments\results_formal\rq5_observability\formal_benchmark\full_framework\mock_weak\seed-7\observability.db,completed
-rq5-formal-003,agentorch_failure_suite,AgentOrch Failure Suite,mock:weak,7,a0c1c088-5e5a-4432-aa68-6be1c00cefcf,rq5_observability-rq5-formal-003-rep-0,experiments\results_formal\rq5_observability\formal_benchmark\full_framework\mock_weak\seed-7\observability.db,completed
-rq5-formal-004,agentorch_failure_suite,AgentOrch Failure Suite,mock:weak,7,e129628e-2100-49f1-8561-fe80d2ab312e,rq5_observability-rq5-formal-004-rep-0,experiments\results_formal\rq5_observability\formal_benchmark\full_framework\mock_weak\seed-7\observability.db,completed

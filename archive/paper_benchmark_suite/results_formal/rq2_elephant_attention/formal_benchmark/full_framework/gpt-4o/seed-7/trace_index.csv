@@ -1,3 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq2-hotpot-formal-001,hotpotqa,HotpotQA,gpt-4o,7,92bba71c-c701-4f2a-896b-4854ebde1870,rq2_elephant_attention-rq2-hotpot-formal-001-rep-0,experiments\results_formal\rq2_elephant_attention\formal_benchmark\full_framework\gpt-4o\seed-7\observability.db,completed
-rq2-hotpot-formal-002,hotpotqa,HotpotQA,gpt-4o,7,436d6912-501c-4394-8e79-f9450e4cc4f6,rq2_elephant_attention-rq2-hotpot-formal-002-rep-0,experiments\results_formal\rq2_elephant_attention\formal_benchmark\full_framework\gpt-4o\seed-7\observability.db,completed

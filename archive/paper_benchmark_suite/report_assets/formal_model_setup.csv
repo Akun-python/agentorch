@@ -1,5 +1,0 @@
-model_name,runs,avg_tokens,avg_latency_ms
-deepseek-chat,16,0.0,186901.8125
-gpt-4o,62,1730.2097,11512.1129
-gpt-4o-mini,50,2033.66,9087.1
-qwen-plus,42,2703.5952,12738.5

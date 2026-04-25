@@ -1,5 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq2-hotpot-formal-001,hotpotqa,HotpotQA,gpt-4o,11,24dc942d-75f8-40b7-b2a8-f7a01b89043a,rq2_elephant_attention-rq2-hotpot-formal-001-rep-0,experiments\results_formal\rq2_elephant_attention\formal_ablation\single_agent_long_context\gpt-4o\seed-11\observability.db,completed
-rq2-hotpot-formal-002,hotpotqa,HotpotQA,gpt-4o,11,2f5b4748-d56d-40c2-af17-708c036e008e,rq2_elephant_attention-rq2-hotpot-formal-002-rep-0,experiments\results_formal\rq2_elephant_attention\formal_ablation\single_agent_long_context\gpt-4o\seed-11\observability.db,completed
-rq2-musique-formal-001,musique,MuSiQue,gpt-4o,11,6f63020a-a592-40d1-a8b9-d67e12aa8c8f,rq2_elephant_attention-rq2-musique-formal-001-rep-0,experiments\results_formal\rq2_elephant_attention\formal_ablation\single_agent_long_context\gpt-4o\seed-11\observability.db,completed
-rq2-musique-formal-002,musique,MuSiQue,gpt-4o,11,9767342a-06bd-4346-ae1e-ebe844073f8b,rq2_elephant_attention-rq2-musique-formal-002-rep-0,experiments\results_formal\rq2_elephant_attention\formal_ablation\single_agent_long_context\gpt-4o\seed-11\observability.db,completed

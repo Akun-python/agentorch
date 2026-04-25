@@ -1,7 +1,0 @@
-task_id,benchmark_id,benchmark_name,model_name,seed,run_id,thread_id,sqlite_path,status
-rq1-gaia-formal-001,gaia,GAIA,mock:weak,11,81d5f8e8-f2e1-4ad6-8a95-a66ec4ebcfa1,rq1_long_horizon_tasks-rq1-gaia-formal-001-rep-0,,completed
-rq1-gaia-formal-002,gaia,GAIA,mock:weak,11,fe71f67f-6c7c-4e73-92a9-1b2896b69e7f,rq1_long_horizon_tasks-rq1-gaia-formal-002-rep-0,,completed
-rq1-hotpot-formal-001,hotpotqa,HotpotQA,mock:weak,11,95e886ec-d312-403c-b30c-998ac091c3f1,rq1_long_horizon_tasks-rq1-hotpot-formal-001-rep-0,,completed
-rq1-hotpot-formal-002,hotpotqa,HotpotQA,mock:weak,11,ae452af5-d7ed-428a-a4ff-6fdc0a7ed83b,rq1_long_horizon_tasks-rq1-hotpot-formal-002-rep-0,,completed
-rq1-musique-formal-001,musique,MuSiQue,mock:weak,11,61018e99-feab-480a-828e-80f7e0859ab9,rq1_long_horizon_tasks-rq1-musique-formal-001-rep-0,,completed
-rq1-musique-formal-002,musique,MuSiQue,mock:weak,11,a09f6205-a3df-41c4-931c-a9ea2946c979,rq1_long_horizon_tasks-rq1-musique-formal-002-rep-0,,completed

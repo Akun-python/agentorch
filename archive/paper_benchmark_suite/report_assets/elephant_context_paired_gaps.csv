@@ -1,3 +1,0 @@
-baseline,context_precision_gap,precision_bootstrap_ci95,context_recall_gap,key_evidence_retention_gap,prompt_redundancy_gap,sign_test_p,paired_n
-Multi-Agent No Elephant,0.33,"[0.33, 0.33]",0.00,0.00,0.25,0.000,34
-Single Agent Long Context,0.50,"[0.50, 0.50]",0.50,0.50,0.00,0.000,28

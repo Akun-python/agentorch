@@ -1,2 +1,0 @@
-task_id,run_id,thread_id,sqlite_path,status
-rq1-local-001,666ddb12-0ddb-469f-924c-a850acb8e5ee,rq1_long_horizon_tasks-rq1-local-001-rep-0,experiments\results_paper\rq1_long_horizon_tasks\20260411-012229\multi_agent_no_elephant\observability.db,completed

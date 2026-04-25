@@ -1,3 +1,0 @@
-task_id,run_id,thread_id,sqlite_path,status
-rq3-memory-001,fc8c56c4-9db4-4074-9a8f-f59a663ca377,rq3_seagull_memory-rq3-memory-001-rep-0,experiments\results_paper\rq3_seagull_memory\20260411-012232\multi_agent_naive_memory\observability.db,completed
-rq3-memory-002,bf09f9c5-b5be-460b-98a2-f2f25e4d03d0,rq3_seagull_memory-rq3-memory-002-rep-0,experiments\results_paper\rq3_seagull_memory\20260411-012232\multi_agent_naive_memory\observability.db,completed

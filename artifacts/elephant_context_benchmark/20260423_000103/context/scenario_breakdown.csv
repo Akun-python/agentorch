@@ -1,6 +1,0 @@
-family,variant,budget,run_count,task_success,context_precision,context_recall,key_evidence_retention_rate,stage_focus_hit_rate,redundancy_ratio,budget_utilization,compaction_gain
-delegation handoff continuity,elephant_full,12000,1,1.0,0.285714,1.0,1.0,1.0,0.25,1.0,0.361126
-distractor-heavy evidence competition,elephant_full,12000,1,0.0,0.142857,0.5,1.0,0.5,0.25,1.0,0.588617
-early critical rule preservation,elephant_full,12000,1,1.0,0.285714,1.0,1.0,1.0,0.25,1.0,0.337465
-synthesis under noisy late chatter,elephant_full,12000,1,1.0,0.142857,0.333333,0.5,0.5,0.25,1.0,0.533144
-tool result versus conversation conflict,elephant_full,12000,1,1.0,0.142857,0.5,0.0,0.0,0.25,1.0,0.342652
