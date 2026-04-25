@@ -29,3 +29,22 @@ notebooks/*
 !notebooks/.gitkeep
 !notebooks/resources/
 !notebooks/resources/*.svg
+
+# 用户指定的本地 LaTeX 编译产物和研究报告草稿
+/cas-sc-template-zh.abs
+/cas-sc-template-zh.aux
+/cas-sc-template-zh.fdb_latexmk
+/cas-sc-template-zh.fls
+/cas-sc-template-zh.log
+/cas-sc-template-zh.out
+/cas-sc-template-zh.pdf
+/cas-sc-template-zh.synctex.gz
+/cas-sc-template-zh.tex
+/cas-sc-template.abs
+/cas-sc-template.aux
+/cas-sc-template.log
+/cas-sc-template.out
+/cas-sc-template.pdf
+/cas-sc-template.synctex.gz
+/cas-sc-template.tex
+/deep-research-report.md
