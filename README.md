@@ -1,6 +1,10 @@
 <h1 align="center">masarch / agentorch</h1>
 
 <p align="center">
+  <img src="https://raw.githubusercontent.com/Akun-python/agentorch/main/resource/agentorch-icon.svg" alt="agentorch icon" width="110">
+</p>
+
+<p align="center">
   <a href="https://github.com/Akun-python/agentorch/blob/main/README.md">English</a> |
   <a href="https://github.com/Akun-python/agentorch/blob/main/README.zh-CN.md">简体中文</a> |
   <a href="https://github.com/Akun-python/agentorch/blob/main/README.zh-TW.md">繁體中文</a> |
@@ -22,11 +26,15 @@ It is built for teams that need explicit runtime control, not hidden prompt pipe
 
 If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
 
-Resources:
+### Architecture Overview
 
-- Architecture overview: <https://github.com/Akun-python/agentorch/blob/main/resource/architecture_overview.svg>
-- Runtime flow: <https://github.com/Akun-python/agentorch/blob/main/resource/runtime_flow.svg>
-- Source repository: <https://github.com/Akun-python/agentorch>
+![agentorch Architecture Overview](https://raw.githubusercontent.com/Akun-python/agentorch/main/resource/architecture_overview.svg)
+
+### Runtime Flow
+
+![agentorch Runtime Flow](https://raw.githubusercontent.com/Akun-python/agentorch/main/resource/runtime_flow.svg)
+
+Source repository: <https://github.com/Akun-python/agentorch>
 
 ## WHY
 
