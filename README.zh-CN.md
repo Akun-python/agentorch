@@ -1,29 +1,23 @@
 <h1 align="center">agentorch</h1>
 
 <p align="center">
-  <a href="README.md">English README</a>
+  <a href="README.md">English</a> |
+  <a href="README.zh-CN.md">简体中文</a> |
+  <a href="README.zh-TW.md">繁體中文</a> |
+  <a href="README.fr.md">Français</a> |
+  <a href="README.ja.md">日本語</a>
 </p>
 
 <p align="center">
-  <img alt="Agent Orchestration" src="https://img.shields.io/badge/Agent-Orchestration-2563eb?style=flat-square">
-  <img alt="Multi-Agent" src="https://img.shields.io/badge/Focus-Multi--Agent-0d9488?style=flat-square">
-  <img alt="Workflow DAG" src="https://img.shields.io/badge/Capability-Workflow--DAG-7c3aed?style=flat-square">
-  <img alt="RAG" src="https://img.shields.io/badge/Capability-RAG-f97316?style=flat-square">
+  <img alt="Version v0.1.0" src="https://img.shields.io/badge/version-v0.1.0-2563eb?style=flat-square">
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/Akun-python/agentorch/total?style=flat-square">
+  <img alt="License MIT" src="https://img.shields.io/github/license/Akun-python/agentorch?style=flat-square">
 </p>
 
 `agentorch` 是一个代码优先、异步优先的 Python 智能体编排框架，用来构建可编程的 agent 系统。它提供结构化工具、工作流、RAG、记忆、推理策略、沙箱执行和多智能体委派能力。
 
 ![Architecture Overview](resource/architecture_overview.svg)
-
-## 名称含义：`Agent Orch` = `Agent Orchestration` 🎼
-
-`agentorch` 来自 **Agent Orch**，即 **Agent Orchestration（智能体编排）**：
-
-- `Agent`：一个或多个具备明确职责的智能体角色
-- `Orch`：编排与协同，包括路由、约束、记忆、权限和生命周期管理
-- `agentorch`：让多智能体系统在 Python 中被显式装配、可观察、可调试，而不是隐藏在提示词链里
-
-一句话概括：当你需要的不只是“一个助手”，而是“一个可控的智能体系统”，`agentorch` 就是这个编排层。✅
 
 ## 为什么使用 agentorch
 
@@ -194,7 +188,6 @@ $env:OPENAI_API_KEY="sk-xxxx"
 ```python
 from agentorch import create_agent
 
-
 def main() -> None:
     agent = create_agent(
         model="gpt-4.1-mini",
@@ -214,7 +207,6 @@ def main() -> None:
         print(result.output_text)
     finally:
         agent.close()
-
 
 if __name__ == "__main__":
     main()
@@ -260,16 +252,13 @@ from pydantic import BaseModel
 
 from agentorch import ToolRegistry, create_agent, tool
 
-
 class AddInput(BaseModel):
     a: int
     b: int
 
-
 @tool(description="Add two integers together.")
 async def add_numbers(input: AddInput):
     return {"sum": input.a + input.b}
-
 
 agent = create_agent(
     model="gpt-4.1-mini",
@@ -466,7 +455,6 @@ from agentorch import (
 )
 from agentorch.config import ObservabilityConfig, RuntimeConfig
 from agentorch.sandbox import SandboxManager, SandboxPolicy
-
 
 workspace = Path.cwd()
 sandbox = SandboxManager(
