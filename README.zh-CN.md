@@ -2,9 +2,34 @@
 
 [English README](README.md)
 
+![GitHub stars](https://img.shields.io/github/stars/Akun-python/agentorch?style=flat-square&logo=github)
+![GitHub forks](https://img.shields.io/github/forks/Akun-python/agentorch?style=flat-square&logo=github)
+![License](https://img.shields.io/github/license/Akun-python/agentorch?style=flat-square)
+![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+![异步优先](https://img.shields.io/badge/runtime-async--first-0ea5e9?style=flat-square)
+
+![标签 多智能体](https://img.shields.io/badge/tag-multi--agent-2563eb?style=flat-square)
+![标签 工作流DAG](https://img.shields.io/badge/tag-workflow--dag-0d9488?style=flat-square)
+![标签 RAG](https://img.shields.io/badge/tag-rag-7c3aed?style=flat-square)
+![标签 推理策略](https://img.shields.io/badge/tag-reasoning-f97316?style=flat-square)
+![标签 记忆MGCM](https://img.shields.io/badge/tag-memory--mgcm-059669?style=flat-square)
+![标签 工具调用](https://img.shields.io/badge/tag-tool--calling-b45309?style=flat-square)
+![标签 沙箱](https://img.shields.io/badge/tag-sandbox-475569?style=flat-square)
+![标签 OpenAI兼容](https://img.shields.io/badge/tag-openai--compatible-111827?style=flat-square)
+
 `agentorch` 是一个代码优先、异步优先的 Python 智能体编排框架，用来构建可编程的 agent 系统。它提供结构化工具、工作流、RAG、记忆、推理策略、沙箱执行和多智能体委派能力。
 
 ![Architecture Overview](resource/architecture_overview.svg)
+
+## 名称含义：`Agent Orch` = `Agent Orchestration` 🎼
+
+`agentorch` 来自 **Agent Orch**，即 **Agent Orchestration（智能体编排）**：
+
+- `Agent`：一个或多个具备明确职责的智能体角色
+- `Orch`：编排与协同，包括路由、约束、记忆、权限和生命周期管理
+- `agentorch`：让多智能体系统在 Python 中被显式装配、可观察、可调试，而不是隐藏在提示词链里
+
+一句话概括：当你需要的不只是“一个助手”，而是“一个可控的智能体系统”，`agentorch` 就是这个编排层。✅
 
 ## 为什么使用 agentorch
 
@@ -65,17 +90,63 @@
 
 ## 安装
 
-本地开发：
+### 环境要求
+
+- Python `3.10+`
+- `pip` 或 `uv`
+- 推荐使用虚拟环境（`venv` / `conda` / `uv`）
+
+### 安装方式（可直接复制）
+
+1. 本地源码开发安装（推荐贡献者）：
 
 ```bash
 pip install -e .
 ```
 
-推荐 Python 版本：
+2. 直接从 GitHub 安装：
 
-```text
-Python 3.10+
+```bash
+pip install "git+https://github.com/Akun-python/agentorch.git"
 ```
+
+3. 使用 `uv` 安装（解析更快）：
+
+```bash
+uv pip install -e .
+```
+
+4. 安装可选 `neo4j` 扩展：
+
+```bash
+pip install -e ".[neo4j]"
+```
+
+### 一键环境启动
+
+```bash
+python -m venv .venv
+# Windows PowerShell
+. .venv/Scripts/Activate.ps1
+# macOS/Linux
+# source .venv/bin/activate
+pip install -U pip
+pip install -e .
+```
+
+### 安装验证
+
+```bash
+python -c "import agentorch; print(agentorch.__version__ if hasattr(agentorch, '__version__') else 'agentorch imported')"
+```
+
+出现输出即表示安装成功。🎉
+
+### 常见安装问题
+
+- 启动时报 `TypeError: ... dict[str, Any]`：通常是 Python 版本低于 3.10。
+- `pip install -e .` 失败：先执行 `pip install -U pip setuptools wheel` 再安装。
+- 机器上有多个 Python：建议显式写 `py -3.10 -m pip install -e .`（Windows）。
 
 ## 环境变量
 
@@ -113,6 +184,59 @@ OPENAI_TTS_VOICE=your-voice
 ## 快速开始
 
 如果你想快速区分 facade 推荐示例和底层 runtime 装配示例，可先看 [`examples/README.md`](examples/README.md)。
+
+### 0. 5 分钟跑通（详细版）
+
+如果你希望先确认“从安装到运行”链路没问题，可以先跑这个最小闭环。
+
+1. 设置环境变量：
+
+```powershell
+$env:OPENAI_API_KEY="sk-xxxx"
+```
+
+2. 创建 `quickstart.py`：
+
+```python
+from agentorch import create_agent
+
+
+def main() -> None:
+    agent = create_agent(
+        model="gpt-4.1-mini",
+        system_prompt=(
+            "你是一个务实的工程助手。"
+            "回答需要简洁、结构化、可执行。"
+        ),
+        reasoning="react",
+        name="hello-agentorch",
+    )
+    try:
+        result = agent.run_sync(
+            "请用 3 个要点解释 Agent Orch（Agent Orchestration）。",
+            thread_id="hello-001",
+        )
+        print("=== OUTPUT ===")
+        print(result.output_text)
+    finally:
+        agent.close()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+3. 运行：
+
+```bash
+python quickstart.py
+```
+
+4. 预期结果：
+
+- 启动无异常
+- 终端能输出模型回答
+- 进程结束时 agent 正常关闭
 
 ### 1. 最小 Agent
 
@@ -331,6 +455,83 @@ manager = EvolutionManager(
     ),
 )
 ```
+
+### 11. 端到端生产风格启动模板 🧪
+
+下面这个脚本把常用工程能力串在一起：工具集、RAG、可观测性、上下文策略和记忆策略。
+
+```python
+from pathlib import Path
+
+from agentorch import (
+    ContextPolicy,
+    MemoryPolicy,
+    RagStrategyConfig,
+    ToolRegistry,
+    create_agent,
+)
+from agentorch.config import ObservabilityConfig, RuntimeConfig
+from agentorch.sandbox import SandboxManager, SandboxPolicy
+
+
+workspace = Path.cwd()
+sandbox = SandboxManager(
+    policy=SandboxPolicy(
+        allowed_paths=[workspace],
+        command_allowlist=["python", "git", "powershell", "cmd"],
+        allow_shell=False,
+        timeout=20.0,
+    )
+)
+
+tools = ToolRegistry.with_bundles(
+    workspace_root=workspace,
+    sandbox=sandbox,
+    include_filesystem=True,
+    include_execution=True,
+    include_git=True,
+    include_web=False,
+)
+
+agent = create_agent(
+    model="gpt-4.1-mini",
+    name="engineering-assistant",
+    system_prompt=(
+        "你是一个严谨的软件工程助手。"
+        "在需要时使用工具，输出要点清晰、结论可执行。"
+    ),
+    tools=tools,
+    knowledge_paths=["README.md"],
+    enable_rag=True,
+    rag=RagStrategyConfig.for_hybrid(max_steps=3),
+    context_policy=ContextPolicy.evidence_friendly(),
+    memory_policy=MemoryPolicy.long_horizon(),
+    runtime_config=RuntimeConfig.agent(
+        observability=ObservabilityConfig(
+            enabled=True,
+            sqlite_path=".agentorch/observability.db",
+            console_mode="important_only",
+        )
+    ),
+)
+
+try:
+    result = agent.run_sync(
+        "请总结项目架构，并给出 3 个工程风险及其证据。",
+        thread_id="prod-starter-001",
+    )
+    print(result.output_text)
+finally:
+    agent.close()
+```
+
+这个模板的价值：
+
+- `ToolRegistry.with_bundles(...)`：快速得到可用的工程工具面
+- `SandboxManager`：让执行能力可控且可审计
+- `RagStrategyConfig.for_hybrid(...)`：兼顾召回率与证据精度
+- `ObservabilityConfig`：记录运行事件，便于排障和成本追踪
+- `context_policy` + `memory_policy`：让长会话行为更稳定
 
 ## Runtime 装配建议
 

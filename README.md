@@ -10,6 +10,21 @@
 
 [中文文档 / Chinese README](README.zh-CN.md)
 
+![GitHub stars](https://img.shields.io/github/stars/Akun-python/agentorch?style=flat-square&logo=github)
+![GitHub forks](https://img.shields.io/github/forks/Akun-python/agentorch?style=flat-square&logo=github)
+![License](https://img.shields.io/github/license/Akun-python/agentorch?style=flat-square)
+![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+![Async First](https://img.shields.io/badge/runtime-async--first-0ea5e9?style=flat-square)
+
+![Tag Multi-Agent](https://img.shields.io/badge/tag-multi--agent-2563eb?style=flat-square)
+![Tag Workflow DAG](https://img.shields.io/badge/tag-workflow--dag-0d9488?style=flat-square)
+![Tag RAG](https://img.shields.io/badge/tag-rag-7c3aed?style=flat-square)
+![Tag Reasoning](https://img.shields.io/badge/tag-reasoning-f97316?style=flat-square)
+![Tag Memory MGCM](https://img.shields.io/badge/tag-memory--mgcm-059669?style=flat-square)
+![Tag Tool Calling](https://img.shields.io/badge/tag-tool--calling-b45309?style=flat-square)
+![Tag Sandbox](https://img.shields.io/badge/tag-sandbox-475569?style=flat-square)
+![Tag OpenAI Compatible](https://img.shields.io/badge/tag-openai--compatible-111827?style=flat-square)
+
 `agentorch` is a code-first framework for building programmable agent systems with explicit runtime assembly, structured tools, workflow DAGs, retrieval, long-term memory, reasoning strategies, human feedback, observability, and supervisor-based multi-agent coordination.
 
 The project is designed for systems where one assistant is not enough: specialist agents need scoped knowledge, shared memory, traceable handoffs, controllable tool access, and a coordinator that can route work without turning the codebase into a hidden prompt-only pipeline.
