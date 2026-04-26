@@ -1,4 +1,4 @@
-# agentorch
+# agentorch 🤖🧠
 
 <p align="center">
   <img src="resource/agentorch-icon.svg" alt="agentorch multi-agent framework icon" width="120">
@@ -18,7 +18,17 @@ All images referenced by this README live in [`resource/`](resource/).
 
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
-## Why agentorch
+## Name Meaning: `Agent Orch` = `Agent Orchestration` 🎼
+
+`agentorch` comes from **Agent Orch**, short for **Agent Orchestration**:
+
+- `Agent`: one or more model-powered workers with explicit responsibilities.
+- `Orch`: orchestration, meaning coordination, routing, constraints, memory, and lifecycle control.
+- `agentorch`: an orchestration runtime where agent systems are assembled in Python as inspectable software artifacts, not opaque prompt chains.
+
+In short: if your problem needs "one brain + tools", many frameworks can work. If your problem needs "a team of specialists + policy + memory + traceability", `agentorch` is designed for that path. ✅
+
+## Why agentorch 🧭
 
 Many agent frameworks make one of two tradeoffs: they hide orchestration inside a prompt-heavy abstraction, or they expose so many knobs that a real system becomes hard to reason about. `agentorch` takes a different route:
 
@@ -37,7 +47,7 @@ The framework is useful for:
 - Workflow systems that need explicit DAG execution rather than one monolithic prompt.
 - Evaluation loops that search over reasoning, RAG, workflow, and runtime configurations.
 
-## What It Supports
+## What It Supports 🧩
 
 - **Facade-first construction** with `create_agent(...)`, `create_multi_agent(...)`, `AgentDesign`, `RoleDesign`, and `TeamDesign`.
 - **Multi-agent orchestration** with `AgentRegistry`, `Supervisor`, `Coordinator`, `TaskPacket`, handoffs, scoped capabilities, shared memory, and shared knowledge.
@@ -93,19 +103,13 @@ Drop to core assembly only when you need lower-level control:
 
 The stable top-level import surface is intentionally curated, while compatibility exports remain available for older callers.
 
-## Installation
+## Installation 📦
 
-For local development:
+### Requirements
 
-```bash
-pip install -e .
-```
-
-Supported Python:
-
-```text
-Python 3.10+
-```
+- Python `3.10+`
+- `pip` or `uv` package installer
+- recommended: a virtual environment (`venv`, `conda`, or `uv` managed)
 
 Core runtime dependencies are intentionally small:
 
@@ -122,7 +126,59 @@ Optional capabilities may need extra packages depending on the feature:
 - DOCX parsing: `python-docx` improves parsing, with XML fallback available
 - Long-term graph experiments: install the `neo4j` optional dependency when using Neo4j-backed paths
 
-## Environment Setup
+### Install Methods (Copy-Paste Ready)
+
+1. Install from local source for development (recommended for contributors):
+
+```bash
+pip install -e .
+```
+
+2. Install from GitHub directly:
+
+```bash
+pip install "git+https://github.com/Akun-python/agentorch.git"
+```
+
+3. Install with `uv` (faster resolver):
+
+```bash
+uv pip install -e .
+```
+
+4. Install optional Neo4j extras:
+
+```bash
+pip install -e ".[neo4j]"
+```
+
+### Quick Environment Bootstrap
+
+```bash
+python -m venv .venv
+# Windows PowerShell
+. .venv/Scripts/Activate.ps1
+# macOS/Linux
+# source .venv/bin/activate
+pip install -U pip
+pip install -e .
+```
+
+### Verify Installation
+
+```bash
+python -c "import agentorch; print(agentorch.__version__ if hasattr(agentorch, '__version__') else 'agentorch imported')"
+```
+
+If this prints successfully, installation is complete. 🎉
+
+### Common Installation Issues
+
+- `TypeError: ... dict[str, Any]` on startup: you are likely using Python `<3.10`. Run with `py -3.10` (Windows) or switch interpreter.
+- `pip install -e .` fails due to old pip: run `pip install -U pip setuptools wheel` and try again.
+- environment has multiple Python versions: use explicit interpreter commands like `py -3.10 -m pip install -e .`.
+
+## Environment Setup 🔐
 
 `agentorch` keeps configuration at a standard library boundary:
 
@@ -169,9 +225,61 @@ from agentorch.config import initialize_environment
 initialize_environment(".env", overwrite=False)
 ```
 
-## Quick Start
+## Quick Start ⚡
 
 For a curated map of facade-first examples versus lower-level runtime examples, see [`examples/README.md`](examples/README.md).
+
+### 0. First 5-Minute Run (Detailed)
+
+Use this when you want one end-to-end "it works" script before exploring advanced features.
+
+1. Set environment variable:
+
+```powershell
+$env:OPENAI_API_KEY="sk-xxxx"
+```
+
+2. Create `quickstart.py`:
+
+```python
+from agentorch import create_agent
+
+
+def main() -> None:
+    agent = create_agent(
+        model="gpt-4.1-mini",
+        system_prompt=(
+            "You are a practical engineering assistant. "
+            "Return concise answers with clear structure."
+        ),
+        reasoning="react",
+        name="hello-agentorch",
+    )
+    try:
+        result = agent.run_sync(
+            "Explain Agent Orch (Agent Orchestration) in 3 bullet points.",
+            thread_id="hello-001",
+        )
+        print("=== OUTPUT ===")
+        print(result.output_text)
+    finally:
+        agent.close()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+3. Run it:
+
+```bash
+python quickstart.py
+```
+
+4. Expected result:
+- No exceptions during startup
+- A valid assistant response in terminal output
+- Thread-scoped run finished with clean shutdown
 
 ### 1. Minimal Agent
 
@@ -537,7 +645,84 @@ print(parsed.parsed.action, parsed.parsed.confidence)
 agent.close()
 ```
 
-## Runtime Assembly Guide
+### 11. End-to-End Production-Style Starter 🧪
+
+The following script combines practical defaults: tool bundles, RAG, observability, and explicit runtime policies.
+
+```python
+from pathlib import Path
+
+from agentorch import (
+    ContextPolicy,
+    MemoryPolicy,
+    RagStrategyConfig,
+    ToolRegistry,
+    create_agent,
+)
+from agentorch.config import ObservabilityConfig, RuntimeConfig
+from agentorch.sandbox import SandboxManager, SandboxPolicy
+
+
+workspace = Path.cwd()
+sandbox = SandboxManager(
+    policy=SandboxPolicy(
+        allowed_paths=[workspace],
+        command_allowlist=["python", "git", "powershell", "cmd"],
+        allow_shell=False,
+        timeout=20.0,
+    )
+)
+
+tools = ToolRegistry.with_bundles(
+    workspace_root=workspace,
+    sandbox=sandbox,
+    include_filesystem=True,
+    include_execution=True,
+    include_git=True,
+    include_web=False,
+)
+
+agent = create_agent(
+    model="gpt-4.1-mini",
+    name="engineering-assistant",
+    system_prompt=(
+        "You are a careful software engineering assistant. "
+        "Use tools when needed. Keep answers concise and actionable."
+    ),
+    tools=tools,
+    knowledge_paths=["README.md"],
+    enable_rag=True,
+    rag=RagStrategyConfig.for_hybrid(max_steps=3),
+    context_policy=ContextPolicy.evidence_friendly(),
+    memory_policy=MemoryPolicy.long_horizon(),
+    runtime_config=RuntimeConfig.agent(
+        observability=ObservabilityConfig(
+            enabled=True,
+            sqlite_path=".agentorch/observability.db",
+            console_mode="important_only",
+        )
+    ),
+)
+
+try:
+    result = agent.run_sync(
+        "Summarize the project architecture and list 3 engineering risks with evidence.",
+        thread_id="prod-starter-001",
+    )
+    print(result.output_text)
+finally:
+    agent.close()
+```
+
+Why this layout is useful:
+
+- `ToolRegistry.with_bundles(...)`: quickly enables a realistic operator toolset.
+- `SandboxManager`: keeps command execution constrained and auditable.
+- `RagStrategyConfig.for_hybrid(...)`: balances recall and precision for mixed documentation.
+- `ObservabilityConfig`: writes trace events for debugging and cost/performance review.
+- explicit `context_policy` and `memory_policy`: keeps behavior stable across long sessions.
+
+## Runtime Assembly Guide 🧱
 
 The runtime is intentionally layered. A typical agent or team assembly resolves in this order:
 
