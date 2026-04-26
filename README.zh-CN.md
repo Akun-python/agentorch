@@ -21,127 +21,111 @@
   <img alt="license MIT" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square">
 </p>
 
-`agentorch` ????????????? Python ?????????
+`agentorch` 是一个代码优先、异步优先的 Python 多智能体编排框架。
 
-It is built for teams that need explicit runtime control, not hidden prompt pipelines.
+它面向“需要真实工程边界”的系统，而不是只靠提示词拼接的黑盒流程。
 
-If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
+当你的场景需要工具调用、检索证据、记忆治理、工作流和多角色协作同时存在时，`agentorch` 提供了明确可控的运行时模型。
 
 ![Agent Orch Commander Diagram](resource/agent_orch_commander.svg)
 
-This diagram shows the core idea: **Agent Orch = Agent Orchestration**, where a **Commander / 总指挥** coordinates specialist agents and shared runtime capabilities.
+这张图表达核心含义：**Agent Orch = Agent Orchestration（智能体编排）**。通过一个 **Commander / 总指挥** 统一协调多个专家智能体与共享能力层。
 
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
 
-### Why This Project Exists 🎯
+### 为什么做这个框架 🎯
 
-Many projects hit a wall after the "single assistant + one prompt" phase.
+很多项目在“一个助手 + 一段提示词”阶段跑得很快，但一旦进入工程化就容易失控：
 
-The moment you need specialist roles, constrained tools, repeatable state, and observable handoffs, ad-hoc prompt glue becomes difficult to reason about.
+- 角色越来越多，但职责边界不清
+- 工具能力越来越强，但安全约束不成体系
+- 上下文越来越长，但状态不可追踪
+- 检索越来越复杂，但证据链不可复核
 
-`agentorch` is designed to keep these concerns explicit:
+`agentorch` 的目标是把这些问题从“隐式 prompt 技巧”变成“显式软件结构”。
 
-- model adapter choices
-- tool exposure and safety boundaries
-- retrieval strategy and evidence mounting
-- memory retention and promotion
-- workflow execution order
-- multi-agent coordination and delegation
+### 为什么对工程团队有价值 🧭
 
-### Why It Helps Engineering Teams 🧭
+- 运行时装配可导出、可检查、可调试
+- 策略边界可配置、可版本化
+- 能从单智能体平滑升级为多智能体协作
+- 可以对推理/RAG/工作流策略做持续迭代
 
-- You can inspect system assembly with exported blueprint/config.
-- You can enforce policy boundaries with typed configs.
-- You can evolve behavior (reasoning/RAG/workflow) without rewriting everything.
-- You can test behavior through code-level contracts.
+### 为什么对研究团队有价值 🔬
 
-### Why It Helps Research Teams 🔬
+- 可切换推理策略（如 `react`、`plan_execute`）
+- 可比较不同 RAG 与上下文策略组合
+- 可做进化搜索与策略实验
+- 能保留多轮任务中的结构化状态
 
-- Swappable reasoning modes (`react`, `plan_execute`, etc.)
-- Search/evolution support for strategy comparison
-- Source-aware RAG flow and evidence-oriented outputs
-- Long-horizon memory patterns for iterative tasks
+### 典型适用场景
 
-### Typical Scenarios
-
-- multi-agent coding assistants with bounded filesystem/shell access
-- research copilots that must cite retrieved sources
-- workflow-driven automation that needs deterministic node execution
-- long-running assistants with thread/workspace memory
+- 代码助手：需要文件、命令、Git、审查协同
+- 知识助手：需要检索证据并保持可解释输出
+- 自动化流程：需要 DAG 节点级控制与审计
+- 长程任务：需要线程/工作区/跨轮记忆复用
 
 ## WHAT
 
-### Core Facade API
+### 核心入口 API
 
 - `create_agent(...)`
 - `create_multi_agent(...)`
 
-These are the recommended entrypoints for most users.
+默认建议从这两个入口开始，不必先下沉到底层装配。
 
-### Key Runtime Building Blocks 🧩
+### 关键能力模块 🧩
 
-- model adapters (`OpenAIModel`, compatible HTTP adapters)
-- tool registry and bundles
-- sandbox manager and policy
-- knowledge base and RAG strategy
-- memory manager and memory policy
-- workflow DAG builder and runner
-- observability hooks and SQLite event store
+- 模型适配层（OpenAI 与兼容接口）
+- 工具注册与工具包（filesystem / execution / git / web / media）
+- 沙箱执行与权限策略
+- 知识库与 RAG 策略
+- 记忆管理与记忆治理
+- 工作流 DAG 编排与执行
+- 可观测性事件与持久化追踪
 
-### Built-In Capability Surface
+### 编排在这里具体指什么
 
-- structured tool calling via Pydantic I/O
-- filesystem / execution / git / web / media bundles
-- multi-format ingestion (`md`, `txt`, `pdf`, `docx`, code artifacts)
-- reasoning strategy selection
-- human feedback and resumable flows
-- extension hooks for lifecycle interception
+在 `agentorch` 中，编排不是一个模糊概念，而是有明确对象与边界：
 
-### What "Orchestration" Means Here
+- 总指挥负责路由与委派
+- 任务包是可追踪的执行单元
+- 交接记录是显式结构，不是隐式聊天
+- 共享状态受策略约束
+- 工具可见性和权限可控
 
-In `agentorch`, orchestration is not a marketing word.
-
-It means each runtime concern has a concrete type and place in assembly:
-
-- coordinator policies decide routing behavior
-- supervisor plans are inspectable objects
-- handoffs and task packets are explicit records
-- memory scopes and shared state are controlled by policy
-
-### Compatibility and Stability
+### 稳定性与兼容性
 
 - Python `3.10+`
-- minimal core dependencies
-- stable high-level facade surface for day-to-day use
-- compatibility exports for older integrations
+- 核心依赖保持轻量
+- 高层 facade API 面向稳定使用
+- 兼容导出可覆盖存量代码迁移
 
 ## HOW
 
-### Installation 📦
+### 安装 📦
 
-Local editable install:
+本地开发安装：
 
 ```bash
 pip install -e .
 ```
 
-Direct install from GitHub:
+直接从 GitHub 安装：
 
 ```bash
 pip install "git+https://github.com/Akun-python/agentorch.git"
 ```
 
-Optional extras example:
+可选依赖示例：
 
 ```bash
 pip install -e ".[neo4j]"
 ```
 
-### Environment Setup
-
-Set provider credentials through environment variables:
+### 环境变量配置
 
 ```env
 OPENAI_API_KEY=sk-xxxx
@@ -149,59 +133,55 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-Local `.env` loading is opt-in.
+本地 `.env` 建议显式加载，不建议隐式注入。
 
-### Recommended Start Path
+### 推荐落地顺序
 
-1. Start with `create_agent(...)` and one minimal tool.
-2. Add RAG only after baseline behavior is stable.
-3. Add workflow DAG only when execution order matters.
-4. Move to `create_multi_agent(...)` when role separation is clear.
+1. 先用单智能体跑通核心任务。
+2. 再加入必要工具，控制权限范围。
+3. 再打开 RAG（并验证证据质量）。
+4. 最后再引入多智能体委派与策略协同。
 
-### Validation Commands
-
-Run package tests:
+### 验证命令
 
 ```powershell
 py -3.10 -m pytest -q
 ```
 
-Run README contract tests:
-
 ```powershell
 py -3.10 -m pytest -q agentorch/tests/test_readme_contracts.py
 ```
 
-### Practical Guardrails ✅
+### 工程守则 ✅
 
-- keep tool allowlists narrow
-- avoid enabling shell where not required
-- keep thread IDs explicit for traceability
-- close agents/runtimes after use
+- 工具白名单尽量小
+- 线程 ID 显式化，便于追踪
+- 长任务拆分为可检查步骤
+- 运行结束后及时关闭 runtime / agent
 
 ## QUICKSTART
 
-### 1) Minimal Agent (sync)
+### 1) 最小可运行示例
 
 ```python
 from agentorch import create_agent
 
 agent = create_agent(
     model="gpt-4.1-mini",
-    system_prompt="?????????????",
+    system_prompt="你是一个简洁且准确的助手。",
     reasoning="react",
 )
 
 result = agent.run_sync(
-    "?????????????????",
-    thread_id="quickstart-en-001",
+    "请用三个要点解释什么是智能体编排。",
+    thread_id="quickstart-zh-cn-001",
 )
 
 print(result.output_text)
 agent.close()
 ```
 
-### 2) Tool Calling
+### 2) 工具调用示例
 
 ```python
 from pydantic import BaseModel
@@ -225,12 +205,12 @@ agent = create_agent(
     reasoning="react",
 )
 
-result = agent.run_sync("Use add_numbers to compute 12 + 30.", thread_id="quickstart-tools-001")
+result = agent.run_sync("请调用 add_numbers 计算 12 + 30。", thread_id="quickstart-tools-zh-cn-001")
 print(result.output_text)
 agent.close()
 ```
 
-### 3) Multi-Agent Starter
+### 3) 多智能体起步示例
 
 ```python
 from agentorch import create_agent, create_multi_agent
@@ -244,49 +224,19 @@ team = create_multi_agent(
         {"agent": planner, "name": "planner", "role": "planner"},
         {"agent": reviewer, "name": "reviewer", "role": "reviewer"},
     ],
-    system_prompt="Coordinate specialists and return one final answer.",
+    system_prompt="协调专家并返回一个最终答案。",
 )
 
-result = team.run_sync("Draft and review a migration plan.", thread_id="quickstart-team-001")
+result = team.run_sync("先制定再评审一个迁移方案。", thread_id="quickstart-team-zh-cn-001")
 print(result.output_text)
 team.close()
 ```
 
-### 4) Next Steps
+### 4) 下一步建议
 
-- Add RAG with `knowledge_paths` and `enable_rag=True`
-- Add workflow DAG when task steps need explicit control
-- Add observability storage for trace and usage analysis
-- Move policy objects into code for predictable behavior
-
-### Quick FAQ
-
-Q: Should I start with multi-agent first?  
-A: Usually no. Start with one strong agent, then split roles when boundaries are clear.
-
-Q: When should I enable workflow DAG?  
-A: When task order matters and you want deterministic step execution.
-
-Q: When should I enable long-term memory?  
-A: When tasks span multiple threads/sessions and prior outputs must be reused.
-
-Q: How do I keep tool execution safe?  
-A: Use sandbox policy, strict allowlists, and narrow workspace scopes.
-
-### Troubleshooting Notes 🛟
-
-- `TypeError` around modern typing syntax usually means Python version is too low.
-- If `python` points to an older interpreter, use explicit launcher command (`py -3.10`).
-- If output feels unstable, pin model version and keep thread IDs consistent.
-- If delegation is noisy, reduce agent count and tighten role descriptions first.
-
-### Reference Entry Points
-
-- Main docs: `README.md` (this file)
-- Simplified Chinese: `README.zh-CN.md`
-- Examples folder: `examples/`
-- Package tests: `agentorch/tests/`
-
-For production usage, treat this README as a launch map and move critical settings into versioned config files.
+- 加入 `knowledge_paths` 与 `enable_rag=True`
+- 引入 workflow DAG 固化步骤顺序
+- 开启 observability 做成本/质量分析
+- 用策略对象固定团队行为边界
 
 MIT License.

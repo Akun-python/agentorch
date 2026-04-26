@@ -21,127 +21,111 @@
   <img alt="license MIT" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square">
 </p>
 
-`agentorch`? ?? ??, ??? ??? Python ?????? ??????? ????????.
+`agentorch`는 코드 중심, 비동기 중심의 Python 멀티에이전트 오케스트레이션 프레임워크입니다.
 
-It is built for teams that need explicit runtime control, not hidden prompt pipelines.
+프롬프트 블랙박스가 아니라, 경계가 명확한 런타임 구조를 만들기 위해 설계되었습니다.
 
-If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
+도구 호출, 검색 근거, 메모리, 워크플로, 다중 에이전트 위임이 동시에 필요한 시스템에서 `agentorch`는 제어 가능한 실행 모델을 제공합니다.
 
 ![Agent Orch Commander Diagram](resource/agent_orch_commander.svg)
 
-This diagram shows the core idea: **Agent Orch = Agent Orchestration**, where a **Commander / 总指挥** coordinates specialist agents and shared runtime capabilities.
+이 그림은 핵심을 보여줍니다: **Agent Orch = Agent Orchestration**. 하나의 **Commander / 총지휘자**가 전문 에이전트와 공유 능력 계층을 조율합니다.
 
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
 
-### Why This Project Exists 🎯
+### 왜 필요한가 🎯
 
-Many projects hit a wall after the "single assistant + one prompt" phase.
+"단일 에이전트 + 단일 프롬프트" 접근은 초기에는 빠르지만, 시스템이 커지면 다음 문제가 생깁니다:
 
-The moment you need specialist roles, constrained tools, repeatable state, and observable handoffs, ad-hoc prompt glue becomes difficult to reason about.
+- 역할이 늘어나면 책임 경계가 흐려짐
+- 도구가 늘어나면 보안 통제가 어려워짐
+- 컨텍스트가 길어지면 상태 추적이 어려워짐
+- 검색 결과의 근거 검증이 어려워짐
 
-`agentorch` is designed to keep these concerns explicit:
+`agentorch`는 이를 코드 구조로 명시화합니다.
 
-- model adapter choices
-- tool exposure and safety boundaries
-- retrieval strategy and evidence mounting
-- memory retention and promotion
-- workflow execution order
-- multi-agent coordination and delegation
+### 엔지니어링 관점 가치 🧭
 
-### Why It Helps Engineering Teams 🧭
+- 런타임 조립 결과를 내보내고 점검 가능
+- 정책 객체를 버전 관리 가능
+- 단일 에이전트에서 팀 구조로 점진 확장 가능
+- 추론/RAG/워크플로 전략을 안전하게 반복 가능
 
-- You can inspect system assembly with exported blueprint/config.
-- You can enforce policy boundaries with typed configs.
-- You can evolve behavior (reasoning/RAG/workflow) without rewriting everything.
-- You can test behavior through code-level contracts.
+### 연구 관점 가치 🔬
 
-### Why It Helps Research Teams 🔬
+- 추론 전략 전환 가능 (`react`, `plan_execute` 등)
+- RAG/컨텍스트 전략 비교 실험 가능
+- 진화 탐색 기반 구성 실험 가능
+- 장기 작업 상태 유지 및 재사용 가능
 
-- Swappable reasoning modes (`react`, `plan_execute`, etc.)
-- Search/evolution support for strategy comparison
-- Source-aware RAG flow and evidence-oriented outputs
-- Long-horizon memory patterns for iterative tasks
+### 대표 사용 시나리오
 
-### Typical Scenarios
-
-- multi-agent coding assistants with bounded filesystem/shell access
-- research copilots that must cite retrieved sources
-- workflow-driven automation that needs deterministic node execution
-- long-running assistants with thread/workspace memory
+- 개발 보조: 파일/명령/Git 도구 제어
+- 지식 보조: 근거 인용이 필요한 답변
+- 자동화: DAG 노드 단위 실행 제어
+- 장기 태스크: 스레드/워크스페이스 메모리 활용
 
 ## WHAT
 
-### Core Facade API
+### 핵심 진입 API
 
 - `create_agent(...)`
 - `create_multi_agent(...)`
 
-These are the recommended entrypoints for most users.
+대부분의 프로젝트는 위 facade API로 시작하는 것이 좋습니다.
 
-### Key Runtime Building Blocks 🧩
+### 주요 런타임 구성요소 🧩
 
-- model adapters (`OpenAIModel`, compatible HTTP adapters)
-- tool registry and bundles
-- sandbox manager and policy
-- knowledge base and RAG strategy
-- memory manager and memory policy
-- workflow DAG builder and runner
-- observability hooks and SQLite event store
+- 모델 어댑터 계층
+- 도구 레지스트리와 번들
+- 샌드박스 실행과 정책
+- 지식베이스와 RAG 전략
+- 메모리 관리와 거버넌스
+- DAG 워크플로 실행
+- 관측성 이벤트 및 저장
 
-### Built-In Capability Surface
+### 여기서 오케스트레이션이 의미하는 것
 
-- structured tool calling via Pydantic I/O
-- filesystem / execution / git / web / media bundles
-- multi-format ingestion (`md`, `txt`, `pdf`, `docx`, code artifacts)
-- reasoning strategy selection
-- human feedback and resumable flows
-- extension hooks for lifecycle interception
+`agentorch`에서 오케스트레이션은 추상 개념이 아니라 명시적 구조입니다:
 
-### What "Orchestration" Means Here
+- Commander가 라우팅과 위임 담당
+- Task packet은 타입이 있는 실행 단위
+- Handoff는 추적 가능한 기록
+- 공유 메모리는 정책으로 관리
+- 도구 노출 범위는 제한 가능
 
-In `agentorch`, orchestration is not a marketing word.
-
-It means each runtime concern has a concrete type and place in assembly:
-
-- coordinator policies decide routing behavior
-- supervisor plans are inspectable objects
-- handoffs and task packets are explicit records
-- memory scopes and shared state are controlled by policy
-
-### Compatibility and Stability
+### 호환성과 안정성
 
 - Python `3.10+`
-- minimal core dependencies
-- stable high-level facade surface for day-to-day use
-- compatibility exports for older integrations
+- 핵심 의존성 최소화
+- 고수준 facade API 안정화
+- 기존 통합을 위한 호환 export 제공
 
 ## HOW
 
-### Installation 📦
+### 설치 📦
 
-Local editable install:
+로컬 editable 설치:
 
 ```bash
 pip install -e .
 ```
 
-Direct install from GitHub:
+GitHub 직접 설치:
 
 ```bash
 pip install "git+https://github.com/Akun-python/agentorch.git"
 ```
 
-Optional extras example:
+선택 의존성 예:
 
 ```bash
 pip install -e ".[neo4j]"
 ```
 
-### Environment Setup
-
-Set provider credentials through environment variables:
+### 환경 변수
 
 ```env
 OPENAI_API_KEY=sk-xxxx
@@ -149,59 +133,55 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-Local `.env` loading is opt-in.
+`.env`는 명시적으로 로드하는 방식을 권장합니다.
 
-### Recommended Start Path
+### 권장 도입 순서
 
-1. Start with `create_agent(...)` and one minimal tool.
-2. Add RAG only after baseline behavior is stable.
-3. Add workflow DAG only when execution order matters.
-4. Move to `create_multi_agent(...)` when role separation is clear.
+1. 단일 에이전트 경로 먼저 안정화
+2. 도구는 최소 권한으로 추가
+3. RAG는 근거 품질 확인 후 활성화
+4. 마지막에 다중 에이전트 위임 도입
 
-### Validation Commands
-
-Run package tests:
+### 검증 명령
 
 ```powershell
 py -3.10 -m pytest -q
 ```
 
-Run README contract tests:
-
 ```powershell
 py -3.10 -m pytest -q agentorch/tests/test_readme_contracts.py
 ```
 
-### Practical Guardrails ✅
+### 운영 가드레일 ✅
 
-- keep tool allowlists narrow
-- avoid enabling shell where not required
-- keep thread IDs explicit for traceability
-- close agents/runtimes after use
+- 도구 allowlist 최소화
+- thread_id를 명시해 추적성 확보
+- 긴 작업은 단계로 분할
+- 실행 종료 시 agent/runtime 명시적 close
 
 ## QUICKSTART
 
-### 1) Minimal Agent (sync)
+### 1) 최소 실행 예제
 
 ```python
 from agentorch import create_agent
 
 agent = create_agent(
     model="gpt-4.1-mini",
-    system_prompt="???? ??? ????? ?????.",
+    system_prompt="간결하고 정확한 도우미처럼 응답하세요.",
     reasoning="react",
 )
 
 result = agent.run_sync(
-    "???? ???????? ???? 3?? ???? ??? ???.",
-    thread_id="quickstart-en-001",
+    "에이전트 오케스트레이션이 무엇인지 3가지 핵심으로 설명해 주세요.",
+    thread_id="quickstart-ko-001",
 )
 
 print(result.output_text)
 agent.close()
 ```
 
-### 2) Tool Calling
+### 2) 도구 호출 예제
 
 ```python
 from pydantic import BaseModel
@@ -225,12 +205,12 @@ agent = create_agent(
     reasoning="react",
 )
 
-result = agent.run_sync("Use add_numbers to compute 12 + 30.", thread_id="quickstart-tools-001")
+result = agent.run_sync("add_numbers로 12 + 30을 계산해 주세요.", thread_id="quickstart-tools-ko-001")
 print(result.output_text)
 agent.close()
 ```
 
-### 3) Multi-Agent Starter
+### 3) 멀티에이전트 시작 예제
 
 ```python
 from agentorch import create_agent, create_multi_agent
@@ -244,49 +224,19 @@ team = create_multi_agent(
         {"agent": planner, "name": "planner", "role": "planner"},
         {"agent": reviewer, "name": "reviewer", "role": "reviewer"},
     ],
-    system_prompt="Coordinate specialists and return one final answer.",
+    system_prompt="전문 에이전트를 조율해 하나의 최종 답변을 반환하세요.",
 )
 
-result = team.run_sync("Draft and review a migration plan.", thread_id="quickstart-team-001")
+result = team.run_sync("마이그레이션 계획을 작성하고 리뷰해 주세요.", thread_id="quickstart-team-ko-001")
 print(result.output_text)
 team.close()
 ```
 
-### 4) Next Steps
+### 4) 다음 단계
 
-- Add RAG with `knowledge_paths` and `enable_rag=True`
-- Add workflow DAG when task steps need explicit control
-- Add observability storage for trace and usage analysis
-- Move policy objects into code for predictable behavior
-
-### Quick FAQ
-
-Q: Should I start with multi-agent first?  
-A: Usually no. Start with one strong agent, then split roles when boundaries are clear.
-
-Q: When should I enable workflow DAG?  
-A: When task order matters and you want deterministic step execution.
-
-Q: When should I enable long-term memory?  
-A: When tasks span multiple threads/sessions and prior outputs must be reused.
-
-Q: How do I keep tool execution safe?  
-A: Use sandbox policy, strict allowlists, and narrow workspace scopes.
-
-### Troubleshooting Notes 🛟
-
-- `TypeError` around modern typing syntax usually means Python version is too low.
-- If `python` points to an older interpreter, use explicit launcher command (`py -3.10`).
-- If output feels unstable, pin model version and keep thread IDs consistent.
-- If delegation is noisy, reduce agent count and tighten role descriptions first.
-
-### Reference Entry Points
-
-- Main docs: `README.md` (this file)
-- Simplified Chinese: `README.zh-CN.md`
-- Examples folder: `examples/`
-- Package tests: `agentorch/tests/`
-
-For production usage, treat this README as a launch map and move critical settings into versioned config files.
+- `knowledge_paths` + `enable_rag=True` 적용
+- 순서 제어가 필요하면 workflow DAG 도입
+- observability로 비용/품질 분석
+- 정책 객체를 코드에 고정해 재현성 확보
 
 MIT License.

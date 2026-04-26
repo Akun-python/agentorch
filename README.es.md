@@ -21,127 +21,111 @@
   <img alt="license MIT" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square">
 </p>
 
-`agentorch` es un framework de Python orientado a c?digo y as?ncrono para orquestaci?n multiagente programable.
+`agentorch` es un framework de Python orientado a código y asíncrono para orquestación multiagente programable.
 
-It is built for teams that need explicit runtime control, not hidden prompt pipelines.
+Está pensado para sistemas con límites de ingeniería claros, no para cadenas opacas basadas solo en prompts.
 
-If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
+Cuando necesitas herramientas, RAG, memoria, workflow y delegación en un mismo sistema, `agentorch` ofrece un modelo de ejecución controlable.
 
 ![Agent Orch Commander Diagram](resource/agent_orch_commander.svg)
 
-This diagram shows the core idea: **Agent Orch = Agent Orchestration**, where a **Commander / 总指挥** coordinates specialist agents and shared runtime capabilities.
+Este diagrama resume la idea central: **Agent Orch = Agent Orchestration**. Un **Commander / coordinador central** dirige agentes especialistas y capacidades compartidas.
 
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
 
-### Why This Project Exists 🎯
+### Por qué este framework 🎯
 
-Many projects hit a wall after the "single assistant + one prompt" phase.
+Muchos proyectos funcionan al inicio con "un asistente + un prompt", pero al crecer aparecen problemas:
 
-The moment you need specialist roles, constrained tools, repeatable state, and observable handoffs, ad-hoc prompt glue becomes difficult to reason about.
+- más roles, menos claridad de responsabilidades
+- más herramientas, menos control de seguridad
+- más contexto, menor trazabilidad de estado
+- más recuperación, menor verificabilidad de evidencia
 
-`agentorch` is designed to keep these concerns explicit:
+`agentorch` convierte esos riesgos en estructura de software explícita.
 
-- model adapter choices
-- tool exposure and safety boundaries
-- retrieval strategy and evidence mounting
-- memory retention and promotion
-- workflow execution order
-- multi-agent coordination and delegation
+### Valor para equipos de ingeniería 🧭
 
-### Why It Helps Engineering Teams 🧭
+- ensamblado runtime exportable e inspeccionable
+- políticas configurables y versionables
+- transición gradual de un agente a varios agentes
+- evolución controlada de estrategias de razonamiento/RAG/workflow
 
-- You can inspect system assembly with exported blueprint/config.
-- You can enforce policy boundaries with typed configs.
-- You can evolve behavior (reasoning/RAG/workflow) without rewriting everything.
-- You can test behavior through code-level contracts.
+### Valor para equipos de investigación 🔬
 
-### Why It Helps Research Teams 🔬
+- cambio de estrategias de razonamiento (`react`, `plan_execute`, etc.)
+- comparación de variantes de RAG y contexto
+- búsqueda evolutiva de configuraciones
+- reutilización de estado en tareas de largo horizonte
 
-- Swappable reasoning modes (`react`, `plan_execute`, etc.)
-- Search/evolution support for strategy comparison
-- Source-aware RAG flow and evidence-oriented outputs
-- Long-horizon memory patterns for iterative tasks
+### Casos de uso típicos
 
-### Typical Scenarios
-
-- multi-agent coding assistants with bounded filesystem/shell access
-- research copilots that must cite retrieved sources
-- workflow-driven automation that needs deterministic node execution
-- long-running assistants with thread/workspace memory
+- asistentes de desarrollo con acceso acotado a archivos/comandos/Git
+- asistentes de conocimiento con citas de evidencia
+- automatizaciones con ejecución DAG explícita
+- asistentes de larga duración con memoria multi-sesión
 
 ## WHAT
 
-### Core Facade API
+### API principal (fachada)
 
 - `create_agent(...)`
 - `create_multi_agent(...)`
 
-These are the recommended entrypoints for most users.
+Son los puntos de entrada recomendados para la mayoría de aplicaciones.
 
-### Key Runtime Building Blocks 🧩
+### Bloques clave del runtime 🧩
 
-- model adapters (`OpenAIModel`, compatible HTTP adapters)
-- tool registry and bundles
-- sandbox manager and policy
-- knowledge base and RAG strategy
-- memory manager and memory policy
-- workflow DAG builder and runner
-- observability hooks and SQLite event store
+- adaptadores de modelo
+- registro de herramientas y bundles
+- sandbox y políticas de ejecución
+- base de conocimiento y estrategias RAG
+- gestión de memoria y gobernanza
+- workflow DAG y runner
+- observabilidad y almacenamiento de eventos
 
-### Built-In Capability Surface
+### Qué significa "orquestación" aquí
 
-- structured tool calling via Pydantic I/O
-- filesystem / execution / git / web / media bundles
-- multi-format ingestion (`md`, `txt`, `pdf`, `docx`, code artifacts)
-- reasoning strategy selection
-- human feedback and resumable flows
-- extension hooks for lifecycle interception
+En `agentorch`, orquestación es algo concreto:
 
-### What "Orchestration" Means Here
+- el Commander enruta y delega
+- los task packets son unidades tipadas
+- los handoffs quedan registrados
+- la memoria compartida está gobernada por políticas
+- la superficie de herramientas se controla de forma explícita
 
-In `agentorch`, orchestration is not a marketing word.
-
-It means each runtime concern has a concrete type and place in assembly:
-
-- coordinator policies decide routing behavior
-- supervisor plans are inspectable objects
-- handoffs and task packets are explicit records
-- memory scopes and shared state are controlled by policy
-
-### Compatibility and Stability
+### Compatibilidad
 
 - Python `3.10+`
-- minimal core dependencies
-- stable high-level facade surface for day-to-day use
-- compatibility exports for older integrations
+- dependencias core reducidas
+- API de fachada estable para uso diario
+- exports de compatibilidad para migración
 
 ## HOW
 
-### Installation 📦
+### Instalación 📦
 
-Local editable install:
+Instalación editable local:
 
 ```bash
 pip install -e .
 ```
 
-Direct install from GitHub:
+Instalación directa desde GitHub:
 
 ```bash
 pip install "git+https://github.com/Akun-python/agentorch.git"
 ```
 
-Optional extras example:
+Ejemplo de extra opcional:
 
 ```bash
 pip install -e ".[neo4j]"
 ```
 
-### Environment Setup
-
-Set provider credentials through environment variables:
+### Variables de entorno
 
 ```env
 OPENAI_API_KEY=sk-xxxx
@@ -149,39 +133,35 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-Local `.env` loading is opt-in.
+Se recomienda cargar `.env` de forma explícita.
 
-### Recommended Start Path
+### Orden recomendado de adopción
 
-1. Start with `create_agent(...)` and one minimal tool.
-2. Add RAG only after baseline behavior is stable.
-3. Add workflow DAG only when execution order matters.
-4. Move to `create_multi_agent(...)` when role separation is clear.
+1. estabiliza primero un agente único
+2. añade herramientas con permisos mínimos
+3. activa RAG y valida calidad de evidencia
+4. incorpora delegación multiagente después
 
-### Validation Commands
-
-Run package tests:
+### Comandos de validación
 
 ```powershell
 py -3.10 -m pytest -q
 ```
 
-Run README contract tests:
-
 ```powershell
 py -3.10 -m pytest -q agentorch/tests/test_readme_contracts.py
 ```
 
-### Practical Guardrails ✅
+### Guardrails prácticos ✅
 
-- keep tool allowlists narrow
-- avoid enabling shell where not required
-- keep thread IDs explicit for traceability
-- close agents/runtimes after use
+- allowlist de herramientas lo más pequeña posible
+- thread_id explícito para trazabilidad
+- tareas largas divididas en pasos auditables
+- cierre explícito de agent/runtime al finalizar
 
 ## QUICKSTART
 
-### 1) Minimal Agent (sync)
+### 1) Ejemplo mínimo
 
 ```python
 from agentorch import create_agent
@@ -193,15 +173,15 @@ agent = create_agent(
 )
 
 result = agent.run_sync(
-    "Explica qu? es la orquestaci?n de agentes en tres puntos clave.",
-    thread_id="quickstart-en-001",
+    "Explica qué es la orquestación de agentes en tres puntos clave.",
+    thread_id="quickstart-es-001",
 )
 
 print(result.output_text)
 agent.close()
 ```
 
-### 2) Tool Calling
+### 2) Ejemplo de llamada de herramienta
 
 ```python
 from pydantic import BaseModel
@@ -225,12 +205,12 @@ agent = create_agent(
     reasoning="react",
 )
 
-result = agent.run_sync("Use add_numbers to compute 12 + 30.", thread_id="quickstart-tools-001")
+result = agent.run_sync("Usa add_numbers para calcular 12 + 30.", thread_id="quickstart-tools-es-001")
 print(result.output_text)
 agent.close()
 ```
 
-### 3) Multi-Agent Starter
+### 3) Ejemplo inicial multiagente
 
 ```python
 from agentorch import create_agent, create_multi_agent
@@ -244,49 +224,19 @@ team = create_multi_agent(
         {"agent": planner, "name": "planner", "role": "planner"},
         {"agent": reviewer, "name": "reviewer", "role": "reviewer"},
     ],
-    system_prompt="Coordinate specialists and return one final answer.",
+    system_prompt="Coordina especialistas y devuelve una respuesta final.",
 )
 
-result = team.run_sync("Draft and review a migration plan.", thread_id="quickstart-team-001")
+result = team.run_sync("Diseña y revisa una estrategia de migración.", thread_id="quickstart-team-es-001")
 print(result.output_text)
 team.close()
 ```
 
-### 4) Next Steps
+### 4) Siguientes pasos
 
-- Add RAG with `knowledge_paths` and `enable_rag=True`
-- Add workflow DAG when task steps need explicit control
-- Add observability storage for trace and usage analysis
-- Move policy objects into code for predictable behavior
-
-### Quick FAQ
-
-Q: Should I start with multi-agent first?  
-A: Usually no. Start with one strong agent, then split roles when boundaries are clear.
-
-Q: When should I enable workflow DAG?  
-A: When task order matters and you want deterministic step execution.
-
-Q: When should I enable long-term memory?  
-A: When tasks span multiple threads/sessions and prior outputs must be reused.
-
-Q: How do I keep tool execution safe?  
-A: Use sandbox policy, strict allowlists, and narrow workspace scopes.
-
-### Troubleshooting Notes 🛟
-
-- `TypeError` around modern typing syntax usually means Python version is too low.
-- If `python` points to an older interpreter, use explicit launcher command (`py -3.10`).
-- If output feels unstable, pin model version and keep thread IDs consistent.
-- If delegation is noisy, reduce agent count and tighten role descriptions first.
-
-### Reference Entry Points
-
-- Main docs: `README.md` (this file)
-- Simplified Chinese: `README.zh-CN.md`
-- Examples folder: `examples/`
-- Package tests: `agentorch/tests/`
-
-For production usage, treat this README as a launch map and move critical settings into versioned config files.
+- agregar `knowledge_paths` y `enable_rag=True`
+- incorporar workflow DAG para secuencias deterministas
+- activar observabilidad para analizar costo/calidad
+- fijar políticas runtime en configuración versionada
 
 MIT License.

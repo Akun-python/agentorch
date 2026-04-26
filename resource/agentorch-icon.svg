@@ -1,54 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">agentorch multi-agent framework icon</title>
-  <desc id="desc">A central torch hub connected to multiple agent nodes.</desc>
+  <title id="title">agentorch icon</title>
+  <desc id="desc">Minimal commander hub orchestrating four agent nodes.</desc>
   <defs>
-    <linearGradient id="agentorch-flame" x1="208" y1="98" x2="310" y2="250" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F97316"/>
-      <stop offset="0.55" stop-color="#F59E0B"/>
-      <stop offset="1" stop-color="#FACC15"/>
+    <linearGradient id="bg" x1="86" y1="76" x2="430" y2="436" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EFF6FF"/>
+      <stop offset="1" stop-color="#F8FAFC"/>
     </linearGradient>
-    <linearGradient id="agentorch-hub" x1="110" y1="96" x2="405" y2="415" gradientUnits="userSpaceOnUse">
+    <linearGradient id="hub" x1="210" y1="180" x2="310" y2="320" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#2563EB"/>
-      <stop offset="0.52" stop-color="#0F766E"/>
-      <stop offset="1" stop-color="#7C3AED"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
     </linearGradient>
-    <filter id="agentorch-shadow" x="-12%" y="-12%" width="124%" height="124%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#0F172A" flood-opacity="0.16"/>
-    </filter>
   </defs>
 
-  <rect width="512" height="512" rx="112" fill="#F8FAFC"/>
-  <circle cx="256" cy="256" r="184" fill="#EFF6FF"/>
-  <circle cx="256" cy="256" r="148" fill="#FFFFFF" filter="url(#agentorch-shadow)"/>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bg)"/>
 
-  <g fill="none" stroke="#94A3B8" stroke-width="10" stroke-linecap="round">
-    <path d="M256 256L126 166"/>
-    <path d="M256 256L386 166"/>
-    <path d="M256 256L112 314"/>
-    <path d="M256 256L400 314"/>
-    <path d="M256 256V414"/>
+  <g stroke="#93C5FD" stroke-width="12" stroke-linecap="round">
+    <path d="M256 256L144 156"/>
+    <path d="M256 256L368 156"/>
+    <path d="M256 256L128 332"/>
+    <path d="M256 256L384 332"/>
   </g>
 
-  <g fill="#FFFFFF" stroke="url(#agentorch-hub)" stroke-width="10">
-    <circle cx="126" cy="166" r="34"/>
-    <circle cx="386" cy="166" r="34"/>
-    <circle cx="112" cy="314" r="34"/>
-    <circle cx="400" cy="314" r="34"/>
-    <circle cx="256" cy="414" r="34"/>
+  <g fill="#FFFFFF" stroke="#2563EB" stroke-width="10">
+    <circle cx="144" cy="156" r="30"/>
+    <circle cx="368" cy="156" r="30"/>
+    <circle cx="128" cy="332" r="30"/>
+    <circle cx="384" cy="332" r="30"/>
   </g>
 
-  <g fill="url(#agentorch-hub)">
-    <circle cx="126" cy="166" r="13"/>
-    <circle cx="386" cy="166" r="13"/>
-    <circle cx="112" cy="314" r="13"/>
-    <circle cx="400" cy="314" r="13"/>
-    <circle cx="256" cy="414" r="13"/>
+  <g fill="#2563EB">
+    <circle cx="144" cy="156" r="10"/>
+    <circle cx="368" cy="156" r="10"/>
+    <circle cx="128" cy="332" r="10"/>
+    <circle cx="384" cy="332" r="10"/>
   </g>
 
-  <circle cx="256" cy="256" r="76" fill="#0F172A"/>
-  <path fill="url(#agentorch-flame)" d="M268 112c-16 31-4 52 14 76 15 21 28 42 20 75-8 35-39 58-76 58-42 0-74-31-74-72 0-37 20-61 45-86 4 29 18 46 39 57-10-35 4-72 32-108z"/>
-  <path fill="#FFF7ED" d="M248 220c-9 15-5 29 5 42 7 10 10 19 6 31-4 12-15 20-29 20-17 0-30-12-30-29 0-15 9-27 22-40 2 14 9 23 20 29-5-17 0-35 6-53z"/>
-  <path fill="#CBD5E1" d="M214 330h84l-14 72h-56l-14-72z"/>
-  <path fill="#64748B" d="M228 402h56l-12 36h-32l-12-36z"/>
-  <path fill="#FFFFFF" d="M214 330h84l-6 28h-72l-6-28z" opacity="0.35"/>
+  <circle cx="256" cy="256" r="78" fill="url(#hub)"/>
+
+  <path d="M228 286L292 222" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="300" cy="214" r="11" fill="#FFFFFF"/>
 </svg>
