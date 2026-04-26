@@ -1,218 +1,216 @@
-# agentorch
+<h1 align="center">agentorch</h1>
 
 <p align="center">
-  <img src="resource/agentorch-icon.svg" alt="agentorch multi-agent framework icon" width="120">
+  <img src="resource/agentorch-icon.svg" alt="agentorch icon" width="110">
 </p>
 
 <p align="center">
-  <strong>A Python-native, async-first orchestration framework for multi-agent systems.</strong>
+  <a href="README.md">English</a> |
+  <a href="README.zh-CN.md">简体中文</a> |
+  <a href="README.zh-TW.md">繁體中文</a> |
+  <a href="README.fr.md">Français</a> |
+  <a href="README.ja.md">日本語</a> |
+  <a href="README.ko.md">한국어</a> |
+  <a href="README.es.md">Español</a>
 </p>
 
-[中文文档 / Chinese README](README.zh-CN.md)
+<p align="center">
+  <img alt="version v0.1.0" src="https://img.shields.io/badge/version-v0.1.0-2563eb?style=flat-square">
+  <img alt="python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="downloads" src="https://img.shields.io/github/downloads/Akun-python/agentorch/total?style=flat-square">
+  <img alt="license MIT" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square">
+</p>
 
-`agentorch` is a code-first framework for building programmable agent systems with explicit runtime assembly, structured tools, workflow DAGs, retrieval, long-term memory, reasoning strategies, human feedback, observability, and supervisor-based multi-agent coordination.
+`agentorch` is a code-first, async-first framework for programmable multi-agent orchestration in Python.
 
-The project is designed for systems where one assistant is not enough: specialist agents need scoped knowledge, shared memory, traceable handoffs, controllable tool access, and a coordinator that can route work without turning the codebase into a hidden prompt-only pipeline.
+It is built for teams that need explicit runtime control, not hidden prompt pipelines.
 
-All images referenced by this README live in [`resource/`](resource/).
+If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
 
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
-## Why agentorch
+## WHY
 
-Many agent frameworks make one of two tradeoffs: they hide orchestration inside a prompt-heavy abstraction, or they expose so many knobs that a real system becomes hard to reason about. `agentorch` takes a different route:
+### Why This Project Exists 🎯
 
-- Keep the primary interface Python-native instead of DSL-first.
-- Make runtime boundaries explicit: model, tools, memory, knowledge, workflow, policies, supervisor, and extensions are separable.
-- Treat multi-agent systems as first-class runtime objects, not as a chat transcript convention.
-- Support research workflows where reasoning, retrieval, memory, and delegation strategies need to be compared or evolved.
-- Keep provider configuration outside framework internals so model gateways and secrets remain deployment concerns.
+Many projects hit a wall after the "single assistant + one prompt" phase.
 
-The framework is useful for:
+The moment you need specialist roles, constrained tools, repeatable state, and observable handoffs, ad-hoc prompt glue becomes difficult to reason about.
 
-- Multi-agent research prototypes and thesis experiments.
-- Tool-using assistants that need constrained filesystem, git, shell, web, or media tools.
-- RAG systems that need source-aware retrieval plans, evidence reports, and scoped knowledge.
-- Long-horizon agents that need thread state, workspace artifacts, episodic records, and collective memory.
-- Workflow systems that need explicit DAG execution rather than one monolithic prompt.
-- Evaluation loops that search over reasoning, RAG, workflow, and runtime configurations.
+`agentorch` is designed to keep these concerns explicit:
 
-## What It Supports
+- model adapter choices
+- tool exposure and safety boundaries
+- retrieval strategy and evidence mounting
+- memory retention and promotion
+- workflow execution order
+- multi-agent coordination and delegation
 
-- **Facade-first construction** with `create_agent(...)`, `create_multi_agent(...)`, `AgentDesign`, `RoleDesign`, and `TeamDesign`.
-- **Multi-agent orchestration** with `AgentRegistry`, `Supervisor`, `Coordinator`, `TaskPacket`, handoffs, scoped capabilities, shared memory, and shared knowledge.
-- **Runtime policies** for context selection, state retention, coordination, and memory promotion through `ContextPolicy`, `StatePolicy`, `CoordinationPolicy`, and `MemoryPolicy`.
-- **OpenAI-compatible models** through `OpenAIModel`, `OpenAICompatibleHTTPModel`, provider registries, and explicit `ModelConfig` objects.
-- **Structured tool calling** through the `@tool` decorator, `ToolRegistry`, Pydantic inputs, and standard tool bundles.
-- **Sandboxed execution** through `SandboxManager`, `SandboxPolicy`, and a Python interpreter tool.
-- **Media capabilities** for speech synthesis, image generation, and video analysis when the selected model adapter supports them.
-- **Knowledge and RAG** over markdown, text, code, PDF, DOCX, memory records, and workspace artifacts.
-- **Selectable RAG strategies**: `classic`, `deliberative`, `hybrid`, and `off`.
-- **Reasoning frameworks**: `cot`, `react`, `plan_execute`, `tot`, and `reflexion`.
-- **Workflow DAGs** with model, tool, retrieval, RAG mount, RAG evaluation, aggregate, agent, human, and evolution node types.
-- **Skill loading** with progressive disclosure, explicit `SKILL.md` resources, and per-run skill requests.
-- **Memory governance** with session memory, summaries, local agent memory, workspace memory, shared notes, record memory, and collective memory.
-- **Human-in-the-loop feedback** with inboxes, policies, feedback events, and `resume_from_feedback(...)`.
-- **Observability** with structured event tracing, SQLite event storage, usage tracking, and redaction/budget controls.
-- **Evolution search** with `genetic`, `random_search`, `hill_climb`, and `beam_search` algorithms.
-- **Output parsing** with JSON, Pydantic, key-value, list, text, fallback, and parser-chain helpers.
-- **Extension hooks** for run lifecycle, supervisor planning, and handoff customization.
+### Why It Helps Engineering Teams 🧭
 
-## Recommended API Style
+- You can inspect system assembly with exported blueprint/config.
+- You can enforce policy boundaries with typed configs.
+- You can evolve behavior (reasoning/RAG/workflow) without rewriting everything.
+- You can test behavior through code-level contracts.
 
-Use facade and design entrypoints for most application code:
+### Why It Helps Research Teams 🔬
+
+- Swappable reasoning modes (`react`, `plan_execute`, etc.)
+- Search/evolution support for strategy comparison
+- Source-aware RAG flow and evidence-oriented outputs
+- Long-horizon memory patterns for iterative tasks
+
+### Typical Scenarios
+
+- multi-agent coding assistants with bounded filesystem/shell access
+- research copilots that must cite retrieved sources
+- workflow-driven automation that needs deterministic node execution
+- long-running assistants with thread/workspace memory
+
+## WHAT
+
+### Core Facade API
 
 - `create_agent(...)`
 - `create_multi_agent(...)`
-- `AgentDesign`, `RoleDesign`, `TeamDesign`
-- `compose_agent(...)`, `compose_team(...)`
-- `create_agent_evolution(...)`
-- `create_multi_agent_evolution(...)`
 
-Use typed configuration objects when you need explicit control:
+These are the recommended entrypoints for most users.
 
-- `ModelConfig.from_any(...)`
-- `RuntimeConfig.agent(...)` and `RuntimeConfig.workflow(...)`
-- `RagStrategyConfig.for_classic(...)`, `for_deliberative(...)`, `for_hybrid(...)`
-- `ReasoningStrategyConfig.react(...)`, `plan_execute(...)`, `reflexion(...)`
-- `ContextPolicy.default(...)`, `lean(...)`, `evidence_friendly(...)`, `hybrid_budgeted(...)`
-- `CoordinationPolicy.distributed(...)`, `hybrid(...)`
-- `MemoryPolicy.long_horizon(...)`
-- `SkillCatalogConfig(...)` and `SkillRoutingConfig(...)`
-- `ObservabilityConfig(...)`
+### Key Runtime Building Blocks 🧩
 
-Drop to core assembly only when you need lower-level control:
+- model adapters (`OpenAIModel`, compatible HTTP adapters)
+- tool registry and bundles
+- sandbox manager and policy
+- knowledge base and RAG strategy
+- memory manager and memory policy
+- workflow DAG builder and runner
+- observability hooks and SQLite event store
 
-- `Runtime.create(...)` / `Runtime.acreate(...)`
-- `Agent.create(...)` / `Agent.acreate(...)`
-- `AgentRegistry().register(...)`
-- `Supervisor(registry=...)`
-- `WorkflowBuilder()` and `Node.*(...)`
-- `ToolRegistry.from_tools(...)` and `ToolRegistry.with_bundles(...)`
-- `IndexedKnowledgeBase.create(...)` / `IndexedKnowledgeBase.acreate(...)`
+### Built-In Capability Surface
 
-The stable top-level import surface is intentionally curated, while compatibility exports remain available for older callers.
+- structured tool calling via Pydantic I/O
+- filesystem / execution / git / web / media bundles
+- multi-format ingestion (`md`, `txt`, `pdf`, `docx`, code artifacts)
+- reasoning strategy selection
+- human feedback and resumable flows
+- extension hooks for lifecycle interception
 
-## Installation
+### What "Orchestration" Means Here
 
-For local development:
+In `agentorch`, orchestration is not a marketing word.
+
+It means each runtime concern has a concrete type and place in assembly:
+
+- coordinator policies decide routing behavior
+- supervisor plans are inspectable objects
+- handoffs and task packets are explicit records
+- memory scopes and shared state are controlled by policy
+
+### Compatibility and Stability
+
+- Python `3.10+`
+- minimal core dependencies
+- stable high-level facade surface for day-to-day use
+- compatibility exports for older integrations
+
+## HOW
+
+### Installation 📦
+
+Local editable install:
 
 ```bash
 pip install -e .
 ```
 
-Supported Python:
+Direct install from GitHub:
 
-```text
-Python 3.10+
+```bash
+pip install "git+https://github.com/Akun-python/agentorch.git"
 ```
 
-Core runtime dependencies are intentionally small:
+Optional extras example:
 
-```text
-openai>=1.30.0
-pydantic>=2.7.0
-httpx>=0.27.0
-jinja2>=3.1.0
+```bash
+pip install -e ".[neo4j]"
 ```
 
-Optional capabilities may need extra packages depending on the feature:
+### Environment Setup
 
-- PDF parsing: `pdfplumber` or `pypdf`
-- DOCX parsing: `python-docx` improves parsing, with XML fallback available
-- Long-term graph experiments: install the `neo4j` optional dependency when using Neo4j-backed paths
-
-## Environment Setup
-
-`agentorch` keeps configuration at a standard library boundary:
-
-- Pass model settings explicitly when you want full control.
-- Use environment variables when you want deploy-time configuration.
-- Local `.env` loading is opt-in through `initialize_environment(...)`.
-- Automatic local env loading only happens when `AGENTORCH_AUTO_LOAD_ENV=1` is set before importing `agentorch`.
-
-Common environment variables:
+Set provider credentials through environment variables:
 
 ```env
 OPENAI_API_KEY=sk-xxxx
 OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_VISION_MODEL=gpt-4.1-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_TTS_MODEL=your-tts-model
-OPENAI_TTS_VOICE=your-voice
-OPENAI_IMAGE_MODEL=your-image-model
-OPENAI_VIDEO_MODEL=your-video-model
-BRAVE_SEARCH_API_KEY=your-brave-key
 ```
 
-Provider-specific base URLs are normalized. For example, full endpoint URLs such as `.../chat/completions`, `.../embeddings`, or `.../audio/speech` are reduced to the provider base URL expected by the matching adapter.
+Local `.env` loading is opt-in.
 
-Explicit configuration example:
+### Recommended Start Path
 
-```python
-from agentorch import OpenAIModel, create_agent
+1. Start with `create_agent(...)` and one minimal tool.
+2. Add RAG only after baseline behavior is stable.
+3. Add workflow DAG only when execution order matters.
+4. Move to `create_multi_agent(...)` when role separation is clear.
 
-model = OpenAIModel(
-    model="gpt-4.1-mini",
-    api_key="YOUR_API_KEY",
-    base_url="https://api.openai.com/v1",
-)
+### Validation Commands
 
-agent = create_agent(model=model)
+Run package tests:
+
+```powershell
+py -3.10 -m pytest -q
 ```
 
-Opt-in local env loading:
+Run README contract tests:
 
-```python
-from agentorch.config import initialize_environment
-
-initialize_environment(".env", overwrite=False)
+```powershell
+py -3.10 -m pytest -q agentorch/tests/test_readme_contracts.py
 ```
 
-## Quick Start
+### Practical Guardrails ✅
 
-For a curated map of facade-first examples versus lower-level runtime examples, see [`examples/README.md`](examples/README.md).
+- keep tool allowlists narrow
+- avoid enabling shell where not required
+- keep thread IDs explicit for traceability
+- close agents/runtimes after use
 
-### 1. Minimal Agent
+## QUICKSTART
+
+### 1) Minimal Agent (sync)
 
 ```python
 from agentorch import create_agent
 
 agent = create_agent(
     model="gpt-4.1-mini",
-    system_prompt="You are a concise and accurate assistant.",
+    system_prompt="You are concise and accurate.",
     reasoning="react",
-    name="quickstart-agent",
 )
 
 result = agent.run_sync(
-    "Explain what agentorch is in three short sentences.",
-    thread_id="quickstart-001",
+    "Explain what agent orchestration is in three bullet points.",
+    thread_id="quickstart-en-001",
 )
 
 print(result.output_text)
 agent.close()
 ```
 
-Use `await agent.run(...)` in notebooks and async applications. Use `run_sync(...)` in normal synchronous scripts.
-
-### 2. Structured Tool Calling
+### 2) Tool Calling
 
 ```python
 from pydantic import BaseModel
 
 from agentorch import ToolRegistry, create_agent, tool
 
-
 class AddInput(BaseModel):
     a: int
     b: int
 
-
-@tool(description="Add two integers together.")
+@tool(description="Add two integers.")
 async def add_numbers(input: AddInput):
     return {"sum": input.a + input.b}
-
 
 agent = create_agent(
     model="gpt-4.1-mini",
@@ -220,606 +218,68 @@ agent = create_agent(
     reasoning="react",
 )
 
-result = agent.run_sync(
-    "Use the add_numbers tool to calculate 123 + 456 and explain the result.",
-    thread_id="tool-demo-001",
-)
-
+result = agent.run_sync("Use add_numbers to compute 12 + 30.", thread_id="quickstart-tools-001")
 print(result.output_text)
-print(result.tool_results)
 agent.close()
 ```
 
-### 3. Tool Bundles and Sandboxed Execution
-
-Tool bundles keep common agent actions consistent. Execution tools are only registered when a sandbox is supplied.
+### 3) Multi-Agent Starter
 
 ```python
-from pathlib import Path
+from agentorch import create_agent, create_multi_agent
 
-from agentorch import ToolRegistry
-from agentorch.sandbox import SandboxManager, SandboxPolicy
-
-sandbox = SandboxManager(
-    policy=SandboxPolicy(
-        allowed_paths=[Path.cwd()],
-        command_allowlist=["python", "git", "powershell", "cmd"],
-        allow_shell=False,
-        timeout=15.0,
-    )
-)
-
-tools = ToolRegistry.with_bundles(
-    workspace_root=Path.cwd(),
-    sandbox=sandbox,
-    include_filesystem=True,
-    include_execution=True,
-    include_git=True,
-    include_web=False,
-)
-```
-
-Available bundle families include filesystem, execution, git, web search, and media tools.
-
-### 4. Multi-Agent Supervisor
-
-`create_multi_agent(...)` builds a supervisor-root runtime with registered specialist agents. Shared memory and shared knowledge can be attached at the team level.
-
-```python
-from agentorch import AgentCapability, CoordinationPolicy, MemoryPolicy, create_agent, create_multi_agent
-
-planner = create_agent(
-    model="gpt-4.1-mini",
-    reasoning="plan_execute",
-    name="planner",
-    description="Breaks goals into implementation plans.",
-)
-
-reviewer = create_agent(
-    model="gpt-4.1-mini",
-    reasoning="react",
-    name="reviewer",
-    description="Reviews plans for risk and missing evidence.",
-)
+planner = create_agent(model="gpt-4.1-mini", reasoning="plan_execute", name="planner")
+reviewer = create_agent(model="gpt-4.1-mini", reasoning="react", name="reviewer")
 
 team = create_multi_agent(
     model="gpt-4.1-mini",
     agents=[
-        {
-            "agent": planner,
-            "name": "planner",
-            "role": "planner",
-            "description": "Planning specialist",
-            "capabilities": [AgentCapability.PLAN],
-            "knowledge_scope": ["architecture"],
-        },
-        {
-            "agent": reviewer,
-            "name": "reviewer",
-            "role": "reviewer",
-            "description": "Review specialist",
-            "capabilities": [AgentCapability.REVIEW],
-            "knowledge_scope": ["quality"],
-        },
+        {"agent": planner, "name": "planner", "role": "planner"},
+        {"agent": reviewer, "name": "reviewer", "role": "reviewer"},
     ],
-    coordination_policy=CoordinationPolicy.distributed(),
-    memory_policy=MemoryPolicy.long_horizon(),
-    system_prompt="Coordinate specialists and return one concise final answer.",
+    system_prompt="Coordinate specialists and return one final answer.",
 )
 
-result = team.run_sync(
-    "Plan and review a migration path for a multi-agent research assistant.",
-    thread_id="team-demo-001",
-)
-
+result = team.run_sync("Draft and review a migration plan.", thread_id="quickstart-team-001")
 print(result.output_text)
 team.close()
 ```
 
-### 5. Declarative Team Design
+### 4) Next Steps
 
-When role definitions repeat across projects, use `TeamDesign` and `AgentDesign` as reusable assembly specs.
+- Add RAG with `knowledge_paths` and `enable_rag=True`
+- Add workflow DAG when task steps need explicit control
+- Add observability storage for trace and usage analysis
+- Move policy objects into code for predictable behavior
 
-```python
-from agentorch import AgentCapability, AgentDesign, CoordinationPolicy, TeamDesign
+### Quick FAQ
 
-role_defaults = AgentDesign(
-    model="gpt-4.1-mini",
-    profile="workflow",
-    reasoning="react",
-)
+Q: Should I start with multi-agent first?  
+A: Usually no. Start with one strong agent, then split roles when boundaries are clear.
 
-team_design = (
-    TeamDesign(
-        name="delivery-team",
-        description="Planner and reviewer team with shared defaults.",
-        role_defaults=role_defaults,
-        coordination_policy=CoordinationPolicy.distributed(),
-    )
-    .add_role(
-        "planner",
-        description="Planning lead",
-        capabilities=[AgentCapability.PLAN],
-        knowledge_scope=["architecture"],
-        supports_parallel_tasks=True,
-    )
-    .add_role(
-        "reviewer",
-        description="Quality reviewer",
-        capabilities=[AgentCapability.REVIEW],
-        knowledge_scope=["quality"],
-        supports_parallel_tasks=True,
-    )
-)
+Q: When should I enable workflow DAG?  
+A: When task order matters and you want deterministic step execution.
 
-team = team_design.build()
-print(team.export_blueprint()["members"])
-team.close()
-```
+Q: When should I enable long-term memory?  
+A: When tasks span multiple threads/sessions and prior outputs must be reused.
 
-### 6. Multi-Format RAG
+Q: How do I keep tool execution safe?  
+A: Use sandbox policy, strict allowlists, and narrow workspace scopes.
 
-```python
-from pathlib import Path
+### Troubleshooting Notes 🛟
 
-from agentorch import IndexedKnowledgeBase, RagStrategyConfig, create_agent
+- `TypeError` around modern typing syntax usually means Python version is too low.
+- If `python` points to an older interpreter, use explicit launcher command (`py -3.10`).
+- If output feels unstable, pin model version and keep thread IDs consistent.
+- If delegation is noisy, reduce agent count and tighten role descriptions first.
 
-knowledge_base = IndexedKnowledgeBase.create(
-    paths=[
-        Path("docs/architecture.md"),
-        Path("docs/meeting_notes.docx"),
-        Path("contracts/msa.pdf"),
-    ],
-    scopes=["architecture", "ops", "legal"],
-)
+### Reference Entry Points
 
-agent = create_agent(
-    model="gpt-4.1-mini",
-    knowledge_base=knowledge_base,
-    enable_rag=True,
-    rag=RagStrategyConfig.for_hybrid(
-        knowledge_scope=["architecture", "ops", "legal"],
-        file_types=[".md", ".docx", ".pdf"],
-        must_cover=["deployment restrictions"],
-        max_steps=3,
-    ),
-    reasoning="react",
-)
+- Main docs: `README.md` (this file)
+- Simplified Chinese: `README.zh-CN.md`
+- Examples folder: `examples/`
+- Package tests: `agentorch/tests/`
 
-result = agent.run_sync(
-    "Find the deployment restrictions and cite the strongest evidence.",
-    thread_id="rag-demo-001",
-)
+For production usage, treat this README as a launch map and move critical settings into versioned config files.
 
-print(result.output_text)
-agent.close()
-```
-
-Mode guide:
-
-- `classic`: chunk-oriented lexical retrieval.
-- `deliberative`: source-routed, structure-aware active retrieval.
-- `hybrid`: classic coarse recall followed by deliberative evidence refinement.
-- `off`: disable retrieval injection.
-
-### 7. Workflow DAGs
-
-Workflows are Python-defined DAGs. They can retrieve evidence, mount RAG output, call tools, delegate to agents, aggregate results, or run evolution steps.
-
-```python
-from agentorch import WorkflowBuilder, create_agent
-from agentorch.knowledge import RagStrategyConfig
-from agentorch.workflow import Node
-
-workflow = (
-    WorkflowBuilder()
-    .then(Node.retrieve("retrieve", output_key="retrieved", rag_mode="hybrid", must_cover=["owner approval"]))
-    .then(Node.rag_mount("mount", from_variable="retrieved", target_key="mounted", mount_result_to="variable"))
-    .then(Node.rag_evaluate("score", from_variable="retrieved", output_key="scored"))
-    .then(Node.model_node("answer", task_context_from_variables=["retrieved", "scored"]))
-    .build()
-)
-
-agent = create_agent(
-    model="gpt-4.1-mini",
-    workflow=workflow,
-    knowledge_paths=["docs/architecture.md"],
-    enable_rag=True,
-    rag=RagStrategyConfig.for_hybrid(),
-    reasoning="react",
-)
-
-result = agent.run_sync("Answer with evidence and cite risks.", thread_id="workflow-demo-001")
-print(result.output_text)
-agent.close()
-```
-
-![agentorch Runtime Flow](resource/runtime_flow.svg)
-
-### 8. Skills
-
-Skills are discovered from `SKILL.md` packages and can be loaded progressively. They are useful when an agent needs compact capability descriptions first, then detailed instructions or resources only when selected.
-
-```python
-from agentorch import create_agent
-
-agent = create_agent(
-    model="gpt-4.1-mini",
-    workspace_root=".",
-    skills=[".skills/research-writer"],
-    skill_catalog={
-        "discovery_roots": [".skills"],
-        "validation_mode": "lenient",
-    },
-    skill_routing={
-        "mode": "progressive",
-        "disclosure_level": "progressive",
-        "selection_mode": "model",
-    },
-)
-
-result = agent.run_sync(
-    "Draft a section using the research-writer skill.",
-    thread_id="skill-demo-001",
-    skill_request={"force_load": ["research-writer"], "allow_auto_select": False},
-)
-
-print(result.output_text)
-agent.close()
-```
-
-### 9. Media Capabilities
-
-Media tools are available when the selected model adapter supports the matching capability.
-
-```python
-import asyncio
-
-from agentorch import OpenAIModel, create_agent
-
-
-async def main() -> None:
-    model = OpenAIModel(model="gpt-4.1-mini")
-
-    audio = await model.synthesize_speech("Hello from agentorch.")
-    print(audio.output_path)
-
-    image = await model.generate_image("A clean icon for a multi-agent framework.")
-    print(image.output_path)
-
-    video = await model.analyze_video(
-        prompt="Summarize the important events in this clip.",
-        video_path="examples/demo.mp4",
-    )
-    print(video.content)
-
-    agent = create_agent(
-        model=model,
-        tool_bundles={
-            "include_filesystem": False,
-            "include_execution": False,
-            "include_git": False,
-            "include_media": True,
-        },
-    )
-    print(agent.export_blueprint()["runtime"]["tools"])
-    agent.close()
-
-
-asyncio.run(main())
-```
-
-For `OpenAIModel` and `OpenAICompatibleHTTPModel`, `include_media=True` registers `text_to_speech`, `generate_image`, and `analyze_video` when supported.
-
-### 10. Output Parsing
-
-Use parser helpers when a run needs structured output without hand-written parsing code.
-
-```python
-from pydantic import BaseModel
-
-from agentorch import PydanticParser, create_agent
-
-
-class Decision(BaseModel):
-    action: str
-    confidence: float
-
-
-agent = create_agent(model="gpt-4.1-mini")
-parsed = agent.run_parsed_sync(
-    "Return JSON for the next action and confidence.",
-    thread_id="parser-demo-001",
-    parser=PydanticParser(Decision),
-)
-
-print(parsed.parsed.action, parsed.parsed.confidence)
-agent.close()
-```
-
-## Runtime Assembly Guide
-
-The runtime is intentionally layered. A typical agent or team assembly resolves in this order:
-
-1. Model adapter or `ModelConfig`.
-2. Tool registry and optional tool bundles.
-3. Skill registry and routing policy.
-4. Knowledge base and RAG strategy.
-5. Memory manager and memory policy.
-6. Runtime config, including prompt template, reasoning, context, state, coordination, observability, and output budgets.
-7. Optional workflow DAG.
-8. Optional agent registry, supervisor, and coordinator for multi-agent systems.
-9. Optional feedback manager and runtime extensions.
-
-This gives one clear place to inspect the assembled system:
-
-```python
-blueprint = agent.export_blueprint()
-config = agent.export_config()
-inspection = agent.inspect()
-core_assembly = agent.export_core_assembly()
-```
-
-All exports apply redaction by default unless `unsafe_export=True` is explicitly set in runtime config.
-
-## Multi-Agent Concepts
-
-The multi-agent layer is built from concrete runtime types:
-
-- `AgentSpec`: identity, role description, capabilities, tags, scope, and delegation limits.
-- `AgentRegistry`: maps specs to runnable agents.
-- `Supervisor`: creates routing/delegation plans.
-- `Coordinator`: validates tasks, permissions, budgets, escalation, and aggregation.
-- `TaskPacket`: the typed unit of delegated work.
-- `Handoff`: the typed delegation record between supervisor and specialist.
-- `SharedWorkspace` and `SharedNote`: collaboration artifacts.
-- `MemoryManager`: thread, workspace, record, and collective-memory state.
-- `ContextKernel`: prepares compact handoff context, shared memory evidence, and prompt context.
-
-The default supported topology is `supervisor`. Parallel delegation is controlled through `CoordinationPolicy` and coordinator execution policy, so a team can be guided, distributed, or hybrid without changing the specialist agents.
-
-## Memory and MGCM
-
-The default memory composition includes:
-
-- session memory
-- thread summary memory
-- agent-local memory
-- workspace memory
-- shared-note memory
-- record memory
-- collective memory
-
-Collective memory is governed through MGCM-style mechanisms:
-
-- promotion from validated or salient shared evidence
-- scene-first indexing
-- relevance-oriented decay
-- scoped recall for delegated specialists
-- candidate promotion after supervisor aggregation
-- citations/evidence records that can be mounted back into prompt context
-
-Use `MemoryPolicy.long_horizon(...)` when a team needs scene-aware long-term recall and cross-thread reuse.
-
-## Policies
-
-`agentorch` keeps runtime behavior explicit through policy objects:
-
-- `ContextPolicy`: what context blocks are allowed into prompts, how much budget they receive, and how overflow is handled.
-- `StatePolicy`: how conversation windows, summaries, snapshots, and rollups are retained.
-- `CoordinationPolicy`: how handoffs, shared workspace views, route modes, and risk alerts behave.
-- `MemoryPolicy`: how long-term recall, promotion, validation, indexing, and decay are selected.
-
-These policies can be supplied directly to `create_agent(...)`, `create_multi_agent(...)`, `RuntimeConfig.agent(...)`, or design objects.
-
-## Extensibility
-
-Extension hooks let application code integrate behavior without patching the runtime core:
-
-- `before_run(...)`
-- `after_run(...)`
-- `before_supervisor_plan(...)`
-- `after_supervisor_plan(...)`
-- `before_handoff(...)`
-- `after_handoff(...)`
-
-Use `RuntimeExtension` subclasses for logging, policy enforcement, application telemetry, custom state sync, or supervisor-plan intervention.
-
-## Observability
-
-Observability can store structured run events in SQLite, project TODO state, track usage, and emit console events.
-
-```python
-from agentorch import create_agent
-from agentorch.config import ObservabilityConfig, RuntimeConfig
-
-agent = create_agent(
-    model="gpt-4.1-mini",
-    runtime_config=RuntimeConfig.agent(
-        observability=ObservabilityConfig(
-            enabled=True,
-            sqlite_path=".agentorch/observability.db",
-            console_mode="important_only",
-        )
-    ),
-)
-```
-
-Payload budgets and redaction are built into exported runtime state and observability storage.
-
-## Human Feedback
-
-Human feedback is available as runtime-level infrastructure:
-
-- `HumanFeedbackManager`
-- `DefaultFeedbackPolicy`
-- `InMemoryHumanInbox`
-- `ConsoleFeedbackDispatcher`
-- `FeedbackKind`, `FeedbackSeverity`, `FeedbackStatus`
-- `Runtime.resume_from_feedback(...)`
-
-Workflow node kinds include `human_notify`, `human_input`, and `human_approval`, so a workflow can pause and resume around a real human decision.
-
-## Evolution Search
-
-Evolution search can optimize agent or team candidates over reasoning, RAG, workflow, and config choices.
-
-```python
-from agentorch import EvaluationResult, EvolutionConfig, SearchSpace, create_agent_evolution
-
-
-async def evaluator(genome, agent, tasks):
-    scores = []
-    task_results = []
-    for task in tasks:
-        result = await agent.run(task["prompt"], thread_id=task["thread_id"])
-        score = 1.0 if "expected" in result.output_text else 0.0
-        scores.append(score)
-        task_results.append({"thread_id": task["thread_id"], "score": score})
-
-    fitness = sum(scores) / max(1, len(scores))
-    return EvaluationResult(
-        genome_id=genome.id,
-        fitness=fitness,
-        metrics={"mean_score": fitness},
-        task_results=task_results,
-    )
-
-
-session = create_agent_evolution(
-    model="gpt-4.1-mini",
-    search_space=SearchSpace(
-        {
-            "reasoning.kind": ["react", "plan_execute"],
-            "rag.mode": ["classic", "hybrid"],
-            "workflow.template": ["classic_inline_answer", "retrieve_plan_review"],
-        }
-    ),
-    evaluator=evaluator,
-    tasks=[{"prompt": "Solve the benchmark task.", "thread_id": "evo-001"}],
-    evolution_config=EvolutionConfig(
-        algorithm_kind="beam_search",
-        population_size=4,
-        generations=3,
-        evaluation_budget=8,
-    ),
-)
-```
-
-Use `create_multi_agent_evolution(...)` for team-level search.
-
-## Project Layout
-
-```text
-agentorch/
-|-- agents/          # Registry, supervisors, coordinators, handoffs, task packets
-|-- config/          # Model, runtime, memory, sandbox, observability config
-|-- core/            # Messages, run results, context envelopes, usage, stream events
-|-- evolution/       # Search algorithms, genomes, sessions, workflow templates
-|-- extensions/      # Runtime hook surface
-|-- feedback/        # Human feedback inboxes, policies, dispatchers, events
-|-- knowledge/       # RAG, ingestion, adapters, retrievers, citations
-|-- memory/          # Thread state, records, stores, mechanisms, MGCM governance
-|-- models/          # Provider adapters and media-capable model support
-|-- observability/   # Tracing, event sinks, SQLite event store, usage tracking
-|-- parsing/         # Structured output parsers and parser-chain helpers
-|-- plugins/         # Extension manager surface for plugin-style integrations
-|-- prompts/         # Prompt cards, templates, and prompt builder
-|-- reasoning/       # CoT, ReAct, Plan-Execute, ToT, Reflexion
-|-- runtime/         # Agent, Runtime, context kernel, workflow execution
-|-- sandbox/         # Sandboxed command and Python-worker execution
-|-- skills/          # SKILL.md discovery, catalog, routing, resource loading
-|-- tools/           # Tool decorator, registry, filesystem, git, web, media, execution
-|-- workflow/        # Workflow DAG data structures and runner
-```
-
-Other important directories:
-
-```text
-examples/            # Facade and lower-level runtime examples
-experiments/         # Research experiment packages and benchmark CLIs
-notebooks/           # Notebook resources and demos
-resource/            # README images and framework icon
-tests/               # Integration and behavior tests
-agentorch/tests/     # Public API and package-level tests
-```
-
-## Examples
-
-Recommended facade examples:
-
-- [`examples/basic_agent.py`](examples/basic_agent.py)
-- [`examples/supervisor_agents.py`](examples/supervisor_agents.py)
-- [`examples/evolution_facade_demo.py`](examples/evolution_facade_demo.py)
-
-Core and advanced examples:
-
-- [`examples/code_interpreter_agent.py`](examples/code_interpreter_agent.py)
-- [`examples/code_interpreter_session_workflow.py`](examples/code_interpreter_session_workflow.py)
-- [`examples/evolution_demo.py`](examples/evolution_demo.py)
-- [`examples/evolution_multi_mechanism.py`](examples/evolution_multi_mechanism.py)
-- [`examples/evolution_orchestration_search.py`](examples/evolution_orchestration_search.py)
-- [`examples/mgcm_demo.py`](examples/mgcm_demo.py)
-- [`examples/rag_agent_tool_call.py`](examples/rag_agent_tool_call.py)
-- [`examples/rag_mode_comparison.py`](examples/rag_mode_comparison.py)
-- [`examples/rag_multiformat_runtime.py`](examples/rag_multiformat_runtime.py)
-- [`examples/rag_ready_runtime.py`](examples/rag_ready_runtime.py)
-- [`examples/rag_scoped_multi_agent.py`](examples/rag_scoped_multi_agent.py)
-- [`examples/rag_workflow_orchestrated.py`](examples/rag_workflow_orchestrated.py)
-- [`examples/workflow_multi_agent_graph.py`](examples/workflow_multi_agent_graph.py)
-- [`examples/workflow_selectable_rag.py`](examples/workflow_selectable_rag.py)
-
-Interactive notebooks:
-
-- [`agentorch_experiments.ipynb`](agentorch_experiments.ipynb)
-- [`agentorch_media_image_debug.ipynb`](agentorch_media_image_debug.ipynb)
-
-## Testing
-
-Recommended local validation:
-
-```powershell
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
-py -3.13 -m pytest agentorch/tests tests -q
-py -3.13 -m compileall agentorch tests
-```
-
-On this machine, prefer an explicit `py -3.13` or newer launcher. The default `python` executable may resolve to a Python version below the supported `Python 3.10+` floor.
-
-Focused checks:
-
-```powershell
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
-py -3.13 -m pytest agentorch/tests/test_readme_contracts.py tests/test_examples_contracts.py -q
-py -3.13 -m pytest tests/test_multi_agent_runtime.py tests/test_orchestration_integration.py -q
-py -3.13 -m pytest tests/test_memory.py tests/test_skills.py tests/test_workflow.py -q
-```
-
-## Design Notes
-
-`agentorch` intentionally keeps these boundaries explicit:
-
-- memory is not knowledge
-- tools are not workflows
-- workflows are not prompt templates
-- skills are not execution engines
-- supervisor routing is not free-form group chat
-- RAG is a configurable strategy, not a hidden side effect
-- model providers are adapters, not framework identity
-- exports are redacted unless unsafe export is explicitly requested
-
-These boundaries keep the framework maintainable for multi-agent applications, while still allowing lower-level runtime assembly when a research experiment or production integration needs it.
-
-## Documentation Assets
-
-README image dependencies:
-
-- [`resource/agentorch-icon.svg`](resource/agentorch-icon.svg)
-- [`resource/architecture_overview.svg`](resource/architecture_overview.svg)
-- [`resource/runtime_flow.svg`](resource/runtime_flow.svg)
-
-Keep new README images in `resource/` so documentation assets stay portable.
-
-## License
-
-MIT
+MIT License.

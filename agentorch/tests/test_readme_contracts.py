@@ -14,41 +14,32 @@ def _section(text: str, heading: str) -> str:
     return match.group(1)
 
 
-def _subsection(text: str, heading: str) -> str:
-    pattern = re.compile(rf"{re.escape(heading)}\n(.*?)(?:\n### |\n## |\Z)", re.S)
-    match = pattern.search(text)
-    assert match is not None, f"Missing heading: {heading}"
-    return match.group(1)
-
-
 def _python_block(section: str) -> str:
     match = re.search(r"```python\n(.*?)```", section, re.S)
     assert match is not None, "Missing python code block"
     return match.group(1)
 
 
-def test_readmes_recommend_facade_entrypoints():
-    readmes = [
-        (README_EN, "## Recommended API Style"),
-        (README_ZH, "## 当前推荐 API 风格"),
-    ]
-    for path, heading in readmes:
-        section = _section(path.read_text(encoding="utf-8"), heading)
-        assert "`create_agent(...)`" in section
-        assert "`create_multi_agent(...)`" in section
+def test_readmes_follow_concise_structure():
+    for path in (README_EN, README_ZH):
+        text = path.read_text(encoding="utf-8")
+        for heading in ("## WHY", "## WHAT", "## HOW", "## QUICKSTART"):
+            _section(text, heading)
 
 
-def test_chinese_readme_quickstart_uses_facade_entrypoints():
-    text = README_ZH.read_text(encoding="utf-8")
+def test_readmes_keep_facade_entrypoints_in_what_section():
+    for path in (README_EN, README_ZH):
+        text = path.read_text(encoding="utf-8")
+        what_section = _section(text, "## WHAT")
+        assert "`create_agent(...)`" in what_section
+        assert "`create_multi_agent(...)`" in what_section
 
-    minimal_agent = _subsection(text, "### 1. 最小 Agent")
-    minimal_code = _python_block(minimal_agent)
-    assert "from agentorch import create_agent" in minimal_code
-    assert "agent = create_agent(" in minimal_code
-    assert "Agent.create(" not in minimal_code
 
-    multi_agent = _subsection(text, "### 7. 多智能体 supervisor 委派")
-    multi_agent_code = _python_block(multi_agent)
-    assert "from agentorch import AgentCapability, create_agent, create_multi_agent" in multi_agent_code
-    assert "planner = create_agent(" in multi_agent_code
-    assert "orchestrator = create_multi_agent(" in multi_agent_code
+def test_readmes_quickstart_use_create_agent():
+    for path in (README_EN, README_ZH):
+        text = path.read_text(encoding="utf-8")
+        quickstart = _section(text, "## QUICKSTART")
+        code = _python_block(quickstart)
+        assert "from agentorch import create_agent" in code
+        assert "agent = create_agent(" in code
+        assert "Agent.create(" not in code

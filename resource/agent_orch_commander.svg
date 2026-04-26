@@ -1,0 +1,81 @@
+<svg width="1200" height="700" viewBox="0 0 1200 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="700" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#111C34"/>
+    </linearGradient>
+    <linearGradient id="node" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+    <linearGradient id="agent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#10B981"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+    <linearGradient id="cap" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#7C3AED"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 L3.5,6 Z" fill="#93C5FD"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="700" fill="url(#bg)"/>
+
+  <text x="600" y="62" text-anchor="middle" fill="#E2E8F0" font-size="34" font-weight="700" font-family="Segoe UI, Arial, sans-serif">
+    Agent Orch = Agent Orchestration
+  </text>
+  <text x="600" y="95" text-anchor="middle" fill="#93C5FD" font-size="20" font-weight="600" font-family="Segoe UI, Arial, sans-serif">
+    以“总指挥”统一协调模型、工具、记忆、检索与多智能体协作
+  </text>
+
+  <rect x="430" y="130" width="340" height="130" rx="20" fill="url(#node)" filter="url(#shadow)"/>
+  <text x="600" y="184" text-anchor="middle" fill="#F8FAFC" font-size="30" font-weight="700" font-family="Segoe UI, Arial, sans-serif">
+    Commander / 总指挥
+  </text>
+  <text x="600" y="216" text-anchor="middle" fill="#DBEAFE" font-size="17" font-family="Segoe UI, Arial, sans-serif">
+    Routing · Policy · Delegation · Safety
+  </text>
+
+  <rect x="110" y="360" width="230" height="110" rx="18" fill="url(#agent)" filter="url(#shadow)"/>
+  <text x="225" y="410" text-anchor="middle" fill="#ECFDF5" font-size="24" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Planner Agent</text>
+  <text x="225" y="438" text-anchor="middle" fill="#D1FAE5" font-size="15" font-family="Segoe UI, Arial, sans-serif">Plans and decomposition</text>
+
+  <rect x="370" y="360" width="230" height="110" rx="18" fill="url(#agent)" filter="url(#shadow)"/>
+  <text x="485" y="410" text-anchor="middle" fill="#ECFDF5" font-size="24" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Tool Agent</text>
+  <text x="485" y="438" text-anchor="middle" fill="#D1FAE5" font-size="15" font-family="Segoe UI, Arial, sans-serif">Filesystem / Git / Execution</text>
+
+  <rect x="630" y="360" width="230" height="110" rx="18" fill="url(#agent)" filter="url(#shadow)"/>
+  <text x="745" y="410" text-anchor="middle" fill="#ECFDF5" font-size="24" font-weight="700" font-family="Segoe UI, Arial, sans-serif">RAG Agent</text>
+  <text x="745" y="438" text-anchor="middle" fill="#D1FAE5" font-size="15" font-family="Segoe UI, Arial, sans-serif">Retrieve and evidence</text>
+
+  <rect x="890" y="360" width="230" height="110" rx="18" fill="url(#agent)" filter="url(#shadow)"/>
+  <text x="1005" y="410" text-anchor="middle" fill="#ECFDF5" font-size="24" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Reviewer Agent</text>
+  <text x="1005" y="438" text-anchor="middle" fill="#D1FAE5" font-size="15" font-family="Segoe UI, Arial, sans-serif">Risk and quality check</text>
+
+  <path d="M600 262 L225 350" stroke="#93C5FD" stroke-width="3.2" marker-end="url(#arrow)"/>
+  <path d="M600 262 L485 350" stroke="#93C5FD" stroke-width="3.2" marker-end="url(#arrow)"/>
+  <path d="M600 262 L745 350" stroke="#93C5FD" stroke-width="3.2" marker-end="url(#arrow)"/>
+  <path d="M600 262 L1005 350" stroke="#93C5FD" stroke-width="3.2" marker-end="url(#arrow)"/>
+
+  <rect x="150" y="540" width="190" height="82" rx="14" fill="url(#cap)" opacity="0.94"/>
+  <text x="245" y="585" text-anchor="middle" fill="#FAF5FF" font-size="21" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Tools</text>
+
+  <rect x="380" y="540" width="190" height="82" rx="14" fill="url(#cap)" opacity="0.94"/>
+  <text x="475" y="585" text-anchor="middle" fill="#FAF5FF" font-size="21" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Memory</text>
+
+  <rect x="610" y="540" width="190" height="82" rx="14" fill="url(#cap)" opacity="0.94"/>
+  <text x="705" y="585" text-anchor="middle" fill="#FAF5FF" font-size="21" font-weight="700" font-family="Segoe UI, Arial, sans-serif">RAG</text>
+
+  <rect x="840" y="540" width="190" height="82" rx="14" fill="url(#cap)" opacity="0.94"/>
+  <text x="935" y="585" text-anchor="middle" fill="#FAF5FF" font-size="21" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Workflow</text>
+
+  <path d="M245 540 L245 475" stroke="#C4B5FD" stroke-width="2.6" marker-end="url(#arrow)"/>
+  <path d="M475 540 L475 475" stroke="#C4B5FD" stroke-width="2.6" marker-end="url(#arrow)"/>
+  <path d="M705 540 L705 475" stroke="#C4B5FD" stroke-width="2.6" marker-end="url(#arrow)"/>
+  <path d="M935 540 L935 475" stroke="#C4B5FD" stroke-width="2.6" marker-end="url(#arrow)"/>
+</svg>
