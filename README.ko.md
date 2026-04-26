@@ -6,12 +6,12 @@
 
 <p align="center">
   <a href="README.md">English</a> |
-  <a href="README.zh-CN.md">zh-CN</a> |
-  <a href="README.zh-TW.md">zh-TW</a> |
-  <a href="README.fr.md">fr</a> |
-  <a href="README.ja.md">ja</a> |
-  <a href="README.ko.md">ko</a> |
-  <a href="README.es.md">es</a>
+  <a href="README.zh-CN.md">简体中文</a> |
+  <a href="README.zh-TW.md">繁體中文</a> |
+  <a href="README.fr.md">Français</a> |
+  <a href="README.ja.md">日本語</a> |
+  <a href="README.ko.md">한국어</a> |
+  <a href="README.es.md">Español</a>
 </p>
 
 <p align="center">
