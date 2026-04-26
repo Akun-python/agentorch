@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentorch"
+name = "agent-orch"
 version = "0.1.0"
 description = "Code-first async-first agent orchestration framework for Python."
 readme = "README.md"
