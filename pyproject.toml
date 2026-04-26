@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "masarch"
-version = "0.1.0"
+version = "0.1.1"
 description = "Code-first async-first agent orchestration framework for Python."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -40,6 +40,7 @@ neo4j = [
 [project.urls]
 Homepage = "https://github.com/Akun-python/agentorch"
 Repository = "https://github.com/Akun-python/agentorch"
+Documentation = "https://github.com/Akun-python/agentorch#readme"
 Issues = "https://github.com/Akun-python/agentorch/issues"
 
 [tool.pytest.ini_options]

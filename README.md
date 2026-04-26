@@ -1,25 +1,20 @@
-<h1 align="center">agentorch</h1>
+<h1 align="center">masarch / agentorch</h1>
 
 <p align="center">
-  <img src="resource/agentorch-icon.svg" alt="agentorch icon" width="110">
+  <a href="https://github.com/Akun-python/agentorch/blob/main/README.md">English</a> |
+  <a href="https://github.com/Akun-python/agentorch/blob/main/README.zh-CN.md">简体中文</a> |
+  <a href="https://github.com/Akun-python/agentorch/blob/main/README.zh-TW.md">繁體中文</a> |
+  <a href="https://github.com/Akun-python/agentorch/blob/main/README.fr.md">Français</a> |
+  <a href="https://github.com/Akun-python/agentorch/blob/main/README.ja.md">日本語</a> |
+  <a href="https://github.com/Akun-python/agentorch/blob/main/README.ko.md">한국어</a> |
+  <a href="https://github.com/Akun-python/agentorch/blob/main/README.es.md">Español</a>
 </p>
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh-CN.md">简体中文</a> |
-  <a href="README.zh-TW.md">繁體中文</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.es.md">Español</a>
-</p>
-
-<p align="center">
-  <img alt="version v0.1.0" src="https://img.shields.io/badge/version-v0.1.0-2563eb?style=flat-square">
-  <img alt="python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white">
-  <img alt="downloads" src="https://img.shields.io/github/downloads/Akun-python/agentorch/total?style=flat-square">
-  <img alt="license MIT" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square">
-</p>
+PyPI distribution: `masarch`  
+Python import package: `agentorch`  
+Version: `0.1.1`  
+Python: `3.10+`  
+License: `MIT`
 
 `agentorch` is a code-first, async-first framework for programmable multi-agent orchestration in Python.
 
@@ -27,7 +22,11 @@ It is built for teams that need explicit runtime control, not hidden prompt pipe
 
 If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
 
-![agentorch Architecture Overview](resource/architecture_overview.svg)
+Resources:
+
+- Architecture overview: <https://github.com/Akun-python/agentorch/blob/main/resource/architecture_overview.svg>
+- Runtime flow: <https://github.com/Akun-python/agentorch/blob/main/resource/runtime_flow.svg>
+- Source repository: <https://github.com/Akun-python/agentorch>
 
 ## WHY
 
@@ -116,6 +115,30 @@ It means each runtime concern has a concrete type and place in assembly:
 ## HOW
 
 ### Installation 📦
+
+Install from PyPI:
+
+```bash
+pip install masarch
+```
+
+If your package mirror has not synchronized the latest release yet, use the official PyPI index:
+
+```bash
+pip install -i https://pypi.org/simple --no-cache-dir masarch
+```
+
+Verify the installed distribution and import package:
+
+```bash
+python -c "import importlib.metadata as m; import agentorch; print(m.version('masarch')); print(agentorch.__file__)"
+```
+
+Query release versions:
+
+```bash
+pip index versions masarch -i https://pypi.org/simple
+```
 
 Local editable install:
 
