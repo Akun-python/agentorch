@@ -27,6 +27,8 @@ It is built for teams that need explicit runtime control, not hidden prompt pipe
 
 If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
 
+The package is published as `agentorch`, so production users can start from PyPI with `pip install agentorch` and then opt into source installs only when developing the framework itself.
+
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
@@ -117,7 +119,13 @@ It means each runtime concern has a concrete type and place in assembly:
 
 ### Installation 📦
 
-Local editable install:
+Install from PyPI:
+
+```bash
+pip install agentorch
+```
+
+Local editable install for framework development:
 
 ```bash
 pip install -e .
@@ -132,7 +140,7 @@ pip install "git+https://github.com/Akun-python/agentorch.git"
 Optional extras example:
 
 ```bash
-pip install -e ".[neo4j]"
+pip install "agentorch[neo4j]"
 ```
 
 ### Environment Setup

@@ -27,6 +27,8 @@
 
 当你的场景需要工具调用、检索证据、记忆治理、工作流和多角色协作同时存在时，`agentorch` 提供了明确可控的运行时模型。
 
+该库已按 `agentorch` 包名发布，普通用户可直接通过 `pip install agentorch` 安装；只有在参与框架源码开发时，才需要使用本地 editable 安装。
+
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
@@ -103,7 +105,13 @@
 
 ### 安装 📦
 
-本地开发安装：
+从 PyPI 安装：
+
+```bash
+pip install agentorch
+```
+
+框架源码开发时使用本地 editable 安装：
 
 ```bash
 pip install -e .
@@ -118,7 +126,7 @@ pip install "git+https://github.com/Akun-python/agentorch.git"
 可选依赖示例：
 
 ```bash
-pip install -e ".[neo4j]"
+pip install "agentorch[neo4j]"
 ```
 
 ### 环境变量配置
