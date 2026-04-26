@@ -25,6 +25,8 @@ def create_find_files_tool(workspace_root: str | Path, *, name: str = "find_file
         if not base.exists():
             raise ToolError(f"Search path '{base}' does not exist.", tool_name=name)
         iterator = [base] if base.is_file() else base.rglob("*")
+        pattern = input.pattern if input.case_sensitive else input.pattern.lower()
+        matcher = fnmatch.fnmatchcase if input.case_sensitive else fnmatch.fnmatch
         matches = []
         for item in iterator:
             if not item.is_file():
@@ -36,12 +38,10 @@ def create_find_files_tool(workspace_root: str | Path, *, name: str = "find_file
             if input.case_sensitive:
                 name_candidate = item.name
                 path_candidate = relative_str
-                pattern = input.pattern
             else:
                 name_candidate = item.name.lower()
                 path_candidate = relative_str.lower()
-                pattern = input.pattern.lower()
-            if fnmatch.fnmatch(name_candidate, pattern) or fnmatch.fnmatch(path_candidate, pattern):
+            if matcher(name_candidate, pattern) or matcher(path_candidate, pattern):
                 matches.append(relative_str)
                 if len(matches) >= input.max_results:
                     break

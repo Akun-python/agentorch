@@ -28,7 +28,7 @@ def create_search_text_tool(workspace_root: str | Path, *, name: str = "search_t
         base = resolve_workspace_path(root, input.path, tool_name=name)
         if not base.exists():
             raise ToolError(f"Search path '{base}' does not exist.", tool_name=name)
-        candidates = [base] if base.is_file() else [item for item in base.rglob(input.glob) if item.is_file()]
+        candidates = (base,) if base.is_file() else (item for item in base.rglob(input.glob) if item.is_file())
         flags = 0 if input.case_sensitive else re.IGNORECASE
         try:
             needle = re.compile(input.pattern if input.regex else re.escape(input.pattern), flags)
@@ -41,6 +41,31 @@ def create_search_text_tool(workspace_root: str | Path, *, name: str = "search_t
             if not input.include_hidden and is_hidden_path(relative_path):
                 continue
             if is_probably_binary(file_path):
+                continue
+            if input.context_lines == 0:
+                try:
+                    with file_path.open("r", encoding=input.encoding) as handle:
+                        files_scanned += 1
+                        for line_number, raw_line in enumerate(handle, start=1):
+                            line = raw_line.rstrip("\r\n")
+                            if needle.search(line):
+                                results.append(
+                                    {
+                                        "path": relative_path.as_posix(),
+                                        "line": line_number,
+                                        "text": line,
+                                        "context": [line],
+                                    }
+                                )
+                                if len(results) >= input.max_results:
+                                    return {
+                                        "matches": results,
+                                        "files_scanned": files_scanned,
+                                        "summary": f"Found {len(results)} matches after scanning {files_scanned} file(s).",
+                                        "truncated": True,
+                                    }
+                except UnicodeDecodeError:
+                    continue
                 continue
             try:
                 lines = file_path.read_text(encoding=input.encoding).splitlines()

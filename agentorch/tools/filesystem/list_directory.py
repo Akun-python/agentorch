@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from heapq import nsmallest
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -26,17 +27,22 @@ def create_list_directory_tool(workspace_root: str | Path, *, name: str = "list_
         if not target.is_dir():
             raise ToolError(f"Path '{target}' is not a directory.", tool_name=name)
         iterator = target.rglob("*") if input.recursive else target.iterdir()
+
+        def iter_candidates():
+            for item in iterator:
+                relative_path = item.relative_to(root)
+                if not input.include_hidden and is_hidden_path(relative_path):
+                    continue
+                is_directory = item.is_dir()
+                yield (not is_directory, relative_path.as_posix().lower()), relative_path, item, is_directory
+
+        selected = nsmallest(input.max_entries, iter_candidates(), key=lambda payload: payload[0])
         entries = []
-        for item in sorted(iterator, key=lambda value: (not value.is_dir(), value.as_posix().lower())):
-            relative_path = item.relative_to(root)
-            if not input.include_hidden and is_hidden_path(relative_path):
-                continue
-            entry = {"path": relative_path.as_posix(), "type": "directory" if item.is_dir() else "file"}
-            if input.include_size and item.is_file():
+        for _, relative_path, item, is_directory in selected:
+            entry = {"path": relative_path.as_posix(), "type": "directory" if is_directory else "file"}
+            if input.include_size and not is_directory:
                 entry["size_bytes"] = item.stat().st_size
             entries.append(entry)
-            if len(entries) >= input.max_entries:
-                break
         return {"workspace_root": root.as_posix(), "entries": entries, "count": len(entries)}
 
     return FunctionTool(
