@@ -27,6 +27,8 @@
 
 当你的场景需要工具调用、检索证据、记忆治理、工作流和多角色协作同时存在时，`agentorch` 提供了明确可控的运行时模型。
 
+PyPI 发行名是 `masarch`，Python 导入包名仍然是 `agentorch`。用户安装时使用 `pip install masarch`，代码里继续使用 `import agentorch`。
+
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
@@ -103,6 +105,30 @@
 
 ### 安装 📦
 
+从 PyPI 安装：
+
+```bash
+pip install masarch
+```
+
+如果当前镜像源还没有同步最新版本，临时使用官方 PyPI 源：
+
+```bash
+pip install -i https://pypi.org/simple --no-cache-dir masarch
+```
+
+确认安装版本和导入路径：
+
+```bash
+python -c "import importlib.metadata as m; import agentorch; print(m.version('masarch')); print(agentorch.__file__)"
+```
+
+查询 PyPI 已发布版本：
+
+```bash
+pip index versions masarch -i https://pypi.org/simple
+```
+
 本地开发安装：
 
 ```bash
@@ -116,6 +142,12 @@ pip install "git+https://github.com/Akun-python/agentorch.git"
 ```
 
 可选依赖示例：
+
+```bash
+pip install "masarch[neo4j]"
+```
+
+本地开发并启用可选依赖：
 
 ```bash
 pip install -e ".[neo4j]"

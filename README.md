@@ -155,6 +155,12 @@ pip install "git+https://github.com/Akun-python/agentorch.git"
 Optional extras example:
 
 ```bash
+pip install "masarch[neo4j]"
+```
+
+Local editable install with optional extras:
+
+```bash
 pip install -e ".[neo4j]"
 ```
 
