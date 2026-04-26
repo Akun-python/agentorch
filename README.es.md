@@ -17,19 +17,19 @@
   <img alt="license MIT" src="https://img.shields.io/github/license/Akun-python/agentorch?style=flat-square">
 </p>
 
-`agentorch` は、コードファーストかつ非同期ファーストの Python マルチエージェント編成フレームワークです。
+`agentorch` es un framework de orquestación multiagente en Python, orientado a código y asíncrono.
 
 ## WHY
 
-- プロンプト依存のブラックボックス化を避ける
-- モデル、ツール、メモリ、RAG、ワークフローの境界を明確化
-- 単一エージェントからチーム編成へ拡張しやすい
+- Evita pipelines opacos basados solo en prompts
+- Mantiene límites claros entre modelo, herramientas, memoria, RAG y workflow
+- Escala de un agente a equipos de especialistas
 
 ## WHAT
 
-- ファサード API: `create_agent(...)`, `create_multi_agent(...)`
-- 構造化ツール呼び出しと Sandbox 実行
-- RAG、メモリ、Workflow DAG、可観測性
+- API de fachada: `create_agent(...)`, `create_multi_agent(...)`
+- Llamadas de herramientas estructuradas y ejecución en sandbox
+- RAG, memoria, workflow DAG y observabilidad
 
 ## HOW
 
@@ -41,7 +41,7 @@ pip install -e .
 pip install "git+https://github.com/Akun-python/agentorch.git"
 ```
 
-Python `3.10+` が必要です。
+Requiere Python `3.10+`.
 
 ## QUICKSTART
 
@@ -50,11 +50,11 @@ from agentorch import create_agent
 
 agent = create_agent(
     model="gpt-4.1-mini",
-    system_prompt="簡潔で正確なアシスタントとして振る舞ってください。",
+    system_prompt="Eres un asistente conciso y preciso.",
     reasoning="react",
 )
 
-result = agent.run_sync("agentorch を 3 つの要点で説明してください。", thread_id="quickstart-ja-001")
+result = agent.run_sync("Explica agentorch en tres puntos.", thread_id="quickstart-es-001")
 print(result.output_text)
 agent.close()
 ```
