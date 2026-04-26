@@ -1,4 +1,4 @@
-# agentorch 🤖🧠
+<h1 align="center">agentorch</h1>
 
 <p align="center">
   <img src="resource/agentorch-icon.svg" alt="agentorch multi-agent framework icon" width="120">
@@ -8,22 +8,16 @@
   <strong>A Python-native, async-first orchestration framework for multi-agent systems.</strong>
 </p>
 
-[中文文档 / Chinese README](README.zh-CN.md)
+<p align="center">
+  <a href="README.zh-CN.md">中文文档 / Chinese README</a>
+</p>
 
-![GitHub stars](https://img.shields.io/github/stars/Akun-python/agentorch?style=flat-square&logo=github)
-![GitHub forks](https://img.shields.io/github/forks/Akun-python/agentorch?style=flat-square&logo=github)
-![License](https://img.shields.io/github/license/Akun-python/agentorch?style=flat-square)
-![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![Async First](https://img.shields.io/badge/runtime-async--first-0ea5e9?style=flat-square)
-
-![Tag Multi-Agent](https://img.shields.io/badge/tag-multi--agent-2563eb?style=flat-square)
-![Tag Workflow DAG](https://img.shields.io/badge/tag-workflow--dag-0d9488?style=flat-square)
-![Tag RAG](https://img.shields.io/badge/tag-rag-7c3aed?style=flat-square)
-![Tag Reasoning](https://img.shields.io/badge/tag-reasoning-f97316?style=flat-square)
-![Tag Memory MGCM](https://img.shields.io/badge/tag-memory--mgcm-059669?style=flat-square)
-![Tag Tool Calling](https://img.shields.io/badge/tag-tool--calling-b45309?style=flat-square)
-![Tag Sandbox](https://img.shields.io/badge/tag-sandbox-475569?style=flat-square)
-![Tag OpenAI Compatible](https://img.shields.io/badge/tag-openai--compatible-111827?style=flat-square)
+<p align="center">
+  <img alt="Agent Orchestration" src="https://img.shields.io/badge/Agent-Orchestration-2563eb?style=flat-square">
+  <img alt="Multi-Agent" src="https://img.shields.io/badge/Focus-Multi--Agent-0d9488?style=flat-square">
+  <img alt="Workflow DAG" src="https://img.shields.io/badge/Capability-Workflow--DAG-7c3aed?style=flat-square">
+  <img alt="RAG" src="https://img.shields.io/badge/Capability-RAG-f97316?style=flat-square">
+</p>
 
 `agentorch` is a code-first framework for building programmable agent systems with explicit runtime assembly, structured tools, workflow DAGs, retrieval, long-term memory, reasoning strategies, human feedback, observability, and supervisor-based multi-agent coordination.
 

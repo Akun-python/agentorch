@@ -1,21 +1,15 @@
-# agentorch
+<h1 align="center">agentorch</h1>
 
-[English README](README.md)
+<p align="center">
+  <a href="README.md">English README</a>
+</p>
 
-![GitHub stars](https://img.shields.io/github/stars/Akun-python/agentorch?style=flat-square&logo=github)
-![GitHub forks](https://img.shields.io/github/forks/Akun-python/agentorch?style=flat-square&logo=github)
-![License](https://img.shields.io/github/license/Akun-python/agentorch?style=flat-square)
-![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![异步优先](https://img.shields.io/badge/runtime-async--first-0ea5e9?style=flat-square)
-
-![标签 多智能体](https://img.shields.io/badge/tag-multi--agent-2563eb?style=flat-square)
-![标签 工作流DAG](https://img.shields.io/badge/tag-workflow--dag-0d9488?style=flat-square)
-![标签 RAG](https://img.shields.io/badge/tag-rag-7c3aed?style=flat-square)
-![标签 推理策略](https://img.shields.io/badge/tag-reasoning-f97316?style=flat-square)
-![标签 记忆MGCM](https://img.shields.io/badge/tag-memory--mgcm-059669?style=flat-square)
-![标签 工具调用](https://img.shields.io/badge/tag-tool--calling-b45309?style=flat-square)
-![标签 沙箱](https://img.shields.io/badge/tag-sandbox-475569?style=flat-square)
-![标签 OpenAI兼容](https://img.shields.io/badge/tag-openai--compatible-111827?style=flat-square)
+<p align="center">
+  <img alt="Agent Orchestration" src="https://img.shields.io/badge/Agent-Orchestration-2563eb?style=flat-square">
+  <img alt="Multi-Agent" src="https://img.shields.io/badge/Focus-Multi--Agent-0d9488?style=flat-square">
+  <img alt="Workflow DAG" src="https://img.shields.io/badge/Capability-Workflow--DAG-7c3aed?style=flat-square">
+  <img alt="RAG" src="https://img.shields.io/badge/Capability-RAG-f97316?style=flat-square">
+</p>
 
 `agentorch` 是一个代码优先、异步优先的 Python 智能体编排框架，用来构建可编程的 agent 系统。它提供结构化工具、工作流、RAG、记忆、推理策略、沙箱执行和多智能体委派能力。
 
