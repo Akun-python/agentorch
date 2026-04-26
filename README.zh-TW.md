@@ -27,10 +27,6 @@
 
 當你的場景需要工具調用、檢索證據、記憶治理、工作流與多角色協作同時運作時，`agentorch` 提供可控且可檢查的執行模型。
 
-![Agent Orch Commander Diagram](resource/agent_orch_commander.svg)
-
-這張圖呈現核心概念：**Agent Orch = Agent Orchestration**，由一個 **Commander / 總指揮** 統一協調專家智能體與共享能力。
-
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
@@ -188,16 +184,13 @@ from pydantic import BaseModel
 
 from agentorch import ToolRegistry, create_agent, tool
 
-
 class AddInput(BaseModel):
     a: int
     b: int
 
-
 @tool(description="Add two integers.")
 async def add_numbers(input: AddInput):
     return {"sum": input.a + input.b}
-
 
 agent = create_agent(
     model="gpt-4.1-mini",

@@ -27,10 +27,6 @@
 
 도구 호출, 검색 근거, 메모리, 워크플로, 다중 에이전트 위임이 동시에 필요한 시스템에서 `agentorch`는 제어 가능한 실행 모델을 제공합니다.
 
-![Agent Orch Commander Diagram](resource/agent_orch_commander.svg)
-
-이 그림은 핵심을 보여줍니다: **Agent Orch = Agent Orchestration**. 하나의 **Commander / 총지휘자**가 전문 에이전트와 공유 능력 계층을 조율합니다.
-
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
@@ -188,16 +184,13 @@ from pydantic import BaseModel
 
 from agentorch import ToolRegistry, create_agent, tool
 
-
 class AddInput(BaseModel):
     a: int
     b: int
 
-
 @tool(description="Add two integers.")
 async def add_numbers(input: AddInput):
     return {"sum": input.a + input.b}
-
 
 agent = create_agent(
     model="gpt-4.1-mini",

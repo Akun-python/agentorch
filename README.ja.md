@@ -27,10 +27,6 @@
 
 ツール呼び出し、RAG、メモリ、ワークフロー、委譲を同時に扱う場合でも、`agentorch` は明示的な実行モデルを提供します。
 
-![Agent Orch Commander Diagram](resource/agent_orch_commander.svg)
-
-この図は核心を示します：**Agent Orch = Agent Orchestration**。**Commander / 総指揮** が専門エージェントと共通能力を統合して調整します。
-
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
@@ -188,16 +184,13 @@ from pydantic import BaseModel
 
 from agentorch import ToolRegistry, create_agent, tool
 
-
 class AddInput(BaseModel):
     a: int
     b: int
 
-
 @tool(description="Add two integers.")
 async def add_numbers(input: AddInput):
     return {"sum": input.a + input.b}
-
 
 agent = create_agent(
     model="gpt-4.1-mini",

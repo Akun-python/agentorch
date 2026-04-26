@@ -1,144 +1,144 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1020" viewBox="0 0 1440 1020" fill="none" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="980" viewBox="0 0 1440 980" fill="none" role="img" aria-labelledby="title desc">
   <title id="title">agentorch Architecture Overview</title>
-  <desc id="desc">Layered architecture diagram for agentorch, emphasizing runtime orchestration, tools, state, knowledge, and multi-agent coordination.</desc>
+  <desc id="desc">Minimal layered architecture diagram for agentorch with explicit orchestration core and multi-agent coordination.</desc>
 
   <defs>
     <style>
-      .title { font-family: "Segoe UI", Arial, sans-serif; font-size: 40px; font-weight: 700; letter-spacing: 0; }
-      .subtitle { font-family: "Segoe UI", Arial, sans-serif; font-size: 19px; font-weight: 400; letter-spacing: 0; }
-      .card-title { font-family: "Segoe UI", Arial, sans-serif; font-size: 30px; font-weight: 700; letter-spacing: 0; }
-      .card-text { font-family: "Segoe UI", Arial, sans-serif; font-size: 18px; font-weight: 400; letter-spacing: 0; }
-      .card-text-strong { font-family: "Segoe UI", Arial, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: 0; }
-      .chip-text { font-family: "Segoe UI", Arial, sans-serif; font-size: 17px; font-weight: 500; letter-spacing: 0; }
-      .footer-text { font-family: "Segoe UI", Arial, sans-serif; font-size: 18px; font-weight: 400; letter-spacing: 0; }
-      .connector { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      .title { font-family: "Segoe UI", Arial, sans-serif; font-size: 38px; font-weight: 700; }
+      .subtitle { font-family: "Segoe UI", Arial, sans-serif; font-size: 18px; font-weight: 400; }
+      .layer-title { font-family: "Segoe UI", Arial, sans-serif; font-size: 28px; font-weight: 700; }
+      .text { font-family: "Segoe UI", Arial, sans-serif; font-size: 17px; font-weight: 400; }
+      .chip { font-family: "Segoe UI", Arial, sans-serif; font-size: 16px; font-weight: 500; }
     </style>
-    <filter id="soft-shadow" x="-5%" y="-8%" width="110%" height="116%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1F2937" flood-opacity="0.10"/>
+    <filter id="shadow" x="-10%" y="-12%" width="120%" height="130%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0F172A" flood-opacity="0.08"/>
     </filter>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">
+      <path d="M0 0L11 5.5L0 11L3 5.5Z" fill="#94A3B8"/>
+    </marker>
   </defs>
 
-  <rect width="1440" height="1020" fill="#F5EFE3"/>
-  <rect x="40" y="34" width="1360" height="952" rx="32" fill="#FFFDF8" stroke="#D7C9AF" stroke-width="2"/>
+  <rect width="1440" height="980" fill="#F8FAFC"/>
+  <rect x="36" y="30" width="1368" height="920" rx="28" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2"/>
 
-  <text x="84" y="96" class="title" fill="#1F2937">agentorch Architecture Overview</text>
-  <text x="84" y="132" class="subtitle" fill="#64748B">
-    Code-first, async-first runtime for explicit tools, workflows, retrieval, memory, and multi-agent coordination.
+  <text x="78" y="90" class="title" fill="#0F172A">agentorch Architecture Overview</text>
+  <text x="78" y="124" class="subtitle" fill="#475569">
+    Code-first runtime for explicit tools, workflow execution, retrieval, memory, and multi-agent orchestration.
   </text>
-  <rect x="1110" y="78" width="246" height="40" rx="20" fill="#EEF2FF" stroke="#818CF8" stroke-width="1.5"/>
-  <text x="1138" y="104" class="chip-text" fill="#3730A3">Multi-agent first runtime</text>
+  <rect x="1118" y="74" width="238" height="40" rx="20" fill="#EEF4FF" stroke="#BFDBFE"/>
+  <text x="1237" y="100" text-anchor="middle" class="chip" fill="#1D4ED8">Minimal, Inspectable Runtime</text>
 
-  <g opacity="0.92">
-    <path d="M394 257H445" class="connector" stroke="#A67818"/>
-    <path d="M995 257H1046" class="connector" stroke="#6373E6"/>
-    <path d="M239 338V410" class="connector" stroke="#D86F58"/>
-    <path d="M720 338V410" class="connector" stroke="#4F9D7B"/>
-    <path d="M1201 338V410" class="connector" stroke="#5C8FCC"/>
-    <path d="M720 558V620" class="connector" stroke="#9B63D1"/>
+  <g stroke="#94A3B8" stroke-width="3.5" stroke-linecap="round" fill="none" opacity="0.85">
+    <path d="M390 244H442" marker-end="url(#arrow)"/>
+    <path d="M998 244H1050" marker-end="url(#arrow)"/>
+    <path d="M240 322V384" marker-end="url(#arrow)"/>
+    <path d="M720 322V384" marker-end="url(#arrow)"/>
+    <path d="M1200 322V384" marker-end="url(#arrow)"/>
+    <path d="M720 532V594" marker-end="url(#arrow)"/>
   </g>
 
-  <g filter="url(#soft-shadow)">
-    <rect x="84" y="176" width="310" height="162" rx="24" fill="#FDEAB9" stroke="#E4A72D" stroke-width="2"/>
-    <text x="112" y="222" class="card-title" fill="#7A4A06">Application Layer</text>
-    <text x="112" y="263" class="card-text" fill="#7A4A06">
-      <tspan x="112" dy="0">create_agent / create_multi_agent</tspan>
-      <tspan x="112" dy="28">AgentDesign / TeamDesign</tspan>
-      <tspan x="112" dy="28">Workflow / Supervisor entrypoints</tspan>
+  <g filter="url(#shadow)">
+    <rect x="78" y="164" width="312" height="160" rx="20" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="2"/>
+    <text x="106" y="210" class="layer-title" fill="#0F172A">Application Layer</text>
+    <text x="106" y="248" class="text" fill="#334155">
+      <tspan x="106" dy="0">create_agent / create_multi_agent</tspan>
+      <tspan x="106" dy="27">AgentDesign / TeamDesign</tspan>
+      <tspan x="106" dy="27">Workflow / Supervisor entrypoints</tspan>
     </text>
   </g>
 
-  <g filter="url(#soft-shadow)">
-    <rect x="445" y="176" width="550" height="162" rx="24" fill="#DCEFE8" stroke="#5CA98A" stroke-width="2"/>
-    <text x="475" y="222" class="card-title" fill="#0F5132">Orchestration Core</text>
-    <text x="475" y="263" class="card-text" fill="#0F5132">
-      <tspan x="475" dy="0">Runtime / Agent</tspan>
-      <tspan x="475" dy="28">ContextKernel / prompts</tspan>
-      <tspan x="475" dy="28">Workflow execution</tspan>
+  <g filter="url(#shadow)">
+    <rect x="442" y="164" width="556" height="160" rx="20" fill="#EEF4FF" stroke="#93C5FD" stroke-width="2"/>
+    <text x="472" y="210" class="layer-title" fill="#1E3A8A">Orchestration Core</text>
+    <text x="472" y="248" class="text" fill="#1F2937">
+      <tspan x="472" dy="0">Runtime / Agent / ContextKernel</tspan>
+      <tspan x="472" dy="27">Prompt assembly / workflow execution</tspan>
+      <tspan x="472" dy="27">Policies / tracing / extensions</tspan>
     </text>
-    <text x="725" y="263" class="card-text" fill="#0F5132">
-      <tspan x="725" dy="0">Reasoning frameworks</tspan>
-      <tspan x="725" dy="28">TaskPacket / Handoff</tspan>
-      <tspan x="725" dy="28">Policies / tracing / extensions</tspan>
-    </text>
-  </g>
-
-  <g filter="url(#soft-shadow)">
-    <rect x="1046" y="176" width="310" height="162" rx="24" fill="#E3E9FF" stroke="#6373E6" stroke-width="2"/>
-    <text x="1074" y="222" class="card-title" fill="#27346C">Model Layer</text>
-    <text x="1074" y="263" class="card-text" fill="#27346C">
-      <tspan x="1074" dy="0">ModelConfig / provider registry</tspan>
-      <tspan x="1074" dy="28">OpenAI-compatible adapters</tspan>
-      <tspan x="1074" dy="28">Streaming / media / tool calls</tspan>
+    <text x="742" y="248" class="text" fill="#1F2937">
+      <tspan x="742" dy="0">Reasoning frameworks</tspan>
+      <tspan x="742" dy="27">TaskPacket / Handoff</tspan>
+      <tspan x="742" dy="27">Delegation and routing</tspan>
     </text>
   </g>
 
-  <g filter="url(#soft-shadow)">
-    <rect x="84" y="410" width="370" height="148" rx="24" fill="#FFE1D9" stroke="#D86F58" stroke-width="2"/>
-    <text x="112" y="456" class="card-title" fill="#7A271A">Action Systems</text>
-    <text x="112" y="492" class="card-text" fill="#7A271A">
-      <tspan x="112" dy="0">ToolRegistry / @tool decorator</tspan>
-      <tspan x="112" dy="27">Filesystem / Git / Web / Media</tspan>
-      <tspan x="112" dy="27">SandboxManager / Python worker</tspan>
+  <g filter="url(#shadow)">
+    <rect x="1050" y="164" width="306" height="160" rx="20" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="2"/>
+    <text x="1078" y="210" class="layer-title" fill="#0F172A">Model Layer</text>
+    <text x="1078" y="248" class="text" fill="#334155">
+      <tspan x="1078" dy="0">ModelConfig / provider registry</tspan>
+      <tspan x="1078" dy="27">OpenAI-compatible adapters</tspan>
+      <tspan x="1078" dy="27">Streaming / media / tool calls</tspan>
     </text>
   </g>
 
-  <g filter="url(#soft-shadow)">
-    <rect x="535" y="410" width="370" height="148" rx="24" fill="#E3F0D3" stroke="#8AAE56" stroke-width="2"/>
-    <text x="563" y="456" class="card-title" fill="#375623">State Systems</text>
-    <text x="563" y="492" class="card-text" fill="#375623">
-      <tspan x="563" dy="0">MemoryManager / mechanisms</tspan>
-      <tspan x="563" dy="27">Thread state / workspace records</tspan>
-      <tspan x="563" dy="27">MGCM collective memory governance</tspan>
+  <g filter="url(#shadow)">
+    <rect x="78" y="384" width="372" height="148" rx="20" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+    <text x="106" y="428" class="layer-title" fill="#0F172A">Action Systems</text>
+    <text x="106" y="462" class="text" fill="#334155">
+      <tspan x="106" dy="0">ToolRegistry / @tool decorator</tspan>
+      <tspan x="106" dy="26">Filesystem / Git / Web / Media</tspan>
+      <tspan x="106" dy="26">SandboxManager / Python worker</tspan>
     </text>
   </g>
 
-  <g filter="url(#soft-shadow)">
-    <rect x="986" y="410" width="370" height="148" rx="24" fill="#E7F0FF" stroke="#5C8FCC" stroke-width="2"/>
-    <text x="1014" y="456" class="card-title" fill="#153E75">Knowledge Systems</text>
-    <text x="1014" y="492" class="card-text" fill="#153E75">
-      <tspan x="1014" dy="0">IndexedKnowledgeBase / adapters</tspan>
-      <tspan x="1014" dy="27">Classic / deliberative / hybrid RAG</tspan>
-      <tspan x="1014" dy="27">Citations / evidence reports</tspan>
+  <g filter="url(#shadow)">
+    <rect x="534" y="384" width="372" height="148" rx="20" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+    <text x="562" y="428" class="layer-title" fill="#0F172A">State Systems</text>
+    <text x="562" y="462" class="text" fill="#334155">
+      <tspan x="562" dy="0">MemoryManager / mechanisms</tspan>
+      <tspan x="562" dy="26">Thread state / workspace records</tspan>
+      <tspan x="562" dy="26">Collective memory governance</tspan>
     </text>
   </g>
 
-  <g filter="url(#soft-shadow)">
-    <rect x="84" y="620" width="1272" height="258" rx="30" fill="#F0E0FF" stroke="#9B63D1" stroke-width="3"/>
-    <text x="114" y="674" class="title" fill="#5B2B85">Multi-Agent Layer</text>
-    <text x="114" y="712" class="card-text-strong" fill="#5B2B85">
-      First-class team orchestration for scoped delegation, shared state, inspectable handoffs, and low-token collaboration.
+  <g filter="url(#shadow)">
+    <rect x="990" y="384" width="366" height="148" rx="20" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+    <text x="1018" y="428" class="layer-title" fill="#0F172A">Knowledge Systems</text>
+    <text x="1018" y="462" class="text" fill="#334155">
+      <tspan x="1018" dy="0">IndexedKnowledgeBase / adapters</tspan>
+      <tspan x="1018" dy="26">Classic / deliberative / hybrid RAG</tspan>
+      <tspan x="1018" dy="26">Citations / evidence reports</tspan>
     </text>
-
-    <rect x="114" y="742" width="260" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
-    <text x="244" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">AgentRegistry / AgentSpec</text>
-
-    <rect x="398" y="742" width="236" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
-    <text x="516" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">TaskPacket / Handoff</text>
-
-    <rect x="658" y="742" width="220" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
-    <text x="768" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">Supervisor / Coordinator</text>
-
-    <rect x="902" y="742" width="204" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
-    <text x="1004" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">CoordinationPolicy</text>
-
-    <rect x="1130" y="742" width="196" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
-    <text x="1228" y="767" text-anchor="middle" class="chip-text" fill="#5B2B85">MemoryPolicy</text>
-
-    <rect x="208" y="800" width="232" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
-    <text x="324" y="825" text-anchor="middle" class="chip-text" fill="#5B2B85">Specialist agents</text>
-
-    <rect x="466" y="800" width="230" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
-    <text x="581" y="825" text-anchor="middle" class="chip-text" fill="#5B2B85">Workflow agent nodes</text>
-
-    <rect x="722" y="800" width="220" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
-    <text x="832" y="825" text-anchor="middle" class="chip-text" fill="#5B2B85">Shared knowledge</text>
-
-    <rect x="968" y="800" width="222" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.80"/>
-    <text x="1079" y="825" text-anchor="middle" class="chip-text" fill="#5B2B85">Aggregated outputs</text>
   </g>
 
-  <rect x="84" y="910" width="1272" height="48" rx="24" fill="#FFF0D8" stroke="#D89B35" stroke-width="2"/>
-  <text x="114" y="941" class="footer-text" fill="#7C4A03">
-    Extension surface: skills · plugins · custom retrievers · custom policies · sandbox backends · runtime hooks · specialist agents
+  <g filter="url(#shadow)">
+    <rect x="78" y="594" width="1278" height="252" rx="24" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="2"/>
+    <text x="108" y="646" class="layer-title" fill="#0F172A">Multi-Agent Layer</text>
+    <text x="108" y="682" class="text" fill="#334155">
+      Explicit team orchestration for scoped delegation, shared state, inspectable handoffs, and low-token collaboration.
+    </text>
+
+    <rect x="108" y="710" width="262" height="38" rx="19" fill="#FFFFFF" stroke="#D6E3F8"/>
+    <text x="239" y="735" text-anchor="middle" class="chip" fill="#334155">AgentRegistry / AgentSpec</text>
+
+    <rect x="392" y="710" width="240" height="38" rx="19" fill="#FFFFFF" stroke="#D6E3F8"/>
+    <text x="512" y="735" text-anchor="middle" class="chip" fill="#334155">TaskPacket / Handoff</text>
+
+    <rect x="654" y="710" width="230" height="38" rx="19" fill="#FFFFFF" stroke="#D6E3F8"/>
+    <text x="769" y="735" text-anchor="middle" class="chip" fill="#334155">Supervisor / Coordinator</text>
+
+    <rect x="906" y="710" width="206" height="38" rx="19" fill="#FFFFFF" stroke="#D6E3F8"/>
+    <text x="1009" y="735" text-anchor="middle" class="chip" fill="#334155">CoordinationPolicy</text>
+
+    <rect x="1134" y="710" width="192" height="38" rx="19" fill="#FFFFFF" stroke="#D6E3F8"/>
+    <text x="1230" y="735" text-anchor="middle" class="chip" fill="#334155">MemoryPolicy</text>
+
+    <rect x="204" y="766" width="236" height="38" rx="19" fill="#FFFFFF" stroke="#D6E3F8"/>
+    <text x="322" y="791" text-anchor="middle" class="chip" fill="#334155">Specialist agents</text>
+
+    <rect x="464" y="766" width="230" height="38" rx="19" fill="#FFFFFF" stroke="#D6E3F8"/>
+    <text x="579" y="791" text-anchor="middle" class="chip" fill="#334155">Workflow agent nodes</text>
+
+    <rect x="718" y="766" width="220" height="38" rx="19" fill="#FFFFFF" stroke="#D6E3F8"/>
+    <text x="828" y="791" text-anchor="middle" class="chip" fill="#334155">Shared knowledge</text>
+
+    <rect x="962" y="766" width="230" height="38" rx="19" fill="#FFFFFF" stroke="#D6E3F8"/>
+    <text x="1077" y="791" text-anchor="middle" class="chip" fill="#334155">Aggregated outputs</text>
+  </g>
+
+  <rect x="78" y="872" width="1278" height="46" rx="23" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+  <text x="108" y="902" class="text" fill="#475569">
+    Extension surface: skills | plugins | custom retrievers | custom policies | sandbox backends | runtime hooks
   </text>
 </svg>

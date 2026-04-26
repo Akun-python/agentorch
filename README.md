@@ -27,10 +27,6 @@ It is built for teams that need explicit runtime control, not hidden prompt pipe
 
 If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
 
-![Agent Orch Commander Diagram](resource/agent_orch_commander.svg)
-
-This diagram shows the core idea: **Agent Orch = Agent Orchestration**, where a **Commander / 总指挥** coordinates specialist agents and shared runtime capabilities.
-
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
@@ -208,16 +204,13 @@ from pydantic import BaseModel
 
 from agentorch import ToolRegistry, create_agent, tool
 
-
 class AddInput(BaseModel):
     a: int
     b: int
 
-
 @tool(description="Add two integers.")
 async def add_numbers(input: AddInput):
     return {"sum": input.a + input.b}
-
 
 agent = create_agent(
     model="gpt-4.1-mini",

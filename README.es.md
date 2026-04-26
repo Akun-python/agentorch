@@ -27,10 +27,6 @@ Está pensado para sistemas con límites de ingeniería claros, no para cadenas 
 
 Cuando necesitas herramientas, RAG, memoria, workflow y delegación en un mismo sistema, `agentorch` ofrece un modelo de ejecución controlable.
 
-![Agent Orch Commander Diagram](resource/agent_orch_commander.svg)
-
-Este diagrama resume la idea central: **Agent Orch = Agent Orchestration**. Un **Commander / coordinador central** dirige agentes especialistas y capacidades compartidas.
-
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 ## WHY
@@ -188,16 +184,13 @@ from pydantic import BaseModel
 
 from agentorch import ToolRegistry, create_agent, tool
 
-
 class AddInput(BaseModel):
     a: int
     b: int
 
-
 @tool(description="Add two integers.")
 async def add_numbers(input: AddInput):
     return {"sum": input.a + input.b}
-
 
 agent = create_agent(
     model="gpt-4.1-mini",
