@@ -614,7 +614,7 @@ class OpenAIModel(
         choice = raw.choices[0]
         content = choice.message.content or ""
         tool_calls: list[ToolCall] = []
-        for tool_call in choice.message.tool_calls or []:
+        for tool_call in getattr(choice.message, "tool_calls", None) or []:
             arguments = {}
             if tool_call.function and tool_call.function.arguments:
                 try:

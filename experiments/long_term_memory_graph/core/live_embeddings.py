@@ -20,26 +20,32 @@ class LiveOpenAIEmbeddingProvider(EmbeddingProvider):
         self.base_url = base_url
         self.embedding_model = embedding_model or model
         self.embedding_dimensions = embedding_dimensions
+        self.dimensions = embedding_dimensions or 1536
         self.provider = provider
-        self._adapter = create_model_adapter(
-            {
-                "provider": provider,
-                "model": model,
-                "api_key": api_key,
-                "base_url": base_url,
-                "embedding_model": self.embedding_model,
-                "embedding_dimensions": embedding_dimensions,
-            }
-        )
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        return await self._adapter.embed(
-            texts,
-            embedding_model=self.embedding_model,
-            dimensions=self.embedding_dimensions,
+        adapter = create_model_adapter(
+            {
+                "provider": self.provider,
+                "model": self.model,
+                "api_key": self.api_key,
+                "base_url": self.base_url,
+                "embedding_model": self.embedding_model,
+                "embedding_dimensions": self.dimensions,
+            }
         )
+        try:
+            return await adapter.embed(
+                texts,
+                embedding_model=self.embedding_model,
+                dimensions=self.dimensions,
+            )
+        finally:
+            close_fn = getattr(adapter, "aclose", None)
+            if callable(close_fn):
+                await close_fn()
 
 
 __all__ = ["LiveOpenAIEmbeddingProvider"]
