@@ -116,7 +116,10 @@ class RuntimeWorkflowExecutor:
             thread_id=self.thread_id,
             metadata=child_metadata,
         )
-        return {"status": "completed", "output_text": result.output_text}
+        payload = {"status": "completed", "output_text": result.output_text}
+        if output_key := node.config.get("output_key"):
+            ctx.variables[output_key] = payload
+        return payload
 
     async def handle_tool(self, node, ctx):
         arguments = self._resolve_tool_arguments(dict(node.config.get("arguments", {})), ctx)
@@ -124,7 +127,10 @@ class RuntimeWorkflowExecutor:
             arguments["query"] = ctx.user_input
             del arguments["__from_input__"]
         result = await self.runtime.tools.execute(node.config["tool_name"], arguments)
-        return {"status": "completed" if result.success else "failed", "output": result.data}
+        payload = {"status": "completed" if result.success else "failed", "output": result.data}
+        if output_key := node.config.get("output_key"):
+            ctx.variables[output_key] = payload
+        return payload
 
     async def handle_router(self, node, ctx):
         route = node.config.get("default_route")
@@ -243,6 +249,9 @@ class RuntimeWorkflowExecutor:
         task_input = dict(node.config.get("input", {}))
         if input_var := node.config.get("input_from_variable"):
             task_input["retrieval_input"] = ctx.variables.get(input_var, {})
+        knowledge_scope = node.config.get("knowledge_scope")
+        if knowledge_scope is None:
+            knowledge_scope = list(registered.spec.allowed_knowledge_scopes)
         task = TaskPacket(
             task_id=f"{self.thread_id}:{node.id}",
             goal=node.config.get("goal", ctx.user_input),
@@ -251,7 +260,7 @@ class RuntimeWorkflowExecutor:
             expected_output=node.config.get("expected_output"),
             parent_task_id=node.config.get("parent_task_id"),
             origin_agent=node.config.get("origin_agent", "workflow"),
-            knowledge_scope=node.config.get("knowledge_scope", registered.spec.allowed_knowledge_scopes),
+            knowledge_scope=knowledge_scope,
             metadata={"thread_id": self.thread_id, "delegation_depth": 1},
         )
         self.runtime.tracer.emit(
