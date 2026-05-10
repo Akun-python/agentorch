@@ -1,0 +1,14 @@
+{
+  "project_name": "都市悬疑短剧MVP",
+  "premise": "失忆女记者在一卷旧录像带里看见了三天后的自己遇害现场，于是她必须和昔日恋人联手，在案发前找出真凶。",
+  "style": "都市悬疑、节奏快、强反转、适合竖屏短剧",
+  "episode_goal": "先生成首集开场 2 个镜头的角色设定和样片",
+  "role_count": 2,
+  "shot_count": 2,
+  "image_aspect_ratio": "16:9",
+  "generate_role_images": true,
+  "generate_storyboard_images": true,
+  "generate_shot_videos": true,
+  "render_role_image_limit": 2,
+  "render_shot_limit": 1
+}
