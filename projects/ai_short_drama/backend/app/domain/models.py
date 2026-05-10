@@ -74,6 +74,12 @@ class ShotPlan(BaseModel):
             payload["title"] = f"镜头{shot_no}"
         if not payload.get("summary"):
             payload["summary"] = payload.get("description") or payload.get("video_prompt") or ""
+        if payload.get("duration_seconds") is not None:
+            try:
+                duration_value = int(payload["duration_seconds"])
+            except (TypeError, ValueError):
+                duration_value = 4
+            payload["duration_seconds"] = max(4, min(15, duration_value))
         if not payload.get("focus_roles"):
             payload["focus_roles"] = []
         return payload
@@ -120,6 +126,31 @@ class ShortDramaPlan(BaseModel):
         return payload
 
 
+class TransitionPlan(BaseModel):
+    transition_no: int = Field(..., ge=1)
+    from_shot_no: int = Field(..., ge=1)
+    to_shot_no: int = Field(..., ge=1)
+    transition_type: str = Field(default="fade", description="转场类型")
+    duration_seconds: float = Field(default=0.6, ge=0.1, le=3.0)
+    visual_prompt: str = Field(default="", description="转场画面提示词")
+    summary: str = Field(default="", description="转场说明")
+
+
+class AssemblyPlan(BaseModel):
+    episode_title: str = Field(..., description="成片标题")
+    editing_style: str = Field(..., description="剪辑风格")
+    transitions: list[TransitionPlan] = Field(default_factory=list)
+    final_runtime_seconds: float = Field(default=0.0, ge=0.0)
+    export_notes: list[str] = Field(default_factory=list)
+
+
+class ProductionStageRecord(BaseModel):
+    stage_name: str
+    status: str
+    detail: str = ""
+    metadata: dict = Field(default_factory=dict)
+
+
 class DramaProjectRequest(BaseModel):
     project_name: str = Field(..., description="项目名称")
     premise: str = Field(..., description="故事 premise")
@@ -131,8 +162,11 @@ class DramaProjectRequest(BaseModel):
     generate_role_images: bool = Field(default=True)
     generate_storyboard_images: bool = Field(default=True)
     generate_shot_videos: bool = Field(default=True)
+    generate_transition_images: bool = Field(default=False)
+    assemble_episode_video: bool = Field(default=True)
     render_role_image_limit: int = Field(default=2, ge=0, le=8)
     render_shot_limit: int = Field(default=1, ge=0, le=8)
+    render_transition_limit: int = Field(default=2, ge=0, le=8)
     project_id: str | None = Field(default=None)
 
 
@@ -148,5 +182,7 @@ class DramaPipelineResult(BaseModel):
     project_dir: str
     request_path: str
     plan_path: str
+    assembly_plan_path: str | None = None
     manifest_path: str
     generated_assets: list[GeneratedAsset] = Field(default_factory=list)
+    stage_records: list[ProductionStageRecord] = Field(default_factory=list)
