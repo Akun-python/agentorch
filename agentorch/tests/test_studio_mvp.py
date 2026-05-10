@@ -191,11 +191,15 @@ def test_studio_python_export_contains_core_files() -> None:
     artifact = export_studio_artifact(dsl, target="python_project")
     assert artifact.target == "python_project"
     assert "app/main.py" in artifact.files
+    assert "app/diamond.py" in artifact.files
+    assert "app/agents/main_agent.py" in artifact.files
+    assert "configs/app.json" in artifact.files
     assert "app/studio_dsl.json" in artifact.files
     assert "tests/test_smoke.py" in artifact.files
+    assert "AgentDesign(" in artifact.files["app/agents/main_agent.py"]
 
 
-def test_studio_sdk_export_uses_json_loader() -> None:
+def test_studio_sdk_export_uses_framework_builder_entry() -> None:
     dsl = StudioDslDocument.model_validate(
         {
             "app_type": "agent",
@@ -213,7 +217,42 @@ def test_studio_sdk_export_uses_json_loader() -> None:
         }
     )
     artifact = export_studio_artifact(dsl, target="sdk_snippet")
-    assert "json.loads" in artifact.files["studio_sdk.py"]
+    assert "build_agent" in artifact.files["studio_sdk.py"]
+
+
+def test_studio_workflow_export_contains_python_diamond_runtime() -> None:
+    dsl = StudioDslDocument.model_validate(
+        {
+            "app_type": "workflow",
+            "meta": {"name": "workflow-export", "slug": "workflow-export"},
+            "canvas": {
+                "nodes": [
+                    {"id": "start", "kind": "start"},
+                    {
+                        "id": "assistant",
+                        "kind": "llm_agent",
+                        "config": {
+                            "model_binding": "default_model",
+                            "output_key": "assistant_output",
+                        },
+                    },
+                    {"id": "end", "kind": "end"},
+                ],
+                "edges": [
+                    {"source": "start", "target": "assistant"},
+                    {"source": "assistant", "target": "end"},
+                ],
+            },
+            "bindings": {
+                "models": [{"name": "default_model", "model": "gpt-4.1-mini", "default": True}],
+            },
+            "runtime": {"debug": {"max_steps": 6}},
+        }
+    )
+    artifact = export_studio_artifact(dsl, target="python_project")
+    assert "app/workflows/main_workflow.py" in artifact.files
+    assert "StudioWorkflowRuntimePlan" in artifact.files["app/workflows/main_workflow.py"]
+    assert "build_diamond" in artifact.files["app/diamond.py"]
 
 
 def test_studio_service_validate_surfaces_errors() -> None:
