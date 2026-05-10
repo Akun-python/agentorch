@@ -1,0 +1,489 @@
+文件名：ai短剧制作方案.txt
+
+基于 AgentTorch 的 AI 短剧制作方案
+================================
+
+一、目标定位
+------------
+目标不是把 AgentTorch 改造成一个巨大的短剧专用框架，而是在现有 AgentTorch 执行内核之上，加一层“短剧制作领域层”和“产品层”。
+
+你现在要的能力，本质上是把以下几类原子能力编排起来：
+
+1. 文本生成：角色设定、分镜脚本、场景描述、字幕文案
+2. 图像生成：角色形象图、分镜图、宫格图、封面图
+3. 音频生成：TTS 配音、试听、音色分配
+4. 视频生成：图生视频、单镜头合成、整集拼接
+5. 资源管理：素材、任务、版本、导出物统一存档
+
+所以正确路线是：
+
+1. 保持 AgentTorch 负责编排、运行时、工具调用、工作流执行
+2. 新增短剧领域模块，承接角色/分镜/镜头/成片这些业务对象
+3. 先打通“单集闭环”，再做批量、可视化、多人协同
+
+
+二、为什么适合接在当前仓库上做
+------------------------------
+当前仓库已经有可直接复用的基础能力，不需要重写内核：
+
+1. `agentorch/studio/dsl.py`
+   已有工作流 DSL，适合表达短剧制作流程
+
+2. `agentorch/studio/compiler.py`
+   已有 DSL 校验、编译、运行对象装配逻辑
+
+3. `agentorch/studio/runtime.py`
+   已有工作流运行时计划对象，适合承接多阶段任务
+
+4. `agentorch/studio/api.py`
+   已有 validate / compile / export 这类平台 API 入口
+
+5. `agentorch/workflow/`、`agentorch/runtime/`、`agentorch/tools/`
+   已有 DAG 执行、运行时、工具体系
+
+结论：
+短剧制作应该做成一个垂直场景产品层，而不是去大改 `runtime`、`workflow`、`studio` 的底层语义。
+
+
+三、总体路线
+------------
+建议分三层实现：
+
+1. 内核层
+   继续使用现有 AgentTorch：
+   - workflow
+   - runtime
+   - studio
+   - tools
+   - models
+   - memory
+
+2. 领域层
+   新增 `agentorch/drama/`，专门放短剧对象、服务、流程、适配器
+
+3. 产品层
+   基于 `studio/api.py` 或独立 router 暴露短剧项目接口
+   前端可挂接现有 `..agentorch-studioappsweb/`
+
+这三层里，首版重点放在“领域层 + 后端闭环”，前端只做最小可用页面即可。
+
+
+四、实现原则
+------------
+1. 增量改，不碰大底层
+   首版不要改写 `studio` 编译主链，不要为了短剧场景去重构全框架。
+
+2. 领域逻辑单独收口
+   角色、分镜、配音、视频、导出都放到 `agentorch/drama/` 下，避免散落到多个无关模块里。
+
+3. 先复用已有节点语义
+   首版不急着扩 DSL 节点种类，先用现有节点表达：
+   - `llm_agent`
+   - `tool`
+   - `sub_agent`
+   - `aggregate`
+   - `human_approval`
+   - `end`
+
+4. 先本地闭环，再做云任务
+   先支持本地目录存储、本地 FFmpeg、本地任务状态文件；后续再接队列和远端对象存储。
+
+5. Provider 统一抽象
+   文生图、TTS、图生视频都必须走 provider 接口，不能把某家平台 API 写死在业务流程里。
+
+
+五、能力拆解
+------------
+1. 角色管理
+   - 角色设定生成
+   - 角色形象生成
+   - 批量角色生成
+   - 角色图片上传
+   - 音色绑定与试听
+
+2. 分镜制作
+   - 剧本拆分场次
+   - 每场拆分镜头
+   - 镜头描述生成
+   - 分镜图生成
+   - 宫格图生成与切分
+   - 帧类型选择
+
+3. 视频生成
+   - 图生视频
+   - TTS 配音
+   - 字幕文本生成
+   - 单镜头 FFmpeg 合成
+   - 全集拼接导出
+
+4. 资源管理
+   - 项目级目录
+   - 素材去重
+   - 任务状态追踪
+   - 导出文件归档
+   - 重跑与续跑
+
+
+六、推荐目录结构
+----------------
+建议新增：
+
+agentorch/drama/
+  __init__.py
+  domain/
+    enums.py
+    schemas.py
+  services/
+    project_service.py
+    role_service.py
+    storyboard_service.py
+    asset_service.py
+    render_service.py
+    export_service.py
+    progress_service.py
+  providers/
+    base.py
+    image_provider.py
+    speech_provider.py
+    video_provider.py
+    storage_provider.py
+  workflows/
+    role_pipeline.py
+    storyboard_pipeline.py
+    episode_pipeline.py
+  prompts/
+    role_prompts.py
+    script_prompts.py
+    storyboard_prompts.py
+    qc_prompts.py
+  api.py
+  repository.py
+
+说明：
+
+1. `domain/`
+   放纯数据结构，不掺执行细节
+
+2. `services/`
+   放短剧业务编排逻辑
+
+3. `providers/`
+   放外部能力适配层
+
+4. `workflows/`
+   放基于 AgentTorch workflow 的流程装配
+
+5. `prompts/`
+   提示词单独管理，后续优化成本低
+
+
+七、核心数据对象
+----------------
+建议先定义这些核心对象：
+
+1. DramaProject
+   - project_id
+   - name
+   - premise
+   - style
+   - episode_count
+   - status
+
+2. DramaRole
+   - role_id
+   - name
+   - age_range
+   - personality
+   - visual_prompt
+   - avatar_path
+   - voice_id
+
+3. DramaScene
+   - scene_id
+   - episode_no
+   - summary
+   - location
+   - time_of_day
+   - mood
+
+4. DramaShot
+   - shot_id
+   - scene_id
+   - shot_no
+   - shot_type
+   - frame_type
+   - visual_prompt
+   - narration_text
+   - subtitle_text
+
+5. DramaAsset
+   - asset_id
+   - asset_type
+   - local_path
+   - source_provider
+   - metadata
+
+6. DramaTask
+   - task_id
+   - project_id
+   - stage
+   - status
+   - progress
+   - error_message
+
+
+八、工作流设计
+--------------
+首版不要发明新执行系统，直接把短剧流程映射到现有 workflow 语义。
+
+建议主流程：
+
+1. `start`
+2. `sub_agent: role_director`
+   生成角色设定与角色形象提示词
+3. `tool: generate_role_images`
+4. `human_approval: role_review`
+5. `sub_agent: script_splitter`
+   按集、场、镜头拆解
+6. `sub_agent: storyboard_designer`
+   生成场景描述、镜头语言、帧类型
+7. `tool: generate_storyboard_images`
+8. `tool: split_storyboard_grid`
+9. `sub_agent: dubbing_director`
+   生成对白、旁白、字幕
+10. `tool: tts_render`
+11. `tool: image_to_video_render`
+12. `tool: ffmpeg_compose_shot`
+13. `aggregate: assemble_episode`
+14. `tool: ffmpeg_merge_episode`
+15. `sub_agent: qc_agent`
+16. `end`
+
+这样做的好处：
+
+1. 复用现有节点体系
+2. 保持流程可回放、可重跑
+3. 任一步失败都能定位到具体 stage
+4. 后续接前端画布时也顺
+
+
+九、首版不建议扩 DSL 节点
+------------------------
+短剧是业务场景，不是新的基础编排范式。
+
+所以首版建议：
+
+1. 不新增 `storyboard_node`、`tts_node`、`video_node` 这类框架级节点
+2. 统一先落到 `tool` 节点
+3. 通过 `config.tool_name` 或绑定的 provider 区分实际执行器
+
+等业务跑顺以后，如果发现配置表达重复、前端交互复杂，再考虑抽象成短剧专用节点。
+
+
+十、Provider 设计
+----------------
+建议抽象四类 provider：
+
+1. ImageProvider
+   - generate_character(...)
+   - generate_storyboard(...)
+   - generate_grid(...)
+
+2. SpeechProvider
+   - list_voices(...)
+   - preview_voice(...)
+   - synthesize(...)
+
+3. VideoProvider
+   - render_image_to_video(...)
+   - query_task(...)
+   - download_result(...)
+
+4. StorageProvider
+   - save_asset(...)
+   - load_asset(...)
+   - list_project_assets(...)
+
+原则：
+
+1. 业务流程只调用 provider 接口
+2. 某一家平台的参数映射放在 provider 实现里
+3. 支持本地 mock 与真实 provider 双模式
+
+
+十一、项目目录与产物结构
+------------------------
+建议项目产物统一落在：
+
+artifacts/drama_projects/{project_id}/
+  project.json
+  roles/roles.json
+  roles/images/
+  script/episodes.json
+  storyboard/scenes.json
+  storyboard/shots.json
+  storyboard/images/
+  audio/
+  video/shots/
+  video/episodes/
+  subtitles/
+  logs/tasks.jsonl
+  exports/
+
+这样做有三个好处：
+
+1. 调试时能直接看中间产物
+2. 失败后容易续跑
+3. 后续做前端资源库时路径天然可映射
+
+
+十二、API 设计
+--------------
+建议新增独立短剧 API，而不是把所有短剧接口塞进 `studio/api.py`：
+
+1. `POST /drama/projects`
+   创建项目
+
+2. `POST /drama/projects/{project_id}/roles/generate`
+   生成角色
+
+3. `POST /drama/projects/{project_id}/storyboard/generate`
+   生成分镜
+
+4. `POST /drama/projects/{project_id}/audio/generate`
+   生成配音
+
+5. `POST /drama/projects/{project_id}/shots/render`
+   生成单镜头
+
+6. `POST /drama/projects/{project_id}/episodes/export`
+   整集合成导出
+
+7. `GET /drama/projects/{project_id}`
+   获取项目详情
+
+8. `GET /drama/projects/{project_id}/tasks`
+   获取任务进度
+
+9. `GET /drama/projects/{project_id}/assets`
+   获取素材列表
+
+
+十三、前端建议
+--------------
+前端不建议一开始做成大而全平台，先做 4 个主页面：
+
+1. 项目页
+   填写题材、风格、集数、角色数量、目标时长
+
+2. 角色页
+   角色卡片、角色形象、音色试听、手动替换
+
+3. 分镜页
+   场景列表、镜头列表、宫格图、切分结果、重生成功能
+
+4. 成片页
+   单镜头预览、任务状态、字幕、整集导出
+
+首版前端重点是“能看见中间结果”，不是做复杂运营后台。
+
+
+十四、阶段划分
+--------------
+P0：后端最小闭环
+1. 项目对象
+2. 角色生成
+3. 分镜拆解
+4. 本地目录落盘
+5. 任务状态记录
+
+P1：单集完整生产
+1. 分镜图生成
+2. TTS
+3. 图生视频
+4. FFmpeg 单镜头合成
+5. 整集拼接导出
+
+P2：可视化与可编辑
+1. 角色页
+2. 分镜页
+3. 素材替换
+4. 局部重跑
+
+P3：批量化与产品化
+1. 批量角色生成
+2. 多集任务排队
+3. 任务恢复
+4. 多 provider 切换
+
+
+十五、最小 MVP 边界
+------------------
+第一版只要完成下面这个闭环，就已经有产品价值：
+
+输入：
+- 一段短剧 premise
+- 集数
+- 风格
+- 角色数量
+
+输出：
+- 角色卡
+- 分镜 JSON
+- 分镜图
+- TTS 音频
+- 单镜头视频
+- 一集 MP4
+
+不要首版就追求：
+
+1. 完整 SaaS 多租户
+2. 复杂权限系统
+3. 在线剪辑器
+4. 海量 provider 全接入
+5. 高复杂度时间线编辑
+
+
+十六、与现有 AgentTorch 的最小改动点
+----------------------------------
+建议最小改动如下：
+
+1. 新增 `agentorch/drama/` 全套模块
+2. 新增 `agentorch/drama/api.py`
+3. 仅在需要暴露统一入口时，对 `agentorch/studio/__init__.py` 或顶层 API 做小幅导出
+4. 不改写 `runtime` 主链
+5. 不改写 `workflow` 核心执行逻辑
+6. 不把短剧逻辑混进 `tools/media.py` 这类通用模块里
+
+
+十七、测试建议
+--------------
+至少补三类测试：
+
+1. 领域对象测试
+   校验项目、角色、场景、镜头对象序列化是否稳定
+
+2. 工作流测试
+   校验单集流程在 provider mock 下能跑通
+
+3. 导出物测试
+   校验目录、JSON、字幕、视频任务清单是否按约定生成
+
+建议新增：
+
+- `agentorch/tests/test_drama_domain.py`
+- `agentorch/tests/test_drama_episode_pipeline.py`
+- `agentorch/tests/test_drama_export_layout.py`
+
+
+十八、结论
+----------
+最稳的方案不是“把 AgentTorch 改成短剧框架”，而是：
+
+1. AgentTorch 继续做通用执行内核
+2. 短剧制作做成 `agentorch/drama/` 领域层
+3. 先跑通单集后端闭环
+4. 再接最小前端页面
+5. 最后再做批量、可视化、重跑和产品化细节
+
+如果按这个路线做，后面既能保住 AgentTorch 的通用性，也能很快长出一个真正可用的 AI 短剧制作产品。
