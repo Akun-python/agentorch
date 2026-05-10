@@ -25,6 +25,11 @@ class EchoInput(BaseModel):
     text: str
 
 
+class InspectKeywordInput(BaseModel):
+    keyword: str
+    path: str = "README.md"
+
+
 class ValueModel(BaseModel):
     value: str
 
@@ -132,6 +137,57 @@ def test_tool_registry_methods_cover_register_extend_execute_and_lifecycle() -> 
 
     with pytest.raises(ToolError):
         asyncio.run(registry.execute("add_numbers", {"a": 2}))
+
+
+def test_tool_can_call_inner_registry_tools() -> None:
+    inner_tools = ToolRegistry.with_bundles(
+        workspace_root=".",
+        include_filesystem=True,
+        include_execution=False,
+        include_git=False,
+    )
+
+    @agentorch.tool(description="Inspect README keyword with nested inner tools")
+    async def inspect_keyword(payload: InspectKeywordInput) -> dict[str, object]:
+        search_result = await inner_tools.execute(
+            "search_text",
+            {
+                "pattern": payload.keyword,
+                "path": payload.path,
+                "regex": False,
+                "max_results": 1,
+            },
+        )
+        matches = search_result.data["matches"]
+        if not matches:
+            return {"found": False, "keyword": payload.keyword, "path": payload.path}
+        first_match = matches[0]
+        read_result = await inner_tools.execute(
+            "read_file",
+            {
+                "path": first_match["path"],
+                "start_line": max(1, first_match["line"] - 1),
+                "max_lines": 3,
+                "include_line_numbers": True,
+            },
+        )
+        return {
+            "found": True,
+            "keyword": payload.keyword,
+            "path": first_match["path"],
+            "line": first_match["line"],
+            "snippet": read_result.data["content"],
+        }
+
+    try:
+        registry = ToolRegistry.from_tools(inspect_keyword)
+        result = asyncio.run(registry.execute("inspect_keyword", {"keyword": "create_agent", "path": "README.zh-CN.md"}))
+    finally:
+        asyncio.run(inner_tools.aclose())
+
+    assert result.data["found"] is True
+    assert result.data["path"] == "README.zh-CN.md"
+    assert "create_agent" in result.data["snippet"]
 
 
 def test_runtime_and_model_config_helper_methods_cover_common_construction_paths() -> None:
