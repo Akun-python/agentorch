@@ -19,6 +19,7 @@ class ProjectRepository:
             ".",
             "roles",
             "roles/images",
+            "preproduction",
             "script",
             "storyboard",
             "storyboard/images",
@@ -48,6 +49,9 @@ class ProjectRepository:
 
     def transition_image_path(self, project_id: str, transition_no: int) -> Path:
         return self.artifacts_root / project_id / "video" / "transitions" / f"transition_{transition_no:02d}.png"
+
+    def preproduction_path(self, project_id: str, filename: str) -> Path:
+        return self.artifacts_root / project_id / "preproduction" / filename
 
     @staticmethod
     def slugify_project_id(raw_name: str) -> str:

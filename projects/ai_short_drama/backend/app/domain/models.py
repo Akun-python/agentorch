@@ -151,6 +151,95 @@ class ProductionStageRecord(BaseModel):
     metadata: dict = Field(default_factory=dict)
 
 
+class StoryBible(BaseModel):
+    title: str
+    core_theme: str = Field(default="", description="核心主题")
+    emotional_hook: str = Field(default="", description="情绪抓手")
+    world_rules: list[str] = Field(default_factory=list)
+    style_keywords: list[str] = Field(default_factory=list)
+    forbidden_cliches: list[str] = Field(default_factory=list)
+    target_audience: str = Field(default="", description="目标观众")
+    must_have_moments: list[str] = Field(default_factory=list)
+
+
+class CharacterDirection(BaseModel):
+    name: str
+    dramatic_need: str = Field(default="", description="角色欲望")
+    fear_or_wound: str = Field(default="", description="角色伤口")
+    arc_start: str = Field(default="", description="弧线起点")
+    arc_end_hint: str = Field(default="", description="弧线终点提示")
+    body_language: str = Field(default="", description="肢体习惯")
+    speech_style: str = Field(default="", description="说话风格")
+    visual_anchor: str = Field(default="", description="视觉锚点")
+    performance_notes: list[str] = Field(default_factory=list)
+
+
+class CharacterBible(BaseModel):
+    characters: list[CharacterDirection] = Field(default_factory=list)
+
+
+class SceneBeat(BaseModel):
+    scene_no: int = Field(..., ge=1)
+    location: str = Field(default="")
+    dramatic_goal: str = Field(default="", description="本场戏目标")
+    conflict: str = Field(default="", description="冲突来源")
+    emotional_turn: str = Field(default="", description="情绪转折")
+    reveal: str = Field(default="", description="信息揭示")
+    exit_hook: str = Field(default="", description="离场钩子")
+
+
+class SceneBeatSheet(BaseModel):
+    scenes: list[SceneBeat] = Field(default_factory=list)
+
+
+class ShotDirectionCard(BaseModel):
+    shot_no: int = Field(..., ge=1)
+    title: str
+    story_purpose: str = Field(default="", description="叙事目的")
+    framing: str = Field(default="", description="构图")
+    camera_angle: str = Field(default="", description="机位角度")
+    camera_movement: str = Field(default="", description="镜头运动")
+    lens_feel: str = Field(default="", description="镜头质感")
+    lighting_notes: str = Field(default="", description="灯光说明")
+    acting_notes: list[str] = Field(default_factory=list)
+    prop_notes: list[str] = Field(default_factory=list)
+    sound_notes: list[str] = Field(default_factory=list)
+    continuity_risks: list[str] = Field(default_factory=list)
+
+
+class DirectorNotebook(BaseModel):
+    episode_title: str
+    directing_strategy: str = Field(default="", description="整体导演策略")
+    pacing_plan: list[str] = Field(default_factory=list)
+    visual_motifs: list[str] = Field(default_factory=list)
+    actor_guidance: list[str] = Field(default_factory=list)
+    shot_cards: list[ShotDirectionCard] = Field(default_factory=list)
+
+
+class QualityCheckItem(BaseModel):
+    item_no: int = Field(..., ge=1)
+    category: str
+    description: str
+    severity: str = Field(default="medium")
+    suggestion: str = Field(default="")
+
+
+class QualityCheckReport(BaseModel):
+    summary: str = Field(default="")
+    checks: list[QualityCheckItem] = Field(default_factory=list)
+
+
+class ProjectFileIndexItem(BaseModel):
+    stage_name: str
+    file_path: str
+    description: str
+
+
+class ProjectFileIndex(BaseModel):
+    project_id: str
+    items: list[ProjectFileIndexItem] = Field(default_factory=list)
+
+
 class DramaProjectRequest(BaseModel):
     project_name: str = Field(..., description="项目名称")
     premise: str = Field(..., description="故事 premise")

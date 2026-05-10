@@ -8,12 +8,21 @@ from projects.ai_short_drama.backend.app.domain.models import (
     DramaPipelineResult,
     DramaProjectRequest,
     GeneratedAsset,
+    ProjectFileIndex,
+    ProjectFileIndexItem,
     ProductionStageRecord,
 )
 from projects.ai_short_drama.backend.app.providers import NanobananaImageProvider, SeedanceVideoProvider
 from projects.ai_short_drama.backend.app.repositories import ProjectRepository
 from projects.ai_short_drama.backend.app.services.agent_team_service import AgentTorchDramaTeamService
 from projects.ai_short_drama.backend.app.services.assembly_service import EpisodeAssemblyService
+from projects.ai_short_drama.backend.app.services.preproduction_service import (
+    CharacterBibleService,
+    DirectorNotebookService,
+    QualityCheckService,
+    SceneBeatService,
+    StoryBibleService,
+)
 from projects.ai_short_drama.backend.app.utils.env_loader import load_project_env
 
 
@@ -51,6 +60,64 @@ class DramaPipelineService:
 
         plan_path = self.repository.write_json(project_id, "script/plan.json", plan.model_dump())
         assembly_plan_path = self.repository.write_json(project_id, "script/assembly_plan.json", assembly_plan.model_dump())
+
+        story_bible = StoryBibleService().build(plan)
+        character_bible = CharacterBibleService().build(plan)
+        scene_beats = SceneBeatService().build(plan)
+        director_notebook = DirectorNotebookService().build(plan)
+        quality_report = QualityCheckService().build(plan, director_notebook)
+
+        story_bible_path = self.repository.preproduction_path(project_id, "story_bible.json")
+        story_bible_path.write_text(story_bible.model_dump_json(indent=2), encoding="utf-8")
+        character_bible_path = self.repository.preproduction_path(project_id, "character_bible.json")
+        character_bible_path.write_text(character_bible.model_dump_json(indent=2), encoding="utf-8")
+        scene_beats_path = self.repository.preproduction_path(project_id, "scene_beats.json")
+        scene_beats_path.write_text(scene_beats.model_dump_json(indent=2), encoding="utf-8")
+        director_notebook_path = self.repository.preproduction_path(project_id, "director_notebook.json")
+        director_notebook_path.write_text(director_notebook.model_dump_json(indent=2), encoding="utf-8")
+        quality_report_path = self.repository.preproduction_path(project_id, "quality_checks.json")
+        quality_report_path.write_text(quality_report.model_dump_json(indent=2), encoding="utf-8")
+        generated_assets.extend(
+            [
+                GeneratedAsset(
+                    asset_type="story_bible",
+                    relative_path=str(story_bible_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+                GeneratedAsset(
+                    asset_type="character_bible",
+                    relative_path=str(character_bible_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+                GeneratedAsset(
+                    asset_type="scene_beats",
+                    relative_path=str(scene_beats_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+                GeneratedAsset(
+                    asset_type="director_notebook",
+                    relative_path=str(director_notebook_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+                GeneratedAsset(
+                    asset_type="quality_checks",
+                    relative_path=str(quality_report_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+            ]
+        )
+        stage_records.append(
+            ProductionStageRecord(
+                stage_name="preproduction_detailing",
+                status="completed",
+                detail="已生成故事圣经、角色手册、场景节拍、导演手册和质检清单",
+            )
+        )
 
         image_provider = None
         video_provider = None
@@ -191,6 +258,81 @@ class DramaPipelineService:
                         metadata={},
                     )
                 )
+
+        project_index = ProjectFileIndex(
+            project_id=project_id,
+            items=[
+                ProjectFileIndexItem(stage_name="request", file_path=str(request_path), description="本次项目请求参数"),
+                ProjectFileIndexItem(stage_name="story_plan", file_path=str(plan_path), description="AgentTorch 团队输出的角色和镜头计划"),
+                ProjectFileIndexItem(stage_name="assembly_plan", file_path=str(assembly_plan_path), description="AgentTorch 团队输出的成片装配方案"),
+                ProjectFileIndexItem(stage_name="story_bible", file_path=str(story_bible_path), description="故事圣经"),
+                ProjectFileIndexItem(stage_name="character_bible", file_path=str(character_bible_path), description="角色手册"),
+                ProjectFileIndexItem(stage_name="scene_beats", file_path=str(scene_beats_path), description="场景节拍"),
+                ProjectFileIndexItem(stage_name="director_notebook", file_path=str(director_notebook_path), description="导演镜头手册"),
+                ProjectFileIndexItem(stage_name="quality_checks", file_path=str(quality_report_path), description="细节质检清单"),
+            ],
+        )
+        index_path = self.repository.preproduction_path(project_id, "project_index.json")
+        index_path.write_text(project_index.model_dump_json(indent=2), encoding="utf-8")
+        browse_guide_path = self.repository.preproduction_path(project_id, "browse_guide.txt")
+        browse_guide_path.write_text(
+            "\n".join(
+                [
+                    "AI 短剧项目浏览顺序",
+                    "===================",
+                    "",
+                    "1. logs/request.json",
+                    "   看本次输入目标、开关和生成范围。",
+                    "",
+                    "2. preproduction/story_bible.json",
+                    "   看故事圣经：主题、风格关键词、禁忌和必须保留的戏剧瞬间。",
+                    "",
+                    "3. preproduction/character_bible.json",
+                    "   看角色手册：角色欲望、伤口、表演方向、视觉锚点。",
+                    "",
+                    "4. preproduction/scene_beats.json",
+                    "   看场景节拍：每场戏的目标、冲突、揭示和离场钩子。",
+                    "",
+                    "5. script/plan.json",
+                    "   看角色卡和镜头计划，是后续图片和视频生成的直接输入。",
+                    "",
+                    "6. preproduction/director_notebook.json",
+                    "   看导演手册：镜头意图、构图、机位、表演、道具、声音和连续性风险。",
+                    "",
+                    "7. preproduction/quality_checks.json",
+                    "   看需要人工盯的细节问题，避免直接进入生成后才返工。",
+                    "",
+                    "8. script/assembly_plan.json",
+                    "   看后期节奏、转场和成片思路。",
+                    "",
+                    "9. exports/episode_assembly.json",
+                    "   看最终装配清单，以及是否具备自动拼接条件。",
+                    "",
+                    "10. logs/manifest.json",
+                    "    看所有产物和阶段状态总表。",
+                    "",
+                    "11. preproduction/project_index.json",
+                    "    这是全文件索引，适合程序或前端直接消费。",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        generated_assets.append(
+            GeneratedAsset(
+                asset_type="project_index",
+                relative_path=str(index_path.relative_to(project_dir)),
+                source_name=plan.project_title,
+                metadata={},
+            )
+        )
+        generated_assets.append(
+            GeneratedAsset(
+                asset_type="browse_guide",
+                relative_path=str(browse_guide_path.relative_to(project_dir)),
+                source_name=plan.project_title,
+                metadata={},
+            )
+        )
 
         manifest = DramaPipelineResult(
             project_id=project_id,
