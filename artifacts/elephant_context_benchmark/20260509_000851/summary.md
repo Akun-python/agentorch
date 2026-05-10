@@ -1,0 +1,44 @@
+# MGCM Chapter Benchmark Summary
+
+- Run ID: `20260509_000851`
+- Suite: `context`
+- Output Dir: `C:\Users\24260\Desktop\研究生生涯\agentorch\artifacts\elephant_context_benchmark\20260509_000851`
+- Context artifacts: `context/`
+- Lifecycle artifacts: `lifecycle/`
+
+## Context Suite
+
+# Elephant Context Benchmark Summary
+
+- Run ID: `context`
+- Completed runs: `10`
+- Failed runs: `0`
+
+## Baseline Comparison
+
+| variant | budget | run_count | task_success | context_recall | key_evidence_retention_rate | stage_focus_hit_rate | budget_utilization |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| elephant_full | 12000 | 5 | 1.0 | 0.666667 | 0.7 | 0.6 | 1.0 |
+| multi_agent_default_context | 12000 | 5 | 0.6 | 0.566667 | 0.5 | 0.4 | 1.0 |
+
+## Ablation Comparison
+
+_No rows generated._
+
+## Paired Deltas Versus Elephant Full
+
+| variant | budget | metric | pair_count | mean_delta_vs_elephant_full |
+| --- | --- | --- | --- | --- |
+| multi_agent_default_context | 12000 | task_success | 5 | -0.4 |
+| multi_agent_default_context | 12000 | context_precision | 5 | 0.0 |
+| multi_agent_default_context | 12000 | context_recall | 5 | -0.1 |
+| multi_agent_default_context | 12000 | key_evidence_retention_rate | 5 | -0.2 |
+| multi_agent_default_context | 12000 | stage_focus_hit_rate | 5 | -0.2 |
+| multi_agent_default_context | 12000 | redundancy_ratio | 5 | 0.083333 |
+| multi_agent_default_context | 12000 | budget_utilization | 5 | 0.0 |
+| multi_agent_default_context | 12000 | compaction_gain | 5 | -0.007601 |
+
+## Failure Modes
+
+- `multi_agent_default_context` / `rule_preservation_01` / budget `12000`: first observed field `[planner] agent_role=planner`, planned agents `planner,reviewer`.
+- `multi_agent_default_context` / `late_synthesis_01` / budget `12000`: first observed field `[reviewer] agent_role=reviewer`, planned agents `reviewer,planner`.

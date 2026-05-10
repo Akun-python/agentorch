@@ -1,0 +1,22 @@
+{
+  "tiers": [
+    {
+      "tier": "small",
+      "node_count": 2,
+      "edge_count_estimate": 4,
+      "qps": 1.0
+    },
+    {
+      "tier": "medium",
+      "node_count": 6,
+      "edge_count_estimate": 12,
+      "qps": 0.8
+    },
+    {
+      "tier": "large",
+      "node_count": 12,
+      "edge_count_estimate": 24,
+      "qps": 0.6
+    }
+  ]
+}

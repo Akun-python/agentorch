@@ -1,0 +1,39 @@
+{
+  "rows": [
+    {
+      "method": "clarks_nutcracker_graph",
+      "variant": "full",
+      "question_type": "Single-hop",
+      "accuracy_ci_low": 100.0,
+      "accuracy_ci_high": 100.0
+    },
+    {
+      "method": "clarks_nutcracker_graph",
+      "variant": "full",
+      "question_type": "Multi-hop",
+      "accuracy_ci_low": 100.0,
+      "accuracy_ci_high": 100.0
+    },
+    {
+      "method": "clarks_nutcracker_graph",
+      "variant": "full",
+      "question_type": "Temporal",
+      "accuracy_ci_low": 0.0,
+      "accuracy_ci_high": 0.0
+    },
+    {
+      "method": "clarks_nutcracker_graph",
+      "variant": "full",
+      "question_type": "Open Domain",
+      "accuracy_ci_low": 100.0,
+      "accuracy_ci_high": 100.0
+    },
+    {
+      "method": "clarks_nutcracker_graph",
+      "variant": "full",
+      "question_type": "Overall",
+      "accuracy_ci_low": 25.0,
+      "accuracy_ci_high": 100.0
+    }
+  ]
+}

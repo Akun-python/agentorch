@@ -1,0 +1,67 @@
+{
+  "token_accuracy_curve": [
+    {
+      "method": "clarks_nutcracker_graph",
+      "variant": "full",
+      "case_id": "ltmg_single_retry",
+      "relative_tokens": 1.0,
+      "judge_score": 1.0
+    }
+  ],
+  "return_scale_distribution": [
+    {
+      "method": "clarks_nutcracker_graph",
+      "variant": "full",
+      "returned_node_count": 2,
+      "returned_edge_count": 2,
+      "returned_evidence_count": 0
+    }
+  ],
+  "latency_breakdown_summary": {
+    "detail_lookup_ms": {
+      "avg_ms": 0.0138,
+      "p50_ms": 0.0138,
+      "p95_ms": 0.0138
+    },
+    "graph_expand_ms": {
+      "avg_ms": 0.0269,
+      "p50_ms": 0.0269,
+      "p95_ms": 0.0269
+    },
+    "lexical_recall_ms": {
+      "avg_ms": 0.0368,
+      "p50_ms": 0.0368,
+      "p95_ms": 0.0368
+    },
+    "merge_candidates_ms": {
+      "avg_ms": 0.0078,
+      "p50_ms": 0.0078,
+      "p95_ms": 0.0078
+    },
+    "rerank_ms": {
+      "avg_ms": 0.2946,
+      "p50_ms": 0.2946,
+      "p95_ms": 0.2946
+    },
+    "safety_filter_ms": {
+      "avg_ms": 0.0221,
+      "p50_ms": 0.0221,
+      "p95_ms": 0.0221
+    },
+    "select_nodes_edges_ms": {
+      "avg_ms": 0.0139,
+      "p50_ms": 0.0139,
+      "p95_ms": 0.0139
+    },
+    "semantic_recall_ms": {
+      "avg_ms": 2.5929,
+      "p50_ms": 2.5929,
+      "p95_ms": 2.5929
+    },
+    "total_ms": {
+      "avg_ms": 3.1372,
+      "p50_ms": 3.1372,
+      "p95_ms": 3.1372
+    }
+  }
+}

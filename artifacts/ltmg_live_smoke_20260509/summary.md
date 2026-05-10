@@ -1,0 +1,20 @@
+# Long-Term Memory Graph Experiment: main
+
+- Run ID: `20260509_002919`
+- Model backend: `openai_http`
+- Judge backend: `deterministic_probe`
+- Runs: `1`
+- Case count: `1`
+- Token reference: `suite_mean`
+- Bootstrap samples: `300`
+
+## Main Results
+
+| Method | Variant | Type | Acc. | 95% CI | Capsule Recall@k | Relation Hit | Evidence | Rel. Tok. | Latency (ms) |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `clarks_nutcracker_graph` | `full` | Overall | 0.00 | [0.00, 0.00] | 1.00 | 1.00 | 1.00 | 1.00 | 1873.60 |
+
+## Evidence Boundary
+
+当前默认后端是确定性 AgentTorch 探针，用于验证实验管线、字段、产物和统计口径。
+正式论文数值必须改用真实模型和真实 judge 运行后，从本目录 CSV/JSONL 产物回填。

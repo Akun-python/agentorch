@@ -1,0 +1,3 @@
+AgentTorch is imported as agentorch even when the package name is masarch.
+It supports single-agent orchestration, multi-agent coordination, tool calling, workflows, and RAG.
+Notebook demos should prefer explicit thread_id and self-contained cells.
