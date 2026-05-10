@@ -16,6 +16,7 @@ from projects.ai_short_drama.backend.app.providers import NanobananaImageProvide
 from projects.ai_short_drama.backend.app.repositories import ProjectRepository
 from projects.ai_short_drama.backend.app.services.agent_team_service import AgentTorchDramaTeamService
 from projects.ai_short_drama.backend.app.services.assembly_service import EpisodeAssemblyService
+from projects.ai_short_drama.backend.app.services.execution_design_service import ExecutionDesignService
 from projects.ai_short_drama.backend.app.services.preproduction_service import (
     CharacterBibleService,
     DirectorNotebookService,
@@ -66,6 +67,13 @@ class DramaPipelineService:
         scene_beats = SceneBeatService().build(plan)
         director_notebook = DirectorNotebookService().build(plan)
         quality_report = QualityCheckService().build(plan, director_notebook)
+        execution_design = ExecutionDesignService()
+        shot_execution_sheet = execution_design.build_shot_execution_sheet(plan)
+        subtitle_timeline = execution_design.build_subtitle_timeline(plan)
+        audio_cue_sheet = execution_design.build_audio_cue_sheet(plan, assembly_plan)
+        continuity_checklist = execution_design.build_continuity_checklist(plan)
+        prop_inventory = execution_design.build_prop_inventory(plan)
+        delivery_checklist = execution_design.build_delivery_checklist(plan, assembly_plan)
 
         story_bible_path = self.repository.preproduction_path(project_id, "story_bible.json")
         story_bible_path.write_text(story_bible.model_dump_json(indent=2), encoding="utf-8")
@@ -77,6 +85,18 @@ class DramaPipelineService:
         director_notebook_path.write_text(director_notebook.model_dump_json(indent=2), encoding="utf-8")
         quality_report_path = self.repository.preproduction_path(project_id, "quality_checks.json")
         quality_report_path.write_text(quality_report.model_dump_json(indent=2), encoding="utf-8")
+        shot_execution_path = self.repository.preproduction_path(project_id, "shot_execution_sheet.json")
+        shot_execution_path.write_text(shot_execution_sheet.model_dump_json(indent=2), encoding="utf-8")
+        subtitle_timeline_path = self.repository.preproduction_path(project_id, "subtitle_timeline.json")
+        subtitle_timeline_path.write_text(subtitle_timeline.model_dump_json(indent=2), encoding="utf-8")
+        audio_cue_path = self.repository.preproduction_path(project_id, "audio_cue_sheet.json")
+        audio_cue_path.write_text(audio_cue_sheet.model_dump_json(indent=2), encoding="utf-8")
+        continuity_path = self.repository.preproduction_path(project_id, "continuity_checklist.json")
+        continuity_path.write_text(continuity_checklist.model_dump_json(indent=2), encoding="utf-8")
+        prop_inventory_path = self.repository.preproduction_path(project_id, "prop_inventory.json")
+        prop_inventory_path.write_text(prop_inventory.model_dump_json(indent=2), encoding="utf-8")
+        delivery_checklist_path = self.repository.preproduction_path(project_id, "delivery_checklist.json")
+        delivery_checklist_path.write_text(delivery_checklist.model_dump_json(indent=2), encoding="utf-8")
         generated_assets.extend(
             [
                 GeneratedAsset(
@@ -109,13 +129,49 @@ class DramaPipelineService:
                     source_name=plan.project_title,
                     metadata={},
                 ),
+                GeneratedAsset(
+                    asset_type="shot_execution_sheet",
+                    relative_path=str(shot_execution_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+                GeneratedAsset(
+                    asset_type="subtitle_timeline",
+                    relative_path=str(subtitle_timeline_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+                GeneratedAsset(
+                    asset_type="audio_cue_sheet",
+                    relative_path=str(audio_cue_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+                GeneratedAsset(
+                    asset_type="continuity_checklist",
+                    relative_path=str(continuity_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+                GeneratedAsset(
+                    asset_type="prop_inventory",
+                    relative_path=str(prop_inventory_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
+                GeneratedAsset(
+                    asset_type="delivery_checklist",
+                    relative_path=str(delivery_checklist_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={},
+                ),
             ]
         )
         stage_records.append(
             ProductionStageRecord(
                 stage_name="preproduction_detailing",
                 status="completed",
-                detail="已生成故事圣经、角色手册、场景节拍、导演手册和质检清单",
+                detail="已生成故事圣经、角色手册、场景节拍、导演手册、字幕时轴、音频 cue、连续性清单等前期细节文件",
             )
         )
 
@@ -270,6 +326,12 @@ class DramaPipelineService:
                 ProjectFileIndexItem(stage_name="scene_beats", file_path=str(scene_beats_path), description="场景节拍"),
                 ProjectFileIndexItem(stage_name="director_notebook", file_path=str(director_notebook_path), description="导演镜头手册"),
                 ProjectFileIndexItem(stage_name="quality_checks", file_path=str(quality_report_path), description="细节质检清单"),
+                ProjectFileIndexItem(stage_name="shot_execution_sheet", file_path=str(shot_execution_path), description="镜头内动作节拍"),
+                ProjectFileIndexItem(stage_name="subtitle_timeline", file_path=str(subtitle_timeline_path), description="字幕时间轴"),
+                ProjectFileIndexItem(stage_name="audio_cue_sheet", file_path=str(audio_cue_path), description="声音与音乐 cue 清单"),
+                ProjectFileIndexItem(stage_name="continuity_checklist", file_path=str(continuity_path), description="连续性检查清单"),
+                ProjectFileIndexItem(stage_name="prop_inventory", file_path=str(prop_inventory_path), description="道具清单"),
+                ProjectFileIndexItem(stage_name="delivery_checklist", file_path=str(delivery_checklist_path), description="交付前检查表"),
             ],
         )
         index_path = self.repository.preproduction_path(project_id, "project_index.json")
@@ -302,16 +364,34 @@ class DramaPipelineService:
                     "7. preproduction/quality_checks.json",
                     "   看需要人工盯的细节问题，避免直接进入生成后才返工。",
                     "",
-                    "8. script/assembly_plan.json",
+                    "8. preproduction/shot_execution_sheet.json",
+                    "   看每个镜头内部的动作节拍、情绪节点和执行重点。",
+                    "",
+                    "9. preproduction/subtitle_timeline.json",
+                    "   看字幕从哪一秒进、哪一秒出，以及强调方式。",
+                    "",
+                    "10. preproduction/audio_cue_sheet.json",
+                    "    看环境声、强调音、转场音效如何铺。",
+                    "",
+                    "11. preproduction/continuity_checklist.json",
+                    "    看服装、视线、灯光、道具这些连续性检查点。",
+                    "",
+                    "12. preproduction/prop_inventory.json",
+                    "    看每个关键道具在哪些镜头出现，是否需要连续控制。",
+                    "",
+                    "13. preproduction/delivery_checklist.json",
+                    "    看最终交付前需要勾掉的事项。",
+                    "",
+                    "14. script/assembly_plan.json",
                     "   看后期节奏、转场和成片思路。",
                     "",
-                    "9. exports/episode_assembly.json",
+                    "15. exports/episode_assembly.json",
                     "   看最终装配清单，以及是否具备自动拼接条件。",
                     "",
-                    "10. logs/manifest.json",
+                    "16. logs/manifest.json",
                     "    看所有产物和阶段状态总表。",
                     "",
-                    "11. preproduction/project_index.json",
+                    "17. preproduction/project_index.json",
                     "    这是全文件索引，适合程序或前端直接消费。",
                 ]
             ),

@@ -229,6 +229,87 @@ class QualityCheckReport(BaseModel):
     checks: list[QualityCheckItem] = Field(default_factory=list)
 
 
+class ShotExecutionBeat(BaseModel):
+    beat_no: int = Field(..., ge=1)
+    shot_no: int = Field(..., ge=1)
+    start_seconds: float = Field(..., ge=0.0)
+    end_seconds: float = Field(..., ge=0.0)
+    focus: str = Field(default="", description="本拍关注点")
+    action: str = Field(default="", description="角色或镜头动作")
+    emotion: str = Field(default="", description="情绪状态")
+    camera_note: str = Field(default="", description="镜头执行说明")
+
+
+class ShotExecutionSheet(BaseModel):
+    beats: list[ShotExecutionBeat] = Field(default_factory=list)
+
+
+class SubtitleSegment(BaseModel):
+    segment_no: int = Field(..., ge=1)
+    shot_no: int = Field(..., ge=1)
+    start_seconds: float = Field(..., ge=0.0)
+    end_seconds: float = Field(..., ge=0.0)
+    text: str
+    emphasis: str = Field(default="", description="强调方式")
+    placement: str = Field(default="bottom_center", description="字幕位置")
+    animation_style: str = Field(default="fade_in", description="字幕动画")
+
+
+class SubtitleTimeline(BaseModel):
+    segments: list[SubtitleSegment] = Field(default_factory=list)
+
+
+class AudioCue(BaseModel):
+    cue_no: int = Field(..., ge=1)
+    shot_no: int | None = Field(default=None, ge=1)
+    cue_type: str = Field(default="ambience")
+    start_seconds: float = Field(..., ge=0.0)
+    end_seconds: float = Field(..., ge=0.0)
+    description: str
+    intensity: str = Field(default="medium")
+    sync_target: str = Field(default="", description="对齐对象")
+
+
+class AudioCueSheet(BaseModel):
+    cues: list[AudioCue] = Field(default_factory=list)
+
+
+class ContinuityChecklistItem(BaseModel):
+    item_no: int = Field(..., ge=1)
+    shot_no: int = Field(..., ge=1)
+    category: str
+    description: str
+    check_method: str = Field(default="")
+    risk_level: str = Field(default="medium")
+
+
+class ContinuityChecklist(BaseModel):
+    items: list[ContinuityChecklistItem] = Field(default_factory=list)
+
+
+class PropInventoryItem(BaseModel):
+    prop_name: str
+    used_in_shots: list[int] = Field(default_factory=list)
+    continuity_note: str = Field(default="")
+    visual_priority: str = Field(default="medium")
+
+
+class PropInventory(BaseModel):
+    items: list[PropInventoryItem] = Field(default_factory=list)
+
+
+class DeliveryChecklistItem(BaseModel):
+    item_no: int = Field(..., ge=1)
+    stage: str
+    description: str
+    owner: str = Field(default="production")
+    done_definition: str = Field(default="")
+
+
+class DeliveryChecklist(BaseModel):
+    items: list[DeliveryChecklistItem] = Field(default_factory=list)
+
+
 class ProjectFileIndexItem(BaseModel):
     stage_name: str
     file_path: str
