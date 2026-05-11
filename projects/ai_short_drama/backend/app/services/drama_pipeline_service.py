@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from datetime import datetime
 from pathlib import Path
 
@@ -64,7 +65,7 @@ class DramaPipelineService:
             )
         else:
             load_project_env(self.project_root)
-            agent_team = AgentTorchDramaTeamService(workspace_root=self.project_root)
+            agent_team = self._create_agent_team(request)
             try:
                 plan = agent_team.generate_story_plan(request, thread_id=f"{project_id}-story-team")
                 assembly_plan = agent_team.generate_assembly_plan(plan, thread_id=f"{project_id}-assembly-team")
@@ -532,6 +533,12 @@ class DramaPipelineService:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         slug = self.repository.slugify_project_id(project_name)
         return f"{slug}_{timestamp}"
+
+    def _create_agent_team(self, request: DramaProjectRequest):
+        signature = inspect.signature(AgentTorchDramaTeamService)
+        if "request" in signature.parameters:
+            return AgentTorchDramaTeamService(workspace_root=self.project_root, request=request)
+        return AgentTorchDramaTeamService(workspace_root=self.project_root)
 
     @staticmethod
     def _normalize_plan(plan, request: DramaProjectRequest):

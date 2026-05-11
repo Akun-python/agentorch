@@ -70,8 +70,9 @@ def _build_assembly_prompt(plan: ShortDramaPlan) -> str:
 class AgentTorchDramaTeamService:
     """把短剧规划和装配显式封装成 AgentTorch 多智能体团队。"""
 
-    def __init__(self, workspace_root: Path):
+    def __init__(self, workspace_root: Path, request: DramaProjectRequest | None = None):
         self.workspace_root = Path(workspace_root)
+        self.request = request
         load_project_env(self.workspace_root)
 
         model_name = get_first_env("OPENAI_CHAT_MODEL", "OPENAI_MODEL", "AGENTORCH_MODEL")
@@ -84,62 +85,68 @@ class AgentTorchDramaTeamService:
             model=model_name,
             api_key=api_key,
             base_url=base_url,
-            timeout=60.0,
-            max_retries=1,
+            timeout=request.llm_timeout_seconds if request else 240.0,
+            max_retries=request.llm_max_retries if request else 2,
+            retry_base_delay=request.llm_retry_base_delay_seconds if request else 3.0,
+            retry_max_delay=request.llm_retry_max_delay_seconds if request else 60.0,
+            min_request_interval=request.llm_min_request_interval_seconds if request else 0.0,
+            max_tokens=request.llm_max_tokens if request else 4096,
         )
+        coordination_policy = _build_coordination_policy(request)
+        supports_parallel_tasks = bool(request.llm_parallel_agents) if request else True
         self.story_team = create_multi_agent(
             name="short-drama-story-team",
             system_prompt="你们共同负责 AI 短剧策划，输出要严谨、结构化、可落地。",
-            coordination_policy=CoordinationPolicy.distributed(),
+            coordination_policy=coordination_policy,
             roles=[
                 {
                     "name": "writer",
                     "description": "负责编剧与人物设定",
                     "model": self.shared_model,
                     "capabilities": ["plan"],
-                    "supports_parallel_tasks": True,
+                    "supports_parallel_tasks": supports_parallel_tasks,
                 },
                 {
                     "name": "director",
                     "description": "负责镜头调度和视觉设计",
                     "model": self.shared_model,
                     "capabilities": ["plan"],
-                    "supports_parallel_tasks": True,
+                    "supports_parallel_tasks": supports_parallel_tasks,
                 },
                 {
                     "name": "reviewer",
                     "description": "负责审校角色一致性与镜头闭环",
                     "model": self.shared_model,
                     "capabilities": ["review"],
-                    "supports_parallel_tasks": True,
+                    "supports_parallel_tasks": supports_parallel_tasks,
                 },
             ],
         )
         self.assembly_team = create_multi_agent(
             name="short-drama-assembly-team",
             system_prompt="你们共同负责短剧后期装配方案，重点关注转场、节奏和最终导出。",
-            coordination_policy=CoordinationPolicy.distributed(),
+            coordination_policy=coordination_policy,
             roles=[
                 {
                     "name": "editor",
                     "description": "负责剪辑结构和节奏安排",
                     "model": self.shared_model,
                     "capabilities": ["plan"],
-                    "supports_parallel_tasks": True,
+                    "supports_parallel_tasks": supports_parallel_tasks,
                 },
                 {
                     "name": "transition_designer",
                     "description": "负责转场设计和视觉过渡",
                     "model": self.shared_model,
                     "capabilities": ["plan"],
-                    "supports_parallel_tasks": True,
+                    "supports_parallel_tasks": supports_parallel_tasks,
                 },
                 {
                     "name": "qc_reviewer",
                     "description": "负责成片风险检查和导出说明",
                     "model": self.shared_model,
                     "capabilities": ["review"],
-                    "supports_parallel_tasks": True,
+                    "supports_parallel_tasks": supports_parallel_tasks,
                 },
             ],
         )
@@ -166,3 +173,15 @@ class AgentTorchDramaTeamService:
                 runtime_holder.close()
             except RuntimeError:
                 pass
+
+
+def _build_coordination_policy(request: DramaProjectRequest | None) -> CoordinationPolicy:
+    if request is None:
+        return CoordinationPolicy.distributed()
+    if not request.llm_parallel_agents:
+        return CoordinationPolicy(route_mode="guided", handoff_mode="summary_only", alert_mode="shared")
+    if request.agent_coordination_mode == "distributed":
+        return CoordinationPolicy.distributed()
+    if request.agent_coordination_mode == "hybrid":
+        return CoordinationPolicy.hybrid()
+    return CoordinationPolicy(route_mode="guided", handoff_mode="summary_only", alert_mode="shared")

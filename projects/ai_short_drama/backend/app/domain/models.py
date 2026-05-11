@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
@@ -464,6 +466,14 @@ class DramaProjectRequest(BaseModel):
     assemble_episode_video: bool = Field(default=True)
     use_placeholder_media: bool = Field(default=False, description="本地占位演练模式，不调用真实 LLM、图片和视频接口")
     use_placeholder_videos: bool = Field(default=False, description="仅视频占位模式，真实调用 LLM 和图片接口，但不调用 Seedance 视频接口")
+    llm_timeout_seconds: float = Field(default=240.0, ge=30.0, le=900.0, description="真实 LLM 单次请求超时时间")
+    llm_max_retries: int = Field(default=2, ge=0, le=5, description="真实 LLM 超时或连接错误后的重试次数")
+    llm_retry_base_delay_seconds: float = Field(default=3.0, ge=0.1, le=60.0, description="LLM 重试基础等待秒数")
+    llm_retry_max_delay_seconds: float = Field(default=60.0, ge=1.0, le=300.0, description="LLM 单次重试最大等待秒数")
+    llm_min_request_interval_seconds: float = Field(default=0.0, ge=0.0, le=60.0, description="同一模型请求启动间隔")
+    llm_max_tokens: int = Field(default=4096, ge=512, le=32768, description="短剧规划阶段 LLM 最大输出 token")
+    agent_coordination_mode: Literal["guided", "distributed", "hybrid"] = Field(default="distributed", description="短剧多智能体路由模式")
+    llm_parallel_agents: bool = Field(default=True, description="是否允许短剧规划团队并行调用多个 LLM 智能体")
     enable_multi_reference_images: bool = Field(default=True)
     enable_continuity_qc: bool = Field(default=True)
     max_continuity_retries: int = Field(default=1, ge=0, le=3)
