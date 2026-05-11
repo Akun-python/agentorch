@@ -23,13 +23,19 @@ def _build_prompt(request: DramaProjectRequest) -> str:
 1. roles 数量必须严格等于角色数量。
 2. shots 数量必须严格等于镜头数量。
 3. roles 里的每个对象必须包含字段：name、appearance、personality、relationship、avatar_prompt、voice_style。
-4. shots 里的每个对象必须包含字段：shot_no、title、summary、duration_seconds、ratio、first_frame_prompt、video_prompt、subtitle_text、focus_roles。
+4. shots 里的每个对象必须包含字段：shot_no、title、summary、duration_seconds、ratio、first_frame_prompt、end_frame_prompt、video_prompt、continuity_notes、camera_axis、lighting_state、prop_state、character_state、subtitle_text、focus_roles。
 5. project_title、logline、visual_style、episode_summary 这 4 个顶层字段必须存在。
-3. avatar_prompt、first_frame_prompt、video_prompt 必须是可以直接给图像/视频模型使用的中文提示词。
-4. 角色外形、镜头视觉和动作描述要一致，不要互相打架。
-5. shot_no 从 1 开始连续递增。
-6. duration_seconds 默认 4 到 6 秒之间。
-7. 不要输出 Markdown，不要解释，只返回符合 schema 的 JSON。
+6. end_frame_prompt 必须描述镜头结束时的定格画面，用于目标尾帧参考图。
+7. continuity_notes 必须拆成数组，逐条写角色、道具、视线、光线和动作惯性。
+8. camera_axis 必须含 axis_description、screen_direction、camera_position。
+9. lighting_state 必须含 key_light_direction、color_temperature、brightness_level。
+10. prop_state 必须含 prop_name、placement、orientation、hand_usage、continuity_priority；没有明确道具时返回空数组。
+11. character_state 必须对每个 focus_roles 角色写 name、blocking、pose、expression、eyeline、wardrobe_state。
+12. avatar_prompt、first_frame_prompt、end_frame_prompt、video_prompt 必须是可以直接给图像/视频模型使用的中文提示词。
+13. 角色外形、镜头视觉和动作描述要一致，不要互相打架。
+14. shot_no 从 1 开始连续递增。
+15. duration_seconds 默认 4 到 6 秒之间。
+16. 不要输出 Markdown，不要解释，只返回符合 schema 的 JSON。
 """.strip()
 
 

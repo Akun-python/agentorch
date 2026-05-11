@@ -42,6 +42,35 @@ class RoleCard(BaseModel):
         return payload
 
 
+class CameraAxisState(BaseModel):
+    axis_description: str = Field(default="主体主运动方向保持稳定", description="轴线说明")
+    screen_direction: str = Field(default="主体由左向右推进", description="主体在画面中的方向")
+    camera_position: str = Field(default="镜头保持在同一轴线侧", description="机位所在轴线侧")
+
+
+class LightingState(BaseModel):
+    key_light_direction: str = Field(default="主光从画面左前方打入", description="主光方向")
+    color_temperature: str = Field(default="冷中性", description="色温状态")
+    brightness_level: str = Field(default="中低照度，保留戏剧反差", description="明暗级别")
+
+
+class PropContinuityState(BaseModel):
+    prop_name: str
+    placement: str = Field(default="保持在镜头主动作区域", description="道具位置")
+    orientation: str = Field(default="朝向与上一镜头一致", description="道具朝向")
+    hand_usage: str = Field(default="保持手位一致", description="持握方式")
+    continuity_priority: str = Field(default="medium", description="连续性优先级")
+
+
+class CharacterContinuityState(BaseModel):
+    name: str
+    blocking: str = Field(default="保持与上一镜头衔接的站位", description="人物站位")
+    pose: str = Field(default="动作起势延续上一镜头尾帧", description="姿态状态")
+    expression: str = Field(default="情绪延续当前剧情推进", description="表情状态")
+    eyeline: str = Field(default="视线方向保持对位逻辑", description="视线方向")
+    wardrobe_state: str = Field(default="服装、发型、妆面保持一致", description="服装状态")
+
+
 class ShotPlan(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -59,7 +88,13 @@ class ShotPlan(BaseModel):
     duration_seconds: int = Field(default=4, ge=4, le=15)
     ratio: str = Field(default="16:9")
     first_frame_prompt: str = Field(..., description="首帧图提示词")
+    end_frame_prompt: str = Field(default="", description="尾帧目标提示词")
     video_prompt: str = Field(..., description="图生视频提示词")
+    continuity_notes: list[str] = Field(default_factory=list, description="连续性要求")
+    camera_axis: CameraAxisState = Field(default_factory=CameraAxisState)
+    lighting_state: LightingState = Field(default_factory=LightingState)
+    prop_state: list[PropContinuityState] = Field(default_factory=list, description="关键道具状态")
+    character_state: list[CharacterContinuityState] = Field(default_factory=list, description="人物连续性状态")
     subtitle_text: str = Field(default="", description="字幕文案")
     focus_roles: list[str] = Field(default_factory=list, description="重点角色名")
 
@@ -82,6 +117,44 @@ class ShotPlan(BaseModel):
             payload["duration_seconds"] = max(4, min(15, duration_value))
         if not payload.get("focus_roles"):
             payload["focus_roles"] = []
+        if not payload.get("end_frame_prompt"):
+            payload["end_frame_prompt"] = f"{payload['title']}结束时的关键画面，动作收束并给下镜头留钩子"
+        continuity_notes = payload.get("continuity_notes")
+        if isinstance(continuity_notes, str):
+            continuity_notes = [continuity_notes]
+        if not continuity_notes:
+            continuity_notes = [
+                "人物站位、服装与发型保持稳定延续",
+                "关键道具的位置、朝向和持握手保持一致",
+                "主光方向、色温和场景总体明暗不可突变",
+            ]
+        payload["continuity_notes"] = continuity_notes
+        if not payload.get("camera_axis"):
+            payload["camera_axis"] = {
+                "axis_description": "保持同一叙事轴线，避免无原因跳轴",
+                "screen_direction": "主体动作方向与上一镜头连续",
+                "camera_position": "机位保持在同一轴线侧，必要时只做轻微推进",
+            }
+        if not payload.get("lighting_state"):
+            payload["lighting_state"] = {
+                "key_light_direction": "主光方向延续上一镜头",
+                "color_temperature": "色温保持统一，不要冷暖乱跳",
+                "brightness_level": "亮度围绕当前场景稳定波动",
+            }
+        if not payload.get("character_state"):
+            payload["character_state"] = [
+                {
+                    "name": role_name,
+                    "blocking": "延续上一镜头的空间关系",
+                    "pose": "动作起势和重心与上一镜头尾帧对齐",
+                    "expression": "表情延续当前剧情冲突",
+                    "eyeline": "视线方向与对手戏或目标物一致",
+                    "wardrobe_state": "服装和发型保持连续",
+                }
+                for role_name in payload.get("focus_roles") or []
+            ]
+        if payload.get("prop_state") is None:
+            payload["prop_state"] = []
         return payload
 
 
@@ -132,6 +205,8 @@ class TransitionPlan(BaseModel):
     to_shot_no: int = Field(..., ge=1)
     transition_type: str = Field(default="fade", description="转场类型")
     duration_seconds: float = Field(default=0.6, ge=0.1, le=3.0)
+    overlap_seconds: float = Field(default=0.35, ge=0.0, le=1.5, description="与下一镜头交叠时长")
+    audio_bridge: str = Field(default="延续环境底噪并轻微跨淡到下一镜头", description="音频衔接说明")
     visual_prompt: str = Field(default="", description="转场画面提示词")
     summary: str = Field(default="", description="转场说明")
 
@@ -244,6 +319,22 @@ class ShotExecutionSheet(BaseModel):
     beats: list[ShotExecutionBeat] = Field(default_factory=list)
 
 
+class ShotSegmentPlanItem(BaseModel):
+    shot_no: int = Field(..., ge=1)
+    segment_no: int = Field(..., ge=1)
+    segment_count: int = Field(..., ge=1)
+    start_seconds: float = Field(..., ge=0.0)
+    end_seconds: float = Field(..., ge=0.0)
+    duration_seconds: int = Field(..., ge=4, le=15)
+    prompt_focus: str = Field(default="", description="本段生成重点")
+    continuity_goal: str = Field(default="", description="本段连续性目标")
+    target_end_frame: str = Field(default="", description="本段结束画面目标")
+
+
+class ShotSegmentPlanSheet(BaseModel):
+    segments: list[ShotSegmentPlanItem] = Field(default_factory=list)
+
+
 class SubtitleSegment(BaseModel):
     segment_no: int = Field(..., ge=1)
     shot_no: int = Field(..., ge=1)
@@ -285,6 +376,21 @@ class ContinuityChecklistItem(BaseModel):
 
 class ContinuityChecklist(BaseModel):
     items: list[ContinuityChecklistItem] = Field(default_factory=list)
+
+
+class ContinuityCheckResult(BaseModel):
+    shot_no: int = Field(..., ge=1)
+    segment_no: int = Field(..., ge=1)
+    attempt_no: int = Field(default=0, ge=0)
+    passed: bool = Field(default=True)
+    score: float = Field(default=100.0, ge=0.0, le=100.0)
+    issues: list[str] = Field(default_factory=list)
+    retry_prompt_suffix: str = Field(default="", description="重试时附加提示词")
+    metrics: dict = Field(default_factory=dict)
+
+
+class ContinuityCheckReport(BaseModel):
+    checks: list[ContinuityCheckResult] = Field(default_factory=list)
 
 
 class PropInventoryItem(BaseModel):
@@ -356,6 +462,11 @@ class DramaProjectRequest(BaseModel):
     generate_shot_videos: bool = Field(default=True)
     generate_transition_images: bool = Field(default=False)
     assemble_episode_video: bool = Field(default=True)
+    enable_multi_reference_images: bool = Field(default=True)
+    enable_continuity_qc: bool = Field(default=True)
+    max_continuity_retries: int = Field(default=1, ge=0, le=3)
+    max_shot_segment_seconds: int = Field(default=6, ge=4, le=8)
+    default_shot_overlap_seconds: float = Field(default=0.35, ge=0.0, le=1.5)
     render_role_image_limit: int = Field(default=2, ge=0, le=8)
     render_shot_limit: int = Field(default=1, ge=0, le=8)
     render_transition_limit: int = Field(default=2, ge=0, le=8)

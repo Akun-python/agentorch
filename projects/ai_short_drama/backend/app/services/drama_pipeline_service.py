@@ -25,6 +25,7 @@ from projects.ai_short_drama.backend.app.services.preproduction_service import (
     SceneBeatService,
     StoryBibleService,
 )
+from projects.ai_short_drama.backend.app.services.shot_generation_service import ShotGenerationService
 from projects.ai_short_drama.backend.app.utils.env_loader import load_project_env
 
 
@@ -70,6 +71,10 @@ class DramaPipelineService:
         quality_report = QualityCheckService().build(plan, director_notebook)
         execution_design = ExecutionDesignService()
         shot_execution_sheet = execution_design.build_shot_execution_sheet(plan)
+        shot_segment_plan = execution_design.build_shot_segment_plan(
+            plan,
+            max_segment_seconds=request.max_shot_segment_seconds,
+        )
         subtitle_timeline = execution_design.build_subtitle_timeline(plan)
         audio_cue_sheet = execution_design.build_audio_cue_sheet(plan, assembly_plan)
         continuity_checklist = execution_design.build_continuity_checklist(plan)
@@ -88,6 +93,8 @@ class DramaPipelineService:
         quality_report_path.write_text(quality_report.model_dump_json(indent=2), encoding="utf-8")
         shot_execution_path = self.repository.preproduction_path(project_id, "shot_execution_sheet.json")
         shot_execution_path.write_text(shot_execution_sheet.model_dump_json(indent=2), encoding="utf-8")
+        shot_segment_path = self.repository.preproduction_path(project_id, "shot_segment_plan.json")
+        shot_segment_path.write_text(shot_segment_plan.model_dump_json(indent=2), encoding="utf-8")
         subtitle_timeline_path = self.repository.preproduction_path(project_id, "subtitle_timeline.json")
         subtitle_timeline_path.write_text(subtitle_timeline.model_dump_json(indent=2), encoding="utf-8")
         audio_cue_path = self.repository.preproduction_path(project_id, "audio_cue_sheet.json")
@@ -137,6 +144,12 @@ class DramaPipelineService:
                     metadata={},
                 ),
                 GeneratedAsset(
+                    asset_type="shot_segment_plan",
+                    relative_path=str(shot_segment_path.relative_to(project_dir)),
+                    source_name=plan.project_title,
+                    metadata={"segment_count": len(shot_segment_plan.segments)},
+                ),
+                GeneratedAsset(
                     asset_type="subtitle_timeline",
                     relative_path=str(subtitle_timeline_path.relative_to(project_dir)),
                     source_name=plan.project_title,
@@ -179,6 +192,7 @@ class DramaPipelineService:
         image_provider = None
         video_provider = None
         shot_video_paths: list[Path] = []
+        role_image_paths: list[Path] = []
         if request.generate_role_images or request.generate_storyboard_images or request.generate_shot_videos:
             image_provider = NanobananaImageProvider()
         if request.generate_shot_videos:
@@ -192,6 +206,7 @@ class DramaPipelineService:
                     aspect_ratio=request.image_aspect_ratio,
                     output_path=output_path,
                 )
+                role_image_paths.append(output_path)
                 generated_assets.append(
                     GeneratedAsset(
                         asset_type="role_image",
@@ -210,98 +225,20 @@ class DramaPipelineService:
             )
 
         if (request.generate_storyboard_images or request.generate_shot_videos) and image_provider is not None:
-            previous_tail_frame_path: Path | None = None
-            continuity_link_count = 0
-            for shot in plan.shots[: request.render_shot_limit]:
-                shot_image_path = self.repository.shot_image_path(project_id, shot.shot_no)
-                image_provider.generate_image(
-                    prompt=shot.first_frame_prompt,
-                    aspect_ratio=shot.ratio or request.image_aspect_ratio,
-                    output_path=shot_image_path,
-                )
-                generated_assets.append(
-                    GeneratedAsset(
-                        asset_type="storyboard_image",
-                        relative_path=str(shot_image_path.relative_to(project_dir)),
-                        source_name=shot.title,
-                        metadata={"shot_no": shot.shot_no},
-                    )
-                )
-
-                if request.generate_shot_videos and video_provider is not None:
-                    current_first_frame_path = previous_tail_frame_path or shot_image_path
-                    current_reference_images = [shot_image_path] if previous_tail_frame_path is not None else []
-                    used_previous_tail = previous_tail_frame_path is not None
-                    continuity_tail_hint = ""
-                    if used_previous_tail:
-                        continuity_tail_hint = (
-                            " 延续上一镜头尾帧中的角色站位、视线方向、光线和主要道具，不要突变。"
-                        )
-                    task_id = video_provider.create_video_task(
-                        prompt=f"{shot.video_prompt}{continuity_tail_hint}",
-                        first_frame_local_path=current_first_frame_path,
-                        reference_image_local_paths=current_reference_images,
-                        ratio=shot.ratio,
-                        duration_seconds=shot.duration_seconds,
-                        return_last_frame=True,
-                    )
-                    video_result = video_provider.wait_for_video_result(task_id)
-                    video_url = video_provider.extract_video_url(video_result)
-                    if not video_url:
-                        raise RuntimeError(f"镜头 {shot.shot_no} 未返回 video_url")
-
-                    shot_video_path = self.repository.shot_video_path(project_id, shot.shot_no)
-                    video_provider.download_video(video_url=video_url, output_path=shot_video_path)
-                    shot_video_paths.append(shot_video_path)
-
-                    tail_frame_path = None
-                    tail_frame_url = video_provider.extract_last_frame_url(video_result)
-                    if tail_frame_url:
-                        tail_frame_path = self.repository.shot_tail_frame_path(project_id, shot.shot_no)
-                        video_provider.download_last_frame(last_frame_url=tail_frame_url, output_path=tail_frame_path)
-                        previous_tail_frame_path = tail_frame_path
-                        generated_assets.append(
-                            GeneratedAsset(
-                                asset_type="shot_tail_frame",
-                                relative_path=str(tail_frame_path.relative_to(project_dir)),
-                                source_name=shot.title,
-                                metadata={"shot_no": shot.shot_no, "task_id": task_id},
-                            )
-                        )
-                    else:
-                        previous_tail_frame_path = None
-
-                    generated_assets.append(
-                        GeneratedAsset(
-                            asset_type="shot_video",
-                            relative_path=str(shot_video_path.relative_to(project_dir)),
-                            source_name=shot.title,
-                            metadata={
-                                "shot_no": shot.shot_no,
-                                "task_id": task_id,
-                                "continuity_first_frame": "previous_tail_frame" if used_previous_tail else "storyboard_image",
-                                "continuity_tail_frame_generated": bool(tail_frame_path),
-                                "continuity_previous_tail_used": used_previous_tail,
-                                "reference_image_count": len(current_reference_images),
-                            },
-                        )
-                    )
-                    if used_previous_tail and tail_frame_url:
-                        continuity_link_count += 1
-            stage_records.append(
-                ProductionStageRecord(
-                    stage_name="shot_generation",
-                    status="completed",
-                    detail="已生成分镜图、镜头视频与连续性尾帧",
-                    metadata={
-                        "video_count": len(shot_video_paths),
-                        "continuity_link_count": continuity_link_count,
-                        "tail_frame_count": len(
-                            [asset for asset in generated_assets if asset.asset_type == "shot_tail_frame"]
-                        ),
-                    },
-                )
+            shot_generation_service = ShotGenerationService(self.repository)
+            shot_generation_result = shot_generation_service.generate(
+                project_id=project_id,
+                project_dir=project_dir,
+                request=request,
+                plan=plan,
+                segment_plan=shot_segment_plan,
+                image_provider=image_provider,
+                video_provider=video_provider,
+                role_image_paths=role_image_paths,
             )
+            shot_video_paths = shot_generation_result.shot_video_paths
+            generated_assets.extend(shot_generation_result.generated_assets)
+            stage_records.append(shot_generation_result.stage_record)
 
         if request.generate_transition_images and image_provider is not None:
             for transition in assembly_plan.transitions[: request.render_transition_limit]:
@@ -386,6 +323,7 @@ class DramaPipelineService:
                 ProjectFileIndexItem(stage_name="director_notebook", file_path=str(director_notebook_path), description="导演镜头手册"),
                 ProjectFileIndexItem(stage_name="quality_checks", file_path=str(quality_report_path), description="细节质检清单"),
                 ProjectFileIndexItem(stage_name="shot_execution_sheet", file_path=str(shot_execution_path), description="镜头内动作节拍"),
+                ProjectFileIndexItem(stage_name="shot_segment_plan", file_path=str(shot_segment_path), description="短段生成计划，控制每个长镜头拆分和尾帧目标"),
                 ProjectFileIndexItem(stage_name="subtitle_timeline", file_path=str(subtitle_timeline_path), description="字幕时间轴"),
                 ProjectFileIndexItem(stage_name="audio_cue_sheet", file_path=str(audio_cue_path), description="声音与音乐 cue 清单"),
                 ProjectFileIndexItem(stage_name="continuity_checklist", file_path=str(continuity_path), description="连续性检查清单"),
@@ -431,43 +369,55 @@ class DramaPipelineService:
                     "8. preproduction/shot_execution_sheet.json",
                     "   看每个镜头内部的动作节拍、情绪节点和执行重点。",
                     "",
-                    "9. preproduction/subtitle_timeline.json",
+                    "9. preproduction/shot_segment_plan.json",
+                    "   看每个镜头如何拆成短段生成，以及每段的尾帧目标。",
+                    "",
+                    "10. preproduction/subtitle_timeline.json",
                     "   看字幕从哪一秒进、哪一秒出，以及强调方式。",
                     "",
-                    "10. preproduction/audio_cue_sheet.json",
-                    "    看环境声、强调音、转场音效如何铺。",
+                    "11. preproduction/audio_cue_sheet.json",
+                    "    看环境声、强调音、转场音效和跨镜音频桥如何铺。",
                     "",
-                    "11. preproduction/continuity_checklist.json",
+                    "12. preproduction/continuity_checklist.json",
                     "    看服装、视线、灯光、道具这些连续性检查点。",
                     "",
-                    "12. preproduction/prop_inventory.json",
+                    "13. preproduction/prop_inventory.json",
                     "    看每个关键道具在哪些镜头出现，是否需要连续控制。",
                     "",
-                    "13. preproduction/delivery_checklist.json",
+                    "14. preproduction/delivery_checklist.json",
                     "    看最终交付前需要勾掉的事项。",
                     "",
-                    "14. script/assembly_plan.json",
+                    "15. script/assembly_plan.json",
                     "   看后期节奏、转场和成片思路。",
                     "",
-                    "15. video/frames/shot_XX_tail.png",
+                    "16. storyboard/end_frames/shot_XX_end.png",
+                    "   看每个镜头预先生成的目标尾帧参考图。",
+                    "",
+                    "17. video/segments/shot_XX_seg_XX.mp4",
+                    "   看长镜头拆分后的短段视频，短段之间会用尾帧继续接力。",
+                    "",
+                    "18. video/frames/shot_XX_tail.png 与 shot_XX_seg_XX_tail.png",
                     "   看每个镜头生成后的尾帧，这些尾帧会被接到下一个镜头继续生成，用来控制连续性。",
                     "",
-                    "16. exports/episode_assembly.json",
+                    "19. logs/continuity_report.json",
+                    "   看每段视频的连续性质检、分数、问题和重试记录。",
+                    "",
+                    "20. exports/episode_assembly.json",
                     "   看最终装配清单，以及是否具备自动拼接条件。",
                     "",
-                    "17. exports/editing_export_bundle.json",
+                    "21. exports/editing_export_bundle.json",
                     "    看开放格式导出包，里面有 draft/final 的 SRT、FCPXML 与导出说明。",
                     "",
-                    "18. subtitles/captions_draft.srt 与 subtitles/captions_final.srt",
+                    "22. subtitles/captions_draft.srt 与 subtitles/captions_final.srt",
                     "    给剪映桌面/Web 直接导字幕。",
                     "",
-                    "19. exports/draft/timeline_draft.fcpxml 与 exports/final/timeline_final.fcpxml",
+                    "23. exports/draft/timeline_draft.fcpxml 与 exports/final/timeline_final.fcpxml",
                     "    给专业剪辑软件导入时间线；draft 可先审稿，final 仅在镜头齐全时生成。",
                     "",
-                    "20. logs/manifest.json",
+                    "24. logs/manifest.json",
                     "    看所有产物和阶段状态总表。",
                     "",
-                    "21. preproduction/project_index.json",
+                    "25. preproduction/project_index.json",
                     "    这是全文件索引，适合程序或前端直接消费。",
                 ]
             ),

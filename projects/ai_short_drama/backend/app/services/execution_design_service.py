@@ -15,6 +15,8 @@ from projects.ai_short_drama.backend.app.domain.models import (
     ShortDramaPlan,
     ShotExecutionBeat,
     ShotExecutionSheet,
+    ShotSegmentPlanItem,
+    ShotSegmentPlanSheet,
     SubtitleSegment,
     SubtitleTimeline,
 )
@@ -70,6 +72,37 @@ class ExecutionDesignService:
                 )
         return ShotExecutionSheet(beats=beats)
 
+    def build_shot_segment_plan(self, plan: ShortDramaPlan, *, max_segment_seconds: int = 6) -> ShotSegmentPlanSheet:
+        segments: list[ShotSegmentPlanItem] = []
+        segment_limit = max(4, min(8, int(max_segment_seconds)))
+        for shot in plan.shots:
+            duration = float(shot.duration_seconds)
+            segment_count = max(1, int((duration + segment_limit - 0.01) // segment_limit))
+            for segment_no in range(1, segment_count + 1):
+                start_seconds = round((segment_no - 1) * duration / segment_count, 2)
+                end_seconds = round(segment_no * duration / segment_count, 2)
+                segment_duration = max(4, min(15, int(round(end_seconds - start_seconds)) or 4))
+                if segment_no == 1:
+                    prompt_focus = f"建立《{shot.title}》的起始空间和人物动作"
+                elif segment_no == segment_count:
+                    prompt_focus = f"把动作推到尾帧目标：{shot.end_frame_prompt}"
+                else:
+                    prompt_focus = f"推进《{shot.title}》中段动作，避免人物和道具突变"
+                segments.append(
+                    ShotSegmentPlanItem(
+                        shot_no=shot.shot_no,
+                        segment_no=segment_no,
+                        segment_count=segment_count,
+                        start_seconds=start_seconds,
+                        end_seconds=end_seconds,
+                        duration_seconds=segment_duration,
+                        prompt_focus=prompt_focus,
+                        continuity_goal="；".join(shot.continuity_notes),
+                        target_end_frame=shot.end_frame_prompt,
+                    )
+                )
+        return ShotSegmentPlanSheet(segments=segments)
+
     def build_subtitle_timeline(self, plan: ShortDramaPlan) -> SubtitleTimeline:
         segments: list[SubtitleSegment] = []
         for shot in plan.shots:
@@ -96,7 +129,7 @@ class ExecutionDesignService:
         cues: list[AudioCue] = []
         current_time = 0.0
         shot_start_map: dict[int, float] = {}
-        for shot in plan.shots:
+        for shot_index, shot in enumerate(plan.shots):
             shot_start_map[shot.shot_no] = round(current_time, 2)
             duration = float(shot.duration_seconds)
             cues.append(
@@ -123,6 +156,19 @@ class ExecutionDesignService:
                     sync_target="镜头结尾钩子",
                 )
             )
+            if shot_index < len(plan.shots) - 1:
+                cues.append(
+                    AudioCue(
+                        cue_no=len(cues) + 1,
+                        shot_no=shot.shot_no,
+                        cue_type="audio_bridge",
+                        start_seconds=round(current_time + max(0.0, duration - 0.45), 2),
+                        end_seconds=round(current_time + duration + 0.35, 2),
+                        description=f"镜头{shot.shot_no} 尾部环境声延续到下一镜，避免声音硬断",
+                        intensity="low",
+                        sync_target="镜头边界连续",
+                    )
+                )
             current_time += duration
 
         for transition in assembly_plan.transitions:
@@ -146,6 +192,31 @@ class ExecutionDesignService:
                     sync_target=f"{transition.from_shot_no}->{transition.to_shot_no}",
                 )
             )
+            cues.append(
+                AudioCue(
+                    cue_no=len(cues) + 1,
+                    shot_no=None,
+                    cue_type="transition_audio_bridge",
+                    start_seconds=round(
+                        shot_start_map.get(transition.from_shot_no, 0.0)
+                        + max(
+                            0.0,
+                            float(next((shot.duration_seconds for shot in plan.shots if shot.shot_no == transition.from_shot_no), 0.0))
+                            - max(transition.duration_seconds, transition.overlap_seconds),
+                        ),
+                        2,
+                    ),
+                    end_seconds=round(
+                        shot_start_map.get(transition.from_shot_no, 0.0)
+                        + float(next((shot.duration_seconds for shot in plan.shots if shot.shot_no == transition.from_shot_no), 0.0))
+                        + transition.overlap_seconds,
+                        2,
+                    ),
+                    description=f"转场{transition.transition_no} 音频桥：{transition.audio_bridge}",
+                    intensity="medium",
+                    sync_target=f"{transition.from_shot_no}->{transition.to_shot_no} overlap {transition.overlap_seconds}s",
+                )
+            )
         return AudioCueSheet(cues=cues)
 
     def build_continuity_checklist(self, plan: ShortDramaPlan) -> ContinuityChecklist:
@@ -156,6 +227,12 @@ class ExecutionDesignService:
                 ("prop", "关键道具的位置、朝向、持握手是否连续", "逐帧核对首尾关键帧"),
                 ("eyeline", "角色视线方向是否匹配对位关系", "检查对切镜头的视线轴"),
                 ("lighting", "主光方向和色温是否延续场景气氛", "对比前后镜头高光与阴影分布"),
+                ("camera_axis", shot.camera_axis.axis_description, "检查主体运动方向和机位轴线是否突然反转"),
+                (
+                    "end_frame",
+                    f"尾帧必须接近目标：{shot.end_frame_prompt}",
+                    "对照生成尾帧、目标尾帧图和下一镜头首帧",
+                ),
             ):
                 items.append(
                     ContinuityChecklistItem(
@@ -165,6 +242,34 @@ class ExecutionDesignService:
                         description=f"镜头{shot.shot_no}：{description}",
                         check_method=method,
                         risk_level="medium",
+                    )
+                )
+            for character in shot.character_state:
+                items.append(
+                    ContinuityChecklistItem(
+                        item_no=len(items) + 1,
+                        shot_no=shot.shot_no,
+                        category="character_state",
+                        description=(
+                            f"镜头{shot.shot_no}：{character.name} 站位={character.blocking}；"
+                            f"姿态={character.pose}；视线={character.eyeline}；服装={character.wardrobe_state}"
+                        ),
+                        check_method="对照角色立绘、上一镜尾帧和当前镜头尾帧",
+                        risk_level="high",
+                    )
+                )
+            for prop in shot.prop_state:
+                items.append(
+                    ContinuityChecklistItem(
+                        item_no=len(items) + 1,
+                        shot_no=shot.shot_no,
+                        category="prop_state",
+                        description=(
+                            f"镜头{shot.shot_no}：{prop.prop_name} 位置={prop.placement}；"
+                            f"朝向={prop.orientation}；手位={prop.hand_usage}"
+                        ),
+                        check_method="对照分镜图、尾帧和道具清单",
+                        risk_level="high" if prop.continuity_priority == "high" else "medium",
                     )
                 )
         return ContinuityChecklist(items=items)
@@ -225,6 +330,13 @@ class ExecutionDesignService:
             ),
             DeliveryChecklistItem(
                 item_no=4,
+                stage="generation",
+                description="连续性尾帧、分段视频和质检报告已生成",
+                owner="technical_director",
+                done_definition="video/frames、video/segments、video/qc 和 logs/continuity_report.json 可被追溯",
+            ),
+            DeliveryChecklistItem(
+                item_no=5,
                 stage="delivery",
                 description="最终导出前检查 ffmpeg、镜头视频、音频和字幕时间轴是否齐全",
                 owner="technical_director",

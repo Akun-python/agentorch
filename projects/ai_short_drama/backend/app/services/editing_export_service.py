@@ -440,7 +440,10 @@ class EditingExportService:
                     start=self._seconds_to_fcpxml_time(max(0.0, shot.duration_seconds - min(transition.duration_seconds, shot.duration_seconds))),
                     duration=self._seconds_to_fcpxml_time(transition.duration_seconds),
                     value=f"转场{transition.transition_no}",
-                    note=transition.summary or transition.transition_type,
+                    note=(
+                        f"{transition.summary or transition.transition_type}；"
+                        f"overlap={transition.overlap_seconds}s；audio_bridge={transition.audio_bridge}"
+                    ),
                 )
         for cue_track in cue_tracks:
             SubElement(
@@ -497,6 +500,8 @@ class EditingExportService:
                         {
                             "transition_type": transitions_by_shot[shot.shot_no].transition_type,
                             "duration_seconds": transitions_by_shot[shot.shot_no].duration_seconds,
+                            "overlap_seconds": transitions_by_shot[shot.shot_no].overlap_seconds,
+                            "audio_bridge": transitions_by_shot[shot.shot_no].audio_bridge,
                             "summary": transitions_by_shot[shot.shot_no].summary,
                         }
                         if shot.shot_no in transitions_by_shot

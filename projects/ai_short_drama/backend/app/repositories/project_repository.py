@@ -24,10 +24,13 @@ class ProjectRepository:
             "preproduction",
             "script",
             "storyboard",
+            "storyboard/end_frames",
             "storyboard/images",
             "subtitles",
             "video",
+            "video/segments",
             "video/frames",
+            "video/qc",
             "video/shots",
             "video/transitions",
             "logs",
@@ -48,11 +51,24 @@ class ProjectRepository:
     def shot_image_path(self, project_id: str, shot_no: int) -> Path:
         return self.artifacts_root / project_id / "storyboard" / "images" / f"shot_{shot_no:02d}.png"
 
+    def shot_end_frame_image_path(self, project_id: str, shot_no: int) -> Path:
+        return self.artifacts_root / project_id / "storyboard" / "end_frames" / f"shot_{shot_no:02d}_end.png"
+
     def shot_video_path(self, project_id: str, shot_no: int) -> Path:
         return self.artifacts_root / project_id / "video" / "shots" / f"shot_{shot_no:02d}.mp4"
 
+    def shot_segment_video_path(self, project_id: str, shot_no: int, segment_no: int) -> Path:
+        return self.artifacts_root / project_id / "video" / "segments" / f"shot_{shot_no:02d}_seg_{segment_no:02d}.mp4"
+
     def shot_tail_frame_path(self, project_id: str, shot_no: int) -> Path:
         return self.artifacts_root / project_id / "video" / "frames" / f"shot_{shot_no:02d}_tail.png"
+
+    def shot_segment_tail_frame_path(self, project_id: str, shot_no: int, segment_no: int) -> Path:
+        return self.artifacts_root / project_id / "video" / "frames" / f"shot_{shot_no:02d}_seg_{segment_no:02d}_tail.png"
+
+    def shot_qc_frame_path(self, project_id: str, shot_no: int, segment_no: int, kind: str) -> Path:
+        safe_kind = re.sub(r"[^0-9A-Za-z_-]+", "-", kind.strip()).strip("-").lower() or "frame"
+        return self.artifacts_root / project_id / "video" / "qc" / f"shot_{shot_no:02d}_seg_{segment_no:02d}_{safe_kind}.png"
 
     def transition_image_path(self, project_id: str, transition_no: int) -> Path:
         return self.artifacts_root / project_id / "video" / "transitions" / f"transition_{transition_no:02d}.png"

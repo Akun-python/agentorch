@@ -8,10 +8,16 @@ from projects.ai_short_drama.backend.app.domain.models import (
     DramaProjectRequest,
     RoleCard,
     ShortDramaPlan,
+    ShotSegmentPlanItem,
+    ShotSegmentPlanSheet,
     ShotPlan,
+    TransitionPlan,
 )
 from projects.ai_short_drama.backend.app.providers.video_provider import SeedanceVideoProvider
+from projects.ai_short_drama.backend.app.repositories import ProjectRepository
+from projects.ai_short_drama.backend.app.services.execution_design_service import ExecutionDesignService
 from projects.ai_short_drama.backend.app.services.drama_pipeline_service import DramaPipelineService
+from projects.ai_short_drama.backend.app.services.shot_generation_service import ShotGenerationService
 
 
 def _build_plan() -> ShortDramaPlan:
@@ -38,7 +44,9 @@ def _build_plan() -> ShortDramaPlan:
                 duration_seconds=4,
                 ratio="16:9",
                 first_frame_prompt="昏暗走廊入口，主角推门而入",
+                end_frame_prompt="主角站在走廊中段回头，手仍扶着门把手",
                 video_prompt="镜头跟随主角进入走廊，气氛压抑",
+                continuity_notes=["深色大衣和门把手位置保持稳定", "主光从走廊左侧延续"],
                 subtitle_text="有人来过。",
                 focus_roles=["沈知"],
             ),
@@ -49,7 +57,9 @@ def _build_plan() -> ShortDramaPlan:
                 duration_seconds=5,
                 ratio="16:9",
                 first_frame_prompt="走廊尽头，墙面血字特写",
+                end_frame_prompt="主角停在血字前，右手握着手机，视线盯住墙面",
                 video_prompt="从主角背后推进到墙上的血字，气氛骤紧",
+                continuity_notes=["深色大衣不变", "主角视线从走廊延续到墙面"],
                 subtitle_text="不对劲。",
                 focus_roles=["沈知"],
             ),
@@ -161,7 +171,37 @@ def test_video_provider_download_last_frame_supports_data_url(tmp_path: Path) ->
     assert output_path.read_bytes() == expected_bytes
 
 
-def test_pipeline_uses_previous_tail_frame_for_next_shot(tmp_path: Path, monkeypatch) -> None:
+def test_execution_design_builds_structured_segment_and_audio_bridge() -> None:
+    plan = _build_plan()
+    assembly_plan = _build_assembly_plan()
+    assembly_plan.transitions = [
+        TransitionPlan(
+            transition_no=1,
+            from_shot_no=1,
+            to_shot_no=2,
+            transition_type="match_cut",
+            duration_seconds=0.4,
+            overlap_seconds=0.35,
+            audio_bridge="门轴低频声延续到血字镜头",
+            visual_prompt="沿着走廊暗线匹配剪切",
+            summary="用走廊线条匹配剪切",
+        )
+    ]
+
+    service = ExecutionDesignService()
+    segment_plan = service.build_shot_segment_plan(plan, max_segment_seconds=4)
+    cue_sheet = service.build_audio_cue_sheet(plan, assembly_plan)
+    checklist = service.build_continuity_checklist(plan)
+
+    assert segment_plan.segments
+    assert segment_plan.segments[0].target_end_frame == plan.shots[0].end_frame_prompt
+    assert any(cue.cue_type == "audio_bridge" for cue in cue_sheet.cues)
+    assert any(cue.cue_type == "transition_audio_bridge" for cue in cue_sheet.cues)
+    assert any(item.category == "end_frame" for item in checklist.items)
+    assert any(item.category == "camera_axis" for item in checklist.items)
+
+
+def test_shot_generation_service_uses_tail_frames_reference_images_and_retries(tmp_path: Path) -> None:
     request = DramaProjectRequest(
         project_name="连续性测试",
         premise="一名调查员在走廊追查真相",
@@ -175,15 +215,159 @@ def test_pipeline_uses_previous_tail_frame_for_next_shot(tmp_path: Path, monkeyp
         generate_transition_images=False,
         assemble_episode_video=False,
         render_shot_limit=2,
+        max_continuity_retries=1,
+        enable_multi_reference_images=True,
         project_id="continuity-case",
     )
     plan = _build_plan()
-    assembly_plan = _build_assembly_plan()
     storyboard_png = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9p3lH3sAAAAASUVORK5CYII="
     )
     tail_png = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAusB8fRqp8QAAAAASUVORK5CYII="
+    )
+
+    class FakeImageProvider:
+        def __init__(self) -> None:
+            self.generated_paths: list[Path] = []
+
+        def generate_image(self, *, prompt: str, aspect_ratio: str, output_path: Path) -> Path:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(storyboard_png)
+            self.generated_paths.append(output_path)
+            return output_path
+
+    class FakeVideoProvider:
+        def __init__(self) -> None:
+            self.create_calls: list[dict] = []
+            self.download_last_frame_calls: list[dict] = []
+            self.result_index = 0
+
+        def create_video_task(self, **kwargs):  # noqa: ANN003
+            self.create_calls.append(kwargs)
+            return f"task-{len(self.create_calls)}"
+
+        def wait_for_video_result(self, task_id: str) -> dict:
+            self.result_index += 1
+            return {
+                "status": "succeeded",
+                "content": {
+                    "video_url": f"https://example.com/{task_id}.mp4",
+                    "last_frame_url": (
+                        ""
+                        if self.result_index == 1
+                        else "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAusB8fRqp8QAAAAASUVORK5CYII="
+                    ),
+                },
+            }
+
+        @staticmethod
+        def extract_video_url(video_result: dict) -> str | None:
+            return video_result.get("content", {}).get("video_url")
+
+        @staticmethod
+        def extract_last_frame_url(video_result: dict) -> str | None:
+            return video_result.get("content", {}).get("last_frame_url") or None
+
+        def download_video(self, *, video_url: str, output_path: Path) -> Path:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"fake-video")
+            return output_path
+
+        def download_last_frame(self, *, last_frame_url: str, output_path: Path) -> Path:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(tail_png)
+            self.download_last_frame_calls.append({"url": last_frame_url, "path": output_path})
+            return output_path
+
+    fake_video_provider = FakeVideoProvider()
+    repository = ProjectRepository(tmp_path / "workspace")
+    project_dir = repository.ensure_project_layout("continuity-case")
+    segment_plan = ShotSegmentPlanSheet(
+        segments=[
+            ShotSegmentPlanItem(
+                shot_no=1,
+                segment_no=1,
+                segment_count=1,
+                start_seconds=0.0,
+                end_seconds=4.0,
+                duration_seconds=4,
+                prompt_focus="建立走廊空间",
+                continuity_goal="角色和光线连续",
+                target_end_frame=plan.shots[0].end_frame_prompt,
+            ),
+            ShotSegmentPlanItem(
+                shot_no=2,
+                segment_no=1,
+                segment_count=1,
+                start_seconds=0.0,
+                end_seconds=5.0,
+                duration_seconds=5,
+                prompt_focus="推进到血字",
+                continuity_goal="接上一镜尾帧",
+                target_end_frame=plan.shots[1].end_frame_prompt,
+            ),
+        ]
+    )
+
+    service = ShotGenerationService(repository)
+    result = service.generate(
+        project_id="continuity-case",
+        project_dir=project_dir,
+        request=request,
+        plan=plan,
+        segment_plan=segment_plan,
+        image_provider=FakeImageProvider(),
+        video_provider=fake_video_provider,
+        role_image_paths=[],
+    )
+
+    assert len(fake_video_provider.create_calls) == 3
+
+    first_call = fake_video_provider.create_calls[0]
+    first_retry_call = fake_video_provider.create_calls[1]
+    second_call = fake_video_provider.create_calls[2]
+
+    assert first_call["first_frame_local_path"].name == "shot_01.png"
+    assert len(first_call["reference_image_local_paths"]) == 2
+    assert first_call["return_last_frame"] is True
+    assert "镜头结束尾帧必须贴近" in first_call["prompt"]
+    assert "连续性重试要求" in first_retry_call["prompt"]
+
+    assert second_call["first_frame_local_path"].name.startswith("shot_01_seg_01_tail")
+    assert len(second_call["reference_image_local_paths"]) == 2
+    assert second_call["reference_image_local_paths"][0].name == "shot_02.png"
+    assert "首帧来自上一段或上一镜头尾帧" in second_call["prompt"]
+
+    tail_assets = [asset for asset in result.generated_assets if asset.asset_type == "shot_tail_frame"]
+    assert len(tail_assets) == 2
+
+    assert result.stage_record.metadata["video_count"] == 2
+    assert result.stage_record.metadata["continuity_link_count"] == 1
+    assert result.stage_record.metadata["continuity_retry_count"] == 1
+    assert (project_dir / "logs" / "continuity_report.json").is_file()
+
+
+def test_pipeline_writes_segment_plan_and_continuity_report(tmp_path: Path, monkeypatch) -> None:
+    request = DramaProjectRequest(
+        project_name="连续性总流程测试",
+        premise="调查员追查走廊血字",
+        style="悬疑",
+        episode_goal="验证总流程产物",
+        role_count=1,
+        shot_count=2,
+        generate_role_images=False,
+        generate_storyboard_images=True,
+        generate_shot_videos=False,
+        generate_transition_images=False,
+        assemble_episode_video=False,
+        render_shot_limit=2,
+        project_id="pipeline-continuity-case",
+    )
+    plan = _build_plan()
+    assembly_plan = _build_assembly_plan()
+    storyboard_png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9p3lH3sAAAAASUVORK5CYII="
     )
 
     class FakeAgentTeamService:
@@ -200,53 +384,10 @@ def test_pipeline_uses_previous_tail_frame_for_next_shot(tmp_path: Path, monkeyp
             return None
 
     class FakeImageProvider:
-        def __init__(self) -> None:
-            self.generated_paths: list[Path] = []
-
         def generate_image(self, *, prompt: str, aspect_ratio: str, output_path: Path) -> Path:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_bytes(storyboard_png)
-            self.generated_paths.append(output_path)
             return output_path
-
-    class FakeVideoProvider:
-        def __init__(self) -> None:
-            self.create_calls: list[dict] = []
-            self.download_last_frame_calls: list[dict] = []
-
-        def create_video_task(self, **kwargs):  # noqa: ANN003
-            self.create_calls.append(kwargs)
-            return f"task-{len(self.create_calls)}"
-
-        def wait_for_video_result(self, task_id: str) -> dict:
-            return {
-                "status": "succeeded",
-                "content": {
-                    "video_url": f"https://example.com/{task_id}.mp4",
-                    "last_frame_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAusB8fRqp8QAAAAASUVORK5CYII=",
-                },
-            }
-
-        @staticmethod
-        def extract_video_url(video_result: dict) -> str | None:
-            return video_result.get("content", {}).get("video_url")
-
-        @staticmethod
-        def extract_last_frame_url(video_result: dict) -> str | None:
-            return video_result.get("content", {}).get("last_frame_url")
-
-        def download_video(self, *, video_url: str, output_path: Path) -> Path:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(b"fake-video")
-            return output_path
-
-        def download_last_frame(self, *, last_frame_url: str, output_path: Path) -> Path:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(tail_png)
-            self.download_last_frame_calls.append({"url": last_frame_url, "path": output_path})
-            return output_path
-
-    fake_video_provider = FakeVideoProvider()
 
     monkeypatch.setattr(
         "projects.ai_short_drama.backend.app.services.drama_pipeline_service.AgentTorchDramaTeamService",
@@ -256,38 +397,13 @@ def test_pipeline_uses_previous_tail_frame_for_next_shot(tmp_path: Path, monkeyp
         "projects.ai_short_drama.backend.app.services.drama_pipeline_service.NanobananaImageProvider",
         FakeImageProvider,
     )
-    monkeypatch.setattr(
-        "projects.ai_short_drama.backend.app.services.drama_pipeline_service.SeedanceVideoProvider",
-        lambda: fake_video_provider,
-    )
 
     service = DramaPipelineService(tmp_path / "workspace")
     result = service.run(request)
+    project_dir = Path(result.project_dir)
 
-    assert len(fake_video_provider.create_calls) == 2
-
-    first_call = fake_video_provider.create_calls[0]
-    second_call = fake_video_provider.create_calls[1]
-
-    assert first_call["first_frame_local_path"].name == "shot_01.png"
-    assert first_call["reference_image_local_paths"] == []
-    assert first_call["return_last_frame"] is True
-
-    assert second_call["first_frame_local_path"].name == "shot_01_tail.png"
-    assert len(second_call["reference_image_local_paths"]) == 1
-    assert second_call["reference_image_local_paths"][0].name == "shot_02.png"
-    assert "延续上一镜头尾帧中的角色站位" in second_call["prompt"]
-
-    tail_assets = [asset for asset in result.generated_assets if asset.asset_type == "shot_tail_frame"]
-    assert len(tail_assets) == 2
-
-    shot_stage = next(stage for stage in result.stage_records if stage.stage_name == "shot_generation")
-    assert shot_stage.metadata["video_count"] == 2
-    assert shot_stage.metadata["continuity_link_count"] == 1
-    assert shot_stage.metadata["tail_frame_count"] == 2
-
-    second_shot_asset = next(
-        asset for asset in result.generated_assets if asset.asset_type == "shot_video" and asset.metadata.get("shot_no") == 2
-    )
-    assert second_shot_asset.metadata["continuity_first_frame"] == "previous_tail_frame"
-    assert second_shot_asset.metadata["continuity_previous_tail_used"] is True
+    assert (project_dir / "preproduction" / "shot_segment_plan.json").is_file()
+    assert (project_dir / "logs" / "continuity_report.json").is_file()
+    assert "shot_segment_plan.json" in (project_dir / "preproduction" / "browse_guide.txt").read_text(encoding="utf-8")
+    assert any(asset.asset_type == "shot_segment_plan" for asset in result.generated_assets)
+    assert any(asset.asset_type == "continuity_report" for asset in result.generated_assets)

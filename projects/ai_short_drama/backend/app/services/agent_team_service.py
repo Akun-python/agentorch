@@ -25,8 +25,15 @@ def _build_story_prompt(request: DramaProjectRequest) -> str:
 2. 顶层字段必须包含：project_title、logline、visual_style、episode_summary、roles、shots。
 3. roles 内每个对象必须含：name、appearance、personality、relationship、avatar_prompt、voice_style。
 4. shots 内每个对象必须含：shot_no、title、summary、duration_seconds、ratio、first_frame_prompt、video_prompt、subtitle_text、focus_roles。
-5. 请让 reviewer 主动检查角色一致性、镜头连续性、提示词是否适合图像和视频生成。
-6. duration_seconds 必须严格落在 4 到 15 秒之间，优先使用 4 到 6 秒。
+5. shots 内还必须尽量补充：end_frame_prompt、continuity_notes、camera_axis、lighting_state、prop_state、character_state。
+6. end_frame_prompt 必须写清镜头结束时定格的画面，能直接用于生成目标尾帧参考图。
+7. continuity_notes 必须逐条写清和上一镜头衔接的角色、道具、光线、视线和动作惯性。
+8. camera_axis 必须含 axis_description、screen_direction、camera_position。
+9. lighting_state 必须含 key_light_direction、color_temperature、brightness_level。
+10. prop_state 必须含关键道具的 prop_name、placement、orientation、hand_usage、continuity_priority；没有明确道具时返回空数组。
+11. character_state 必须对 focus_roles 中每个角色写 name、blocking、pose、expression、eyeline、wardrobe_state。
+12. 请让 reviewer 主动检查角色一致性、镜头连续性、提示词是否适合图像和视频生成。
+13. duration_seconds 必须严格落在 4 到 15 秒之间，优先使用 4 到 6 秒；若需要更长动作，仍保持单镜头可被后续分段生成。
 """.strip()
 
 
@@ -49,9 +56,11 @@ def _build_assembly_prompt(plan: ShortDramaPlan) -> str:
 输出要求：
 1. 只输出合法 JSON。
 2. 顶层字段必须有：episode_title、editing_style、transitions、final_runtime_seconds、export_notes。
-3. transitions 里的每个对象必须含：transition_no、from_shot_no、to_shot_no、transition_type、duration_seconds、visual_prompt、summary。
-4. 转场要服务叙事，不要机械重复。
-5. export_notes 里要包含对字幕、封面、失败重跑或后期拼接的提醒。
+3. transitions 里的每个对象必须含：transition_no、from_shot_no、to_shot_no、transition_type、duration_seconds、overlap_seconds、audio_bridge、visual_prompt、summary。
+4. overlap_seconds 控制相邻镜头交叠区，通常 0.25 到 0.6 秒，动作连续时可以稍长。
+5. audio_bridge 要写明环境声、音乐或动作音效如何跨过剪辑点，避免声音硬断。
+6. 转场要服务叙事，不要机械重复。
+7. export_notes 里要包含对字幕、封面、失败重跑或后期拼接的提醒。
 """.strip()
 
 
