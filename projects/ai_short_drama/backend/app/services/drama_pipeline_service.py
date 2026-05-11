@@ -210,6 +210,8 @@ class DramaPipelineService:
             )
 
         if (request.generate_storyboard_images or request.generate_shot_videos) and image_provider is not None:
+            previous_tail_frame_path: Path | None = None
+            continuity_link_count = 0
             for shot in plan.shots[: request.render_shot_limit]:
                 shot_image_path = self.repository.shot_image_path(project_id, shot.shot_no)
                 image_provider.generate_image(
@@ -227,34 +229,77 @@ class DramaPipelineService:
                 )
 
                 if request.generate_shot_videos and video_provider is not None:
+                    current_first_frame_path = previous_tail_frame_path or shot_image_path
+                    current_reference_images = [shot_image_path] if previous_tail_frame_path is not None else []
+                    used_previous_tail = previous_tail_frame_path is not None
+                    continuity_tail_hint = ""
+                    if used_previous_tail:
+                        continuity_tail_hint = (
+                            " 延续上一镜头尾帧中的角色站位、视线方向、光线和主要道具，不要突变。"
+                        )
                     task_id = video_provider.create_video_task(
-                        prompt=shot.video_prompt,
-                        first_frame_local_path=shot_image_path,
+                        prompt=f"{shot.video_prompt}{continuity_tail_hint}",
+                        first_frame_local_path=current_first_frame_path,
+                        reference_image_local_paths=current_reference_images,
                         ratio=shot.ratio,
                         duration_seconds=shot.duration_seconds,
+                        return_last_frame=True,
                     )
                     video_result = video_provider.wait_for_video_result(task_id)
-                    video_url = video_result.get("content", {}).get("video_url")
+                    video_url = video_provider.extract_video_url(video_result)
                     if not video_url:
                         raise RuntimeError(f"镜头 {shot.shot_no} 未返回 video_url")
 
                     shot_video_path = self.repository.shot_video_path(project_id, shot.shot_no)
                     video_provider.download_video(video_url=video_url, output_path=shot_video_path)
                     shot_video_paths.append(shot_video_path)
+
+                    tail_frame_path = None
+                    tail_frame_url = video_provider.extract_last_frame_url(video_result)
+                    if tail_frame_url:
+                        tail_frame_path = self.repository.shot_tail_frame_path(project_id, shot.shot_no)
+                        video_provider.download_last_frame(last_frame_url=tail_frame_url, output_path=tail_frame_path)
+                        previous_tail_frame_path = tail_frame_path
+                        generated_assets.append(
+                            GeneratedAsset(
+                                asset_type="shot_tail_frame",
+                                relative_path=str(tail_frame_path.relative_to(project_dir)),
+                                source_name=shot.title,
+                                metadata={"shot_no": shot.shot_no, "task_id": task_id},
+                            )
+                        )
+                    else:
+                        previous_tail_frame_path = None
+
                     generated_assets.append(
                         GeneratedAsset(
                             asset_type="shot_video",
                             relative_path=str(shot_video_path.relative_to(project_dir)),
                             source_name=shot.title,
-                            metadata={"shot_no": shot.shot_no, "task_id": task_id},
+                            metadata={
+                                "shot_no": shot.shot_no,
+                                "task_id": task_id,
+                                "continuity_first_frame": "previous_tail_frame" if used_previous_tail else "storyboard_image",
+                                "continuity_tail_frame_generated": bool(tail_frame_path),
+                                "continuity_previous_tail_used": used_previous_tail,
+                                "reference_image_count": len(current_reference_images),
+                            },
                         )
                     )
+                    if used_previous_tail and tail_frame_url:
+                        continuity_link_count += 1
             stage_records.append(
                 ProductionStageRecord(
                     stage_name="shot_generation",
                     status="completed",
-                    detail="已生成分镜图与镜头视频",
-                    metadata={"video_count": len(shot_video_paths)},
+                    detail="已生成分镜图、镜头视频与连续性尾帧",
+                    metadata={
+                        "video_count": len(shot_video_paths),
+                        "continuity_link_count": continuity_link_count,
+                        "tail_frame_count": len(
+                            [asset for asset in generated_assets if asset.asset_type == "shot_tail_frame"]
+                        ),
+                    },
                 )
             )
 
@@ -404,22 +449,25 @@ class DramaPipelineService:
                     "14. script/assembly_plan.json",
                     "   看后期节奏、转场和成片思路。",
                     "",
-                    "15. exports/episode_assembly.json",
+                    "15. video/frames/shot_XX_tail.png",
+                    "   看每个镜头生成后的尾帧，这些尾帧会被接到下一个镜头继续生成，用来控制连续性。",
+                    "",
+                    "16. exports/episode_assembly.json",
                     "   看最终装配清单，以及是否具备自动拼接条件。",
                     "",
-                    "16. exports/editing_export_bundle.json",
+                    "17. exports/editing_export_bundle.json",
                     "    看开放格式导出包，里面有 draft/final 的 SRT、FCPXML 与导出说明。",
                     "",
-                    "17. subtitles/captions_draft.srt 与 subtitles/captions_final.srt",
+                    "18. subtitles/captions_draft.srt 与 subtitles/captions_final.srt",
                     "    给剪映桌面/Web 直接导字幕。",
                     "",
-                    "18. exports/draft/timeline_draft.fcpxml 与 exports/final/timeline_final.fcpxml",
+                    "19. exports/draft/timeline_draft.fcpxml 与 exports/final/timeline_final.fcpxml",
                     "    给专业剪辑软件导入时间线；draft 可先审稿，final 仅在镜头齐全时生成。",
                     "",
-                    "19. logs/manifest.json",
+                    "20. logs/manifest.json",
                     "    看所有产物和阶段状态总表。",
                     "",
-                    "20. preproduction/project_index.json",
+                    "21. preproduction/project_index.json",
                     "    这是全文件索引，适合程序或前端直接消费。",
                 ]
             ),

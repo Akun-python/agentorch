@@ -27,6 +27,7 @@ class ProjectRepository:
             "storyboard/images",
             "subtitles",
             "video",
+            "video/frames",
             "video/shots",
             "video/transitions",
             "logs",
@@ -49,6 +50,9 @@ class ProjectRepository:
 
     def shot_video_path(self, project_id: str, shot_no: int) -> Path:
         return self.artifacts_root / project_id / "video" / "shots" / f"shot_{shot_no:02d}.mp4"
+
+    def shot_tail_frame_path(self, project_id: str, shot_no: int) -> Path:
+        return self.artifacts_root / project_id / "video" / "frames" / f"shot_{shot_no:02d}_tail.png"
 
     def transition_image_path(self, project_id: str, transition_no: int) -> Path:
         return self.artifacts_root / project_id / "video" / "transitions" / f"transition_{transition_no:02d}.png"

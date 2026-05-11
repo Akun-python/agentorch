@@ -27,37 +27,63 @@ class SeedanceVideoProvider:
         self.default_ratio = "adaptive"
         self.default_duration = 4
         self.default_generate_audio = True
+        self.default_return_last_frame = False
 
     def create_video_task(
         self,
         *,
         prompt: str,
         first_frame_local_path: Path,
+        last_frame_local_path: Path | None = None,
+        reference_image_local_paths: list[Path] | None = None,
         ratio: str | None = None,
         duration_seconds: int | None = None,
         resolution: str | None = None,
         generate_audio: bool | None = None,
+        return_last_frame: bool | None = None,
     ) -> str:
         headers = self._build_headers()
-        payload = {
-            "model": self.model,
-            "input": [
-                {"type": "text", "text": prompt},
+        input_items = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": self._build_image_data_url(first_frame_local_path),
+                },
+                "role": "first_frame",
+            },
+        ]
+        if last_frame_local_path is not None:
+            input_items.append(
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": self._build_first_frame_image_url(first_frame_local_path),
+                        "url": self._build_image_data_url(last_frame_local_path),
                     },
-                    "role": "first_frame",
-                },
-            ],
+                    "role": "last_frame",
+                }
+            )
+        for reference_image_path in reference_image_local_paths or []:
+            input_items.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": self._build_image_data_url(reference_image_path),
+                    },
+                    "role": "reference_image",
+                }
+            )
+
+        payload = {
+            "model": self.model,
+            "input": input_items,
             "generate_audio": self.default_generate_audio if generate_audio is None else generate_audio,
             "resolution": resolution or self.default_resolution,
             "ratio": ratio or self.default_ratio,
             "duration": duration_seconds or self.default_duration,
             "seed": -1,
             "watermark": False,
-            "return_last_frame": False,
+            "return_last_frame": self.default_return_last_frame if return_last_frame is None else return_last_frame,
             "execution_expires_after": 172800,
         }
 
@@ -95,15 +121,20 @@ class SeedanceVideoProvider:
         return response.json()
 
     def download_video(self, *, video_url: str, output_path: Path) -> Path:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._make_session() as session:
-            response = session.get(video_url, stream=True, timeout=180)
-            response.raise_for_status()
-            with open(output_path, "wb") as file:
-                for chunk in response.iter_content(chunk_size=1024 * 512):
-                    if chunk:
-                        file.write(chunk)
-        return output_path
+        return self._store_media(video_url, output_path, timeout_seconds=180)
+
+    def download_last_frame(self, *, last_frame_url: str, output_path: Path) -> Path:
+        return self._store_media(last_frame_url, output_path, timeout_seconds=120)
+
+    def extract_video_url(self, video_result: dict) -> str | None:
+        return self._extract_media_value(video_result, "video_url")
+
+    def extract_last_frame_url(self, video_result: dict) -> str | None:
+        for key in ("last_frame_url", "last_frame", "last_frame_image"):
+            value = self._extract_media_value(video_result, key)
+            if value:
+                return value
+        return None
 
     def _build_headers(self) -> dict[str, str]:
         return {
@@ -115,6 +146,26 @@ class SeedanceVideoProvider:
         session = requests.Session()
         session.trust_env = not self.disable_env_proxy
         return session
+
+    def _store_media(self, media_url: str, output_path: Path, *, timeout_seconds: int) -> Path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if media_url.startswith("data:"):
+            output_path.write_bytes(self._decode_data_url(media_url))
+            return output_path
+
+        if not media_url.startswith(("http://", "https://")):
+            output_path.write_bytes(self._decode_base64_payload(media_url))
+            return output_path
+
+        with self._make_session() as session:
+            response = session.get(media_url, stream=True, timeout=timeout_seconds)
+            response.raise_for_status()
+            with open(output_path, "wb") as file:
+                for chunk in response.iter_content(chunk_size=1024 * 512):
+                    if chunk:
+                        file.write(chunk)
+        return output_path
 
     @staticmethod
     def _extract_video_result(response_json: dict) -> dict | None:
@@ -131,13 +182,43 @@ class SeedanceVideoProvider:
         return parsed if isinstance(parsed, dict) else None
 
     @staticmethod
-    def _build_first_frame_image_url(first_frame_local_path: Path) -> str:
-        if not first_frame_local_path.is_file():
-            raise FileNotFoundError(f"首帧图不存在: {first_frame_local_path}")
+    def _extract_media_value(payload: dict, key: str) -> str | None:
+        for container in (payload, payload.get("content"), payload.get("meta_data")):
+            if not isinstance(container, dict):
+                continue
 
-        mime_type = mimetypes.guess_type(first_frame_local_path.name)[0]
+            value = container.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, dict):
+                for nested_key in ("url", "image_url", "video_url", "data", "base64"):
+                    nested_value = value.get(nested_key)
+                    if isinstance(nested_value, str) and nested_value.strip():
+                        return nested_value.strip()
+        return None
+
+    @staticmethod
+    def _build_image_data_url(image_path: Path) -> str:
+        if not image_path.is_file():
+            raise FileNotFoundError(f"图片不存在: {image_path}")
+
+        mime_type = mimetypes.guess_type(image_path.name)[0]
         if not mime_type or not mime_type.startswith("image/"):
-            raise ValueError(f"无法识别首帧图片格式: {first_frame_local_path.name}")
+            raise ValueError(f"无法识别图片格式: {image_path.name}")
 
-        image_base64 = base64.b64encode(first_frame_local_path.read_bytes()).decode("utf-8")
+        image_base64 = base64.b64encode(image_path.read_bytes()).decode("utf-8")
         return f"data:{mime_type};base64,{image_base64}"
+
+    @staticmethod
+    def _decode_data_url(data_url: str) -> bytes:
+        _, _, encoded = data_url.partition(",")
+        if not encoded:
+            raise ValueError("数据 URL 格式不正确")
+        return base64.b64decode(encoded)
+
+    @staticmethod
+    def _decode_base64_payload(payload: str) -> bytes:
+        try:
+            return base64.b64decode(payload, validate=False)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError("无法解析尾帧内容为图片数据") from exc
