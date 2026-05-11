@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentorch import CoordinationPolicy, OpenAIModel, PydanticParser, create_multi_agent
+from agentorch import CoordinationPolicy, OpenAIModel, create_multi_agent
 
 from projects.ai_short_drama.backend.app.domain.models import AssemblyPlan, DramaProjectRequest, ShortDramaPlan
+from projects.ai_short_drama.backend.app.services.drama_output_parse_service import DramaPydanticRepairParser
 from projects.ai_short_drama.backend.app.utils.env_loader import get_first_env, load_project_env
 
 
@@ -22,6 +23,7 @@ def _build_story_prompt(request: DramaProjectRequest) -> str:
 
 产出要求：
 1. 输出必须是一个合法 JSON。
+1.1 最终回答只能输出一个 JSON 对象，不要带 [writer]/[director]/[reviewer] 前缀，不要输出 Markdown 代码块。
 2. 顶层字段必须包含：project_title、logline、visual_style、episode_summary、roles、shots。
 3. roles 内每个对象必须含：name、appearance、personality、relationship、avatar_prompt、voice_style。
 4. shots 内每个对象必须含：shot_no、title、summary、duration_seconds、ratio、first_frame_prompt、video_prompt、subtitle_text、focus_roles。
@@ -55,6 +57,7 @@ def _build_assembly_prompt(plan: ShortDramaPlan) -> str:
 
 输出要求：
 1. 只输出合法 JSON。
+1.1 最终回答只能输出一个 JSON 对象，不要带 [editor]/[transition_designer]/[qc_reviewer] 前缀，不要输出 Markdown 代码块。
 2. 顶层字段必须有：episode_title、editing_style、transitions、final_runtime_seconds、export_notes。
 3. transitions 里的每个对象必须含：transition_no、from_shot_no、to_shot_no、transition_type、duration_seconds、overlap_seconds、audio_bridge、visual_prompt、summary。
 4. overlap_seconds 控制相邻镜头交叠区，通常 0.25 到 0.6 秒，动作连续时可以稍长。
@@ -145,7 +148,7 @@ class AgentTorchDramaTeamService:
         result = self.story_team.run_parsed_sync(
             _build_story_prompt(request),
             thread_id=thread_id,
-            parser=PydanticParser(ShortDramaPlan),
+            parser=DramaPydanticRepairParser(ShortDramaPlan),
         )
         return result.parsed
 
@@ -153,7 +156,7 @@ class AgentTorchDramaTeamService:
         result = self.assembly_team.run_parsed_sync(
             _build_assembly_prompt(plan),
             thread_id=thread_id,
-            parser=PydanticParser(AssemblyPlan),
+            parser=DramaPydanticRepairParser(AssemblyPlan),
         )
         return result.parsed
 
