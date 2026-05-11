@@ -12,7 +12,7 @@ from projects.ai_short_drama.backend.app.domain.models import (
     ProjectFileIndexItem,
     ProductionStageRecord,
 )
-from projects.ai_short_drama.backend.app.providers import NanobananaImageProvider, SeedanceVideoProvider
+from projects.ai_short_drama.backend.app.providers import NanobananaImageProvider, PlaceholderVideoProvider, SeedanceVideoProvider
 from projects.ai_short_drama.backend.app.repositories import ProjectRepository
 from projects.ai_short_drama.backend.app.services.agent_team_service import AgentTorchDramaTeamService
 from projects.ai_short_drama.backend.app.services.assembly_service import EpisodeAssemblyService
@@ -48,6 +48,7 @@ class DramaPipelineService:
 
         request_path = self.repository.write_json(project_id, "logs/request.json", request.model_dump())
 
+        video_placeholder_enabled = request.use_placeholder_media or request.use_placeholder_videos
         placeholder_media_service = PlaceholderMediaService(self.repository) if request.use_placeholder_media else None
         if request.use_placeholder_media:
             placeholder_planning = PlaceholderPlanningService()
@@ -211,12 +212,11 @@ class DramaPipelineService:
         video_provider = None
         shot_video_paths: list[Path] = []
         role_image_paths: list[Path] = []
-        if (
-            not request.use_placeholder_media
-            and (request.generate_role_images or request.generate_storyboard_images or request.generate_shot_videos)
-        ):
+        if not request.use_placeholder_media and (request.generate_role_images or request.generate_storyboard_images or request.generate_shot_videos):
             image_provider = NanobananaImageProvider()
-        if not request.use_placeholder_media and request.generate_shot_videos:
+        if request.generate_shot_videos and request.use_placeholder_videos and not request.use_placeholder_media:
+            video_provider = PlaceholderVideoProvider()
+        elif not request.use_placeholder_media and request.generate_shot_videos:
             video_provider = SeedanceVideoProvider()
 
         if request.generate_role_images and request.use_placeholder_media and placeholder_media_service is not None:
@@ -288,6 +288,15 @@ class DramaPipelineService:
             shot_video_paths = shot_generation_result.shot_video_paths
             generated_assets.extend(shot_generation_result.generated_assets)
             stage_records.append(shot_generation_result.stage_record)
+            if request.use_placeholder_videos:
+                stage_records.append(
+                    ProductionStageRecord(
+                        stage_name="placeholder_video_generation",
+                        status="completed",
+                        detail="已真实生成规划和图片素材，但视频片段使用本地占位文件，未调用 Seedance",
+                        metadata={"mode": "placeholder_videos_only", "video_count": len(shot_video_paths)},
+                    )
+                )
 
         if request.generate_transition_images and request.use_placeholder_media and placeholder_media_service is not None:
             _, transition_assets = placeholder_media_service.generate_transition_images(
@@ -343,7 +352,7 @@ class DramaPipelineService:
                 plan=plan,
                 assembly_plan=assembly_plan,
                 shot_video_paths=shot_video_paths,
-                allow_placeholder_preview=request.use_placeholder_media,
+                allow_placeholder_preview=video_placeholder_enabled,
             )
             stage_records.append(assembly_stage)
             generated_assets.append(

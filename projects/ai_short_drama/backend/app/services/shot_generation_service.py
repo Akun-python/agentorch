@@ -273,6 +273,9 @@ class ShotGenerationService:
                         )
 
                 shot_video_path = self.repository.shot_video_path(project_id, shot.shot_no)
+                provider_output_suffix = getattr(video_provider, "output_suffix", None)
+                if isinstance(provider_output_suffix, str) and provider_output_suffix.startswith("."):
+                    shot_video_path = shot_video_path.with_suffix(provider_output_suffix)
                 shot_build = self._build_shot_video_from_segments(
                     segment_video_paths=segment_video_paths,
                     output_path=shot_video_path,
@@ -362,6 +365,9 @@ class ShotGenerationService:
         max_attempts = 1 + (request.max_continuity_retries if request.enable_continuity_qc else 0)
         used_previous_tail = first_frame_path == previous_tail_frame_path and previous_tail_frame_path is not None
         final_video_path = self.repository.shot_segment_video_path(project_id, shot.shot_no, segment.segment_no)
+        provider_output_suffix = getattr(video_provider, "output_suffix", None)
+        if isinstance(provider_output_suffix, str) and provider_output_suffix.startswith("."):
+            final_video_path = final_video_path.with_suffix(provider_output_suffix)
         final_tail_path: Path | None = None
 
         for attempt_no in range(1, max_attempts + 1):

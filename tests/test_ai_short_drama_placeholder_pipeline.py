@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from projects.ai_short_drama.backend.app.domain.models import DramaProjectRequest
+from projects.ai_short_drama.backend.app.domain.models import AssemblyPlan, DramaProjectRequest, RoleCard, ShortDramaPlan, ShotPlan
 from projects.ai_short_drama.backend.app.services.drama_pipeline_service import DramaPipelineService
 
 
@@ -91,3 +91,131 @@ def test_placeholder_pipeline_runs_without_external_providers(tmp_path: Path, mo
 
     assembly = json.loads((project_dir / "exports" / "episode_assembly.json").read_text(encoding="utf-8"))
     assert assembly["assembly_status"] in {"ready_to_concat", "placeholder_preview"}
+
+
+def test_pipeline_uses_real_planning_and_images_but_placeholder_videos(tmp_path: Path, monkeypatch) -> None:
+    request = DramaProjectRequest(
+        project_name="真实规划图片占位视频测试",
+        premise="女记者追查录像带预告",
+        style="都市悬疑",
+        episode_goal="只跳过 Seedance",
+        role_count=1,
+        shot_count=1,
+        generate_role_images=True,
+        generate_storyboard_images=True,
+        generate_shot_videos=True,
+        generate_transition_images=False,
+        assemble_episode_video=True,
+        use_placeholder_media=False,
+        use_placeholder_videos=True,
+        max_continuity_retries=0,
+        render_role_image_limit=1,
+        render_shot_limit=1,
+        project_id="placeholder-video-only-test",
+    )
+    calls = {"agent": 0, "image": 0, "seedance": 0}
+    plan = ShortDramaPlan(
+        project_title="真实规划图片占位视频测试",
+        logline="测试只跳过视频生成",
+        visual_style="都市悬疑",
+        episode_summary="首镜测试",
+        roles=[
+            RoleCard(
+                name="林夏",
+                appearance="深色风衣",
+                personality="冷静",
+                relationship="主角",
+                avatar_prompt="真实角色图提示词",
+                voice_style="克制",
+            )
+        ],
+        shots=[
+            ShotPlan(
+                shot_no=1,
+                title="真实分镜占位视频",
+                summary="主角看见录像带",
+                duration_seconds=4,
+                ratio="16:9",
+                first_frame_prompt="真实首帧提示词",
+                end_frame_prompt="真实尾帧提示词",
+                video_prompt="这段不应发给 Seedance，只用于本地占位 provider",
+                subtitle_text="这不是过去。",
+                focus_roles=["林夏"],
+            )
+        ],
+    )
+    assembly_plan = AssemblyPlan(
+        episode_title="真实规划图片占位视频测试-第一集",
+        editing_style="快节奏",
+        transitions=[],
+        final_runtime_seconds=4,
+        export_notes=["测试只跳过 Seedance"],
+    )
+
+    class FakeAgentTeamService:
+        def __init__(self, workspace_root: Path):
+            self.workspace_root = workspace_root
+            calls["agent"] += 1
+
+        def generate_story_plan(self, request, *, thread_id):  # noqa: ANN001
+            return plan
+
+        def generate_assembly_plan(self, plan, *, thread_id):  # noqa: ANN001
+            return assembly_plan
+
+        def close(self) -> None:
+            return None
+
+    class FakeImageProvider:
+        def generate_image(self, *, prompt: str, aspect_ratio: str, output_path: Path) -> Path:
+            from projects.ai_short_drama.backend.app.services.placeholder_media_service import PlaceholderMediaService
+
+            calls["image"] += 1
+            PlaceholderMediaService._write_placeholder_png(
+                output_path,
+                title="真实图片 provider 替身",
+                subtitle=prompt,
+                accent=(34, 112, 147),
+            )
+            return output_path
+
+    def fail_seedance_provider(*args, **kwargs):  # noqa: ANN002, ANN003
+        calls["seedance"] += 1
+        raise AssertionError("use_placeholder_videos=True 时不应初始化 SeedanceVideoProvider")
+
+    monkeypatch.setattr(
+        "projects.ai_short_drama.backend.app.services.drama_pipeline_service.AgentTorchDramaTeamService",
+        FakeAgentTeamService,
+    )
+    monkeypatch.setattr(
+        "projects.ai_short_drama.backend.app.services.drama_pipeline_service.NanobananaImageProvider",
+        FakeImageProvider,
+    )
+    monkeypatch.setattr(
+        "projects.ai_short_drama.backend.app.services.drama_pipeline_service.SeedanceVideoProvider",
+        fail_seedance_provider,
+    )
+
+    result = DramaPipelineService(tmp_path / "workspace").run(request)
+    project_dir = Path(result.project_dir)
+
+    assert calls["agent"] == 1
+    assert calls["image"] == 3
+    assert calls["seedance"] == 0
+    assert (project_dir / "roles" / "images" / "role_01.png").is_file()
+    assert (project_dir / "storyboard" / "images" / "shot_01.png").is_file()
+    assert (project_dir / "storyboard" / "end_frames" / "shot_01_end.png").is_file()
+    segment_video_paths = sorted((project_dir / "video" / "segments").glob("shot_01_seg_01.*"))
+    shot_video_paths = sorted((project_dir / "video" / "shots").glob("shot_01.*"))
+    assert len(segment_video_paths) == 1
+    assert len(shot_video_paths) == 1
+    assert segment_video_paths[0].suffix in {".avi", ".mp4"}
+    assert shot_video_paths[0].suffix in {".avi", ".mp4"}
+
+    manifest = json.loads((project_dir / "logs" / "manifest.json").read_text(encoding="utf-8"))
+    stage_names = {stage["stage_name"] for stage in manifest["stage_records"]}
+    assert "agent_planning" in stage_names
+    assert "role_images" in stage_names
+    assert "shot_generation" in stage_names
+    assert "placeholder_video_generation" in stage_names
+    assert "placeholder_planning" not in stage_names
