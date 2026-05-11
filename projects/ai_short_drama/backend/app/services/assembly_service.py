@@ -37,7 +37,7 @@ class EpisodeAssemblyService:
             "transition_cards": [str(path) for path in transition_cards],
             "ffmpeg_available": bool(self.ffmpeg_path),
             "ffprobe_available": bool(self.ffprobe_path),
-            "assembly_status": "ready_to_overlap_concat" if shot_video_paths and self.ffmpeg_path else "planning_only",
+            "assembly_status": "ready_to_concat" if shot_video_paths and self.ffmpeg_path else "planning_only",
             "export_notes": assembly_plan.export_notes,
             "plan_summary": plan.episode_summary,
         }
@@ -86,7 +86,7 @@ class EpisodeAssemblyService:
             ProductionStageRecord(
                 stage_name="episode_assembly",
                 status="completed",
-                detail="已使用 ffmpeg 输出预览成片",
+                detail="已使用 ffmpeg 输出 concat 预览成片，overlap 方案已写入装配清单供精剪使用",
                 metadata={"output_video": str(output_video), "episode_package": str(package_path)},
             ),
             transition_cards,

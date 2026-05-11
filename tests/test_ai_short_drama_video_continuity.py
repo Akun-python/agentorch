@@ -201,6 +201,21 @@ def test_execution_design_builds_structured_segment_and_audio_bridge() -> None:
     assert any(item.category == "camera_axis" for item in checklist.items)
 
 
+def test_segment_plan_never_expands_total_duration() -> None:
+    plan = _build_plan()
+    service = ExecutionDesignService()
+
+    segment_plan = service.build_shot_segment_plan(plan, max_segment_seconds=4)
+
+    durations_by_shot: dict[int, int] = {}
+    for segment in segment_plan.segments:
+        durations_by_shot[segment.shot_no] = durations_by_shot.get(segment.shot_no, 0) + segment.duration_seconds
+        assert segment.duration_seconds >= 4
+
+    assert durations_by_shot[1] == 4
+    assert durations_by_shot[2] == 5
+
+
 def test_shot_generation_service_uses_tail_frames_reference_images_and_retries(tmp_path: Path) -> None:
     request = DramaProjectRequest(
         project_name="连续性测试",
@@ -329,13 +344,15 @@ def test_shot_generation_service_uses_tail_frames_reference_images_and_retries(t
     second_call = fake_video_provider.create_calls[2]
 
     assert first_call["first_frame_local_path"].name == "shot_01.png"
-    assert len(first_call["reference_image_local_paths"]) == 2
+    assert first_call["last_frame_local_path"].name == "shot_01_end.png"
+    assert len(first_call["reference_image_local_paths"]) == 1
     assert first_call["return_last_frame"] is True
     assert "镜头结束尾帧必须贴近" in first_call["prompt"]
     assert "连续性重试要求" in first_retry_call["prompt"]
 
     assert second_call["first_frame_local_path"].name.startswith("shot_01_seg_01_tail")
-    assert len(second_call["reference_image_local_paths"]) == 2
+    assert second_call["last_frame_local_path"].name == "shot_02_end.png"
+    assert len(second_call["reference_image_local_paths"]) == 1
     assert second_call["reference_image_local_paths"][0].name == "shot_02.png"
     assert "首帧来自上一段或上一镜头尾帧" in second_call["prompt"]
 
@@ -346,6 +363,29 @@ def test_shot_generation_service_uses_tail_frames_reference_images_and_retries(t
     assert result.stage_record.metadata["continuity_link_count"] == 1
     assert result.stage_record.metadata["continuity_retry_count"] == 1
     assert (project_dir / "logs" / "continuity_report.json").is_file()
+
+
+def test_shot_generation_blocks_multi_segment_merge_without_ffmpeg(tmp_path: Path) -> None:
+    repository = ProjectRepository(tmp_path / "workspace")
+    service = ShotGenerationService(repository)
+    service.ffmpeg_path = None
+
+    segment_1 = tmp_path / "seg1.mp4"
+    segment_2 = tmp_path / "seg2.mp4"
+    output_path = tmp_path / "shot.mp4"
+    segment_1.write_bytes(b"seg1")
+    segment_2.write_bytes(b"seg2")
+
+    result = service._build_shot_video_from_segments(
+        segment_video_paths=[segment_1, segment_2],
+        output_path=output_path,
+    )
+
+    assert result.output_path is None
+    assert result.status == "blocked_ffmpeg_missing"
+    assert result.fallback_manifest_path is not None
+    assert result.fallback_manifest_path.is_file()
+    assert not output_path.exists()
 
 
 def test_pipeline_writes_segment_plan_and_continuity_report(tmp_path: Path, monkeypatch) -> None:

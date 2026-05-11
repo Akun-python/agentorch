@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from math import ceil
 
 from projects.ai_short_drama.backend.app.domain.models import (
     AssemblyPlan,
@@ -76,12 +77,17 @@ class ExecutionDesignService:
         segments: list[ShotSegmentPlanItem] = []
         segment_limit = max(4, min(8, int(max_segment_seconds)))
         for shot in plan.shots:
-            duration = float(shot.duration_seconds)
-            segment_count = max(1, int((duration + segment_limit - 0.01) // segment_limit))
+            total_duration = max(4, min(15, int(round(float(shot.duration_seconds)))))
+            max_possible_segments = max(1, total_duration // 4)
+            segment_count = max(1, min(ceil(total_duration / segment_limit), max_possible_segments))
+            base_duration = total_duration // segment_count
+            remainder = total_duration % segment_count
+            current_time = 0.0
             for segment_no in range(1, segment_count + 1):
-                start_seconds = round((segment_no - 1) * duration / segment_count, 2)
-                end_seconds = round(segment_no * duration / segment_count, 2)
-                segment_duration = max(4, min(15, int(round(end_seconds - start_seconds)) or 4))
+                segment_duration = base_duration + (1 if segment_no <= remainder else 0)
+                start_seconds = round(current_time, 2)
+                end_seconds = round(current_time + segment_duration, 2)
+                current_time = end_seconds
                 if segment_no == 1:
                     prompt_focus = f"建立《{shot.title}》的起始空间和人物动作"
                 elif segment_no == segment_count:

@@ -29,6 +29,13 @@ class ShotGenerationResult:
     continuity_report: ContinuityCheckReport
 
 
+@dataclass(slots=True)
+class ShotVideoBuildResult:
+    output_path: Path | None
+    status: str
+    fallback_manifest_path: Path | None = None
+
+
 class ContinuityPromptBuilder:
     """把结构化连续性字段压成视频模型能执行的提示词。"""
 
@@ -225,10 +232,10 @@ class ShotGenerationService:
                         segment=segment,
                         video_provider=video_provider,
                         first_frame_path=previous_tail_frame_path or shot_image_path,
+                        target_end_frame_path=end_frame_path,
                         reference_image_paths=self._build_reference_images(
                             request=request,
                             shot_image_path=shot_image_path,
-                            end_frame_path=end_frame_path,
                             role_image_paths=role_image_paths,
                         ),
                         previous_tail_frame_path=previous_tail_frame_path,
@@ -266,21 +273,35 @@ class ShotGenerationService:
                         )
 
                 shot_video_path = self.repository.shot_video_path(project_id, shot.shot_no)
-                self._build_shot_video_from_segments(segment_video_paths=segment_video_paths, output_path=shot_video_path)
-                shot_video_paths.append(shot_video_path)
-                generated_assets.append(
-                    GeneratedAsset(
-                        asset_type="shot_video",
-                        relative_path=str(shot_video_path.relative_to(project_dir)),
-                        source_name=shot.title,
-                        metadata={
-                            "shot_no": shot.shot_no,
-                            "segment_count": len(segment_video_paths),
-                            "continuity_tail_frame_generated": previous_tail_frame_path is not None,
-                            "continuity_first_frame": "previous_tail_frame" if shot.shot_no > 1 else "storyboard_image",
-                        },
-                    )
+                shot_build = self._build_shot_video_from_segments(
+                    segment_video_paths=segment_video_paths,
+                    output_path=shot_video_path,
                 )
+                if shot_build.output_path is not None:
+                    shot_video_paths.append(shot_build.output_path)
+                    generated_assets.append(
+                        GeneratedAsset(
+                            asset_type="shot_video",
+                            relative_path=str(shot_build.output_path.relative_to(project_dir)),
+                            source_name=shot.title,
+                            metadata={
+                                "shot_no": shot.shot_no,
+                                "segment_count": len(segment_video_paths),
+                                "build_status": shot_build.status,
+                                "continuity_tail_frame_generated": previous_tail_frame_path is not None,
+                                "continuity_first_frame": "previous_tail_frame" if shot.shot_no > 1 else "storyboard_image",
+                            },
+                        )
+                    )
+                if shot_build.fallback_manifest_path is not None:
+                    generated_assets.append(
+                        GeneratedAsset(
+                            asset_type="shot_segment_manifest",
+                            relative_path=str(shot_build.fallback_manifest_path.relative_to(project_dir)),
+                            source_name=shot.title,
+                            metadata={"shot_no": shot.shot_no, "build_status": shot_build.status},
+                        )
+                    )
                 if previous_tail_frame_path:
                     shot_tail_frame_path = self.repository.shot_tail_frame_path(project_id, shot.shot_no)
                     shot_tail_frame_path.write_bytes(previous_tail_frame_path.read_bytes())
@@ -332,6 +353,7 @@ class ShotGenerationService:
         segment: ShotSegmentPlanItem,
         video_provider: SeedanceVideoProvider,
         first_frame_path: Path,
+        target_end_frame_path: Path,
         reference_image_paths: list[Path],
         previous_tail_frame_path: Path | None,
     ) -> tuple[Path, Path | None, list[ContinuityCheckResult], bool]:
@@ -353,7 +375,7 @@ class ShotGenerationService:
             task_id = video_provider.create_video_task(
                 prompt=prompt,
                 first_frame_local_path=first_frame_path,
-                last_frame_local_path=reference_image_paths[1] if len(reference_image_paths) > 1 else None,
+                last_frame_local_path=target_end_frame_path,
                 reference_image_local_paths=reference_image_paths,
                 ratio=shot.ratio,
                 duration_seconds=segment.duration_seconds,
@@ -400,12 +422,11 @@ class ShotGenerationService:
         *,
         request: DramaProjectRequest,
         shot_image_path: Path,
-        end_frame_path: Path,
         role_image_paths: list[Path],
     ) -> list[Path]:
         if not request.enable_multi_reference_images:
             return []
-        references = [shot_image_path, end_frame_path]
+        references = [shot_image_path]
         references.extend(path for path in role_image_paths if path.is_file())
         return references[:4]
 
@@ -415,16 +436,28 @@ class ShotGenerationService:
             return final_video_path
         return final_video_path.with_name(f"{final_video_path.stem}_attempt_{attempt_no:02d}{final_video_path.suffix}")
 
-    def _build_shot_video_from_segments(self, *, segment_video_paths: list[Path], output_path: Path) -> None:
+    def _build_shot_video_from_segments(self, *, segment_video_paths: list[Path], output_path: Path) -> ShotVideoBuildResult:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if not segment_video_paths:
-            return
+            return ShotVideoBuildResult(output_path=None, status="missing_segments")
         if len(segment_video_paths) == 1:
             shutil.copyfile(segment_video_paths[0], output_path)
-            return
+            return ShotVideoBuildResult(output_path=output_path, status="single_segment_copy")
         if not self.ffmpeg_path:
-            shutil.copyfile(segment_video_paths[-1], output_path)
-            return
+            package_path = output_path.with_suffix(".segments.json")
+            package_path.write_text(
+                json.dumps(
+                    {
+                        "status": "blocked",
+                        "reason": "ffmpeg_missing",
+                        "segments": [str(path) for path in segment_video_paths],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            return ShotVideoBuildResult(output_path=None, status="blocked_ffmpeg_missing", fallback_manifest_path=package_path)
 
         concat_list = output_path.with_name(f"{output_path.stem}_segments.txt")
         concat_lines = [f"file '{path.as_posix()}'" for path in segment_video_paths]
@@ -444,10 +477,19 @@ class ShotGenerationService:
         ]
         try:
             subprocess.run(command, check=True, capture_output=True, text=True)
+            return ShotVideoBuildResult(output_path=output_path, status="ffmpeg_concat")
         except subprocess.CalledProcessError:
             package_path = output_path.with_suffix(".segments.json")
             package_path.write_text(
-                json.dumps({"segments": [str(path) for path in segment_video_paths]}, ensure_ascii=False, indent=2),
+                json.dumps(
+                    {
+                        "status": "blocked",
+                        "reason": "ffmpeg_concat_failed",
+                        "segments": [str(path) for path in segment_video_paths],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
                 encoding="utf-8",
             )
-            shutil.copyfile(segment_video_paths[-1], output_path)
+            return ShotVideoBuildResult(output_path=None, status="blocked_ffmpeg_concat_failed", fallback_manifest_path=package_path)
