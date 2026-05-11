@@ -25,6 +25,10 @@ from projects.ai_short_drama.backend.app.services.preproduction_service import (
     SceneBeatService,
     StoryBibleService,
 )
+from projects.ai_short_drama.backend.app.services.placeholder_pipeline_service import (
+    PlaceholderMediaService,
+    PlaceholderPlanningService,
+)
 from projects.ai_short_drama.backend.app.services.shot_generation_service import ShotGenerationService
 from projects.ai_short_drama.backend.app.utils.env_loader import load_project_env
 
@@ -34,7 +38,6 @@ class DramaPipelineService:
 
     def __init__(self, project_root: Path):
         self.project_root = Path(project_root)
-        load_project_env(self.project_root)
         self.repository = ProjectRepository(self.project_root)
 
     def run(self, request: DramaProjectRequest) -> DramaPipelineResult:
@@ -45,21 +48,36 @@ class DramaPipelineService:
 
         request_path = self.repository.write_json(project_id, "logs/request.json", request.model_dump())
 
-        agent_team = AgentTorchDramaTeamService(workspace_root=self.project_root)
-        try:
-            plan = agent_team.generate_story_plan(request, thread_id=f"{project_id}-story-team")
-            assembly_plan = agent_team.generate_assembly_plan(plan, thread_id=f"{project_id}-assembly-team")
-        finally:
-            agent_team.close()
+        placeholder_media_service = PlaceholderMediaService(self.repository) if request.use_placeholder_media else None
+        if request.use_placeholder_media:
+            placeholder_planning = PlaceholderPlanningService()
+            plan = placeholder_planning.build_story_plan(request)
+            assembly_plan = placeholder_planning.build_assembly_plan(plan)
+            stage_records.append(
+                ProductionStageRecord(
+                    stage_name="placeholder_planning",
+                    status="completed",
+                    detail="已使用本地确定性规划生成占位短剧方案，未调用真实 LLM",
+                    metadata={"mode": "placeholder_media"},
+                )
+            )
+        else:
+            load_project_env(self.project_root)
+            agent_team = AgentTorchDramaTeamService(workspace_root=self.project_root)
+            try:
+                plan = agent_team.generate_story_plan(request, thread_id=f"{project_id}-story-team")
+                assembly_plan = agent_team.generate_assembly_plan(plan, thread_id=f"{project_id}-assembly-team")
+            finally:
+                agent_team.close()
+            stage_records.append(
+                ProductionStageRecord(
+                    stage_name="agent_planning",
+                    status="completed",
+                    detail="已通过 AgentTorch 多智能体团队完成剧本规划与装配方案",
+                )
+            )
         plan = self._normalize_plan(plan, request)
         assembly_plan = self._normalize_assembly_plan(assembly_plan, plan)
-        stage_records.append(
-            ProductionStageRecord(
-                stage_name="agent_planning",
-                status="completed",
-                detail="已通过 AgentTorch 多智能体团队完成剧本规划与装配方案",
-            )
-        )
 
         plan_path = self.repository.write_json(project_id, "script/plan.json", plan.model_dump())
         assembly_plan_path = self.repository.write_json(project_id, "script/assembly_plan.json", assembly_plan.model_dump())
@@ -193,12 +211,31 @@ class DramaPipelineService:
         video_provider = None
         shot_video_paths: list[Path] = []
         role_image_paths: list[Path] = []
-        if request.generate_role_images or request.generate_storyboard_images or request.generate_shot_videos:
+        if (
+            not request.use_placeholder_media
+            and (request.generate_role_images or request.generate_storyboard_images or request.generate_shot_videos)
+        ):
             image_provider = NanobananaImageProvider()
-        if request.generate_shot_videos:
+        if not request.use_placeholder_media and request.generate_shot_videos:
             video_provider = SeedanceVideoProvider()
 
-        if request.generate_role_images and image_provider is not None:
+        if request.generate_role_images and request.use_placeholder_media and placeholder_media_service is not None:
+            role_image_paths, role_assets = placeholder_media_service.generate_role_images(
+                project_id=project_id,
+                project_dir=project_dir,
+                plan=plan,
+                request=request,
+            )
+            generated_assets.extend(role_assets)
+            stage_records.append(
+                ProductionStageRecord(
+                    stage_name="placeholder_role_images",
+                    status="completed",
+                    detail="已生成本地占位角色图，未调用真实图片接口",
+                    metadata={"count": len(role_image_paths), "mode": "placeholder_media"},
+                )
+            )
+        elif request.generate_role_images and image_provider is not None:
             for index, role in enumerate(plan.roles[: request.render_role_image_limit], start=1):
                 output_path = self.repository.role_image_path(project_id, index)
                 image_provider.generate_image(
@@ -224,7 +261,19 @@ class DramaPipelineService:
                 )
             )
 
-        if (request.generate_storyboard_images or request.generate_shot_videos) and image_provider is not None:
+        if (request.generate_storyboard_images or request.generate_shot_videos) and request.use_placeholder_media and placeholder_media_service is not None:
+            placeholder_shot_result = placeholder_media_service.generate_shot_media(
+                project_id=project_id,
+                project_dir=project_dir,
+                request=request,
+                plan=plan,
+                segment_plan=shot_segment_plan,
+            )
+            shot_generation_result = placeholder_media_service.to_shot_generation_result(placeholder_shot_result)
+            shot_video_paths = shot_generation_result.shot_video_paths
+            generated_assets.extend(shot_generation_result.generated_assets)
+            stage_records.append(shot_generation_result.stage_record)
+        elif (request.generate_storyboard_images or request.generate_shot_videos) and image_provider is not None:
             shot_generation_service = ShotGenerationService(self.repository)
             shot_generation_result = shot_generation_service.generate(
                 project_id=project_id,
@@ -240,7 +289,23 @@ class DramaPipelineService:
             generated_assets.extend(shot_generation_result.generated_assets)
             stage_records.append(shot_generation_result.stage_record)
 
-        if request.generate_transition_images and image_provider is not None:
+        if request.generate_transition_images and request.use_placeholder_media and placeholder_media_service is not None:
+            _, transition_assets = placeholder_media_service.generate_transition_images(
+                project_id=project_id,
+                project_dir=project_dir,
+                assembly_plan=assembly_plan,
+                request=request,
+            )
+            generated_assets.extend(transition_assets)
+            stage_records.append(
+                ProductionStageRecord(
+                    stage_name="placeholder_transition_design",
+                    status="completed",
+                    detail="已生成本地占位转场图，未调用真实图片接口",
+                    metadata={"count": len(transition_assets), "mode": "placeholder_media"},
+                )
+            )
+        elif request.generate_transition_images and image_provider is not None:
             for transition in assembly_plan.transitions[: request.render_transition_limit]:
                 if not transition.visual_prompt:
                     continue
@@ -278,6 +343,7 @@ class DramaPipelineService:
                 plan=plan,
                 assembly_plan=assembly_plan,
                 shot_video_paths=shot_video_paths,
+                allow_placeholder_preview=request.use_placeholder_media,
             )
             stage_records.append(assembly_stage)
             generated_assets.append(

@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from projects.ai_short_drama.backend.app.domain.models import AssemblyPlan, ProductionStageRecord, ShortDramaPlan
+from projects.ai_short_drama.backend.app.services.placeholder_video_writer import write_placeholder_avi
 
 
 class EpisodeAssemblyService:
@@ -22,6 +23,7 @@ class EpisodeAssemblyService:
         plan: ShortDramaPlan,
         assembly_plan: AssemblyPlan,
         shot_video_paths: list[Path],
+        allow_placeholder_preview: bool = False,
     ) -> tuple[Path, ProductionStageRecord, list[Path]]:
         exports_dir = Path(project_dir) / "exports"
         exports_dir.mkdir(parents=True, exist_ok=True)
@@ -56,6 +58,29 @@ class EpisodeAssemblyService:
             )
 
         if not self.ffmpeg_path:
+            if allow_placeholder_preview:
+                output_video = exports_dir / "episode_preview_placeholder.avi"
+                write_placeholder_avi(
+                    output_path=output_video,
+                    duration_seconds=max(1, int(round(sum(shot.duration_seconds for shot in plan.shots)))),
+                    seed=len(shot_video_paths) + 100,
+                )
+                package_payload["assembly_status"] = "placeholder_preview"
+                package_payload["placeholder_preview_video"] = str(output_video)
+                package_payload["export_notes"] = list(package_payload["export_notes"]) + [
+                    "当前机器未找到 ffmpeg，因此输出的是整片占位预览 AVI，不代表真实拼接结果。",
+                ]
+                package_path.write_text(json.dumps(package_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+                return (
+                    package_path,
+                    ProductionStageRecord(
+                        stage_name="episode_assembly",
+                        status="completed",
+                        detail="本机未安装 ffmpeg，已生成整片占位预览 AVI 和装配清单",
+                        metadata={"output_video": str(output_video), "episode_package": str(package_path), "placeholder_preview": True},
+                    ),
+                    transition_cards,
+                )
             return (
                 package_path,
                 ProductionStageRecord(

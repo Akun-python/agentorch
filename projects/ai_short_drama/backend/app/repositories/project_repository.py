@@ -57,8 +57,14 @@ class ProjectRepository:
     def shot_video_path(self, project_id: str, shot_no: int) -> Path:
         return self.artifacts_root / project_id / "video" / "shots" / f"shot_{shot_no:02d}.mp4"
 
+    def placeholder_shot_video_path(self, project_id: str, shot_no: int) -> Path:
+        return self.artifacts_root / project_id / "video" / "shots" / f"shot_{shot_no:02d}.avi"
+
     def shot_segment_video_path(self, project_id: str, shot_no: int, segment_no: int) -> Path:
         return self.artifacts_root / project_id / "video" / "segments" / f"shot_{shot_no:02d}_seg_{segment_no:02d}.mp4"
+
+    def placeholder_shot_segment_video_path(self, project_id: str, shot_no: int, segment_no: int) -> Path:
+        return self.artifacts_root / project_id / "video" / "segments" / f"shot_{shot_no:02d}_seg_{segment_no:02d}.avi"
 
     def shot_tail_frame_path(self, project_id: str, shot_no: int) -> Path:
         return self.artifacts_root / project_id / "video" / "frames" / f"shot_{shot_no:02d}_tail.png"

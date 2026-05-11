@@ -462,6 +462,7 @@ class DramaProjectRequest(BaseModel):
     generate_shot_videos: bool = Field(default=True)
     generate_transition_images: bool = Field(default=False)
     assemble_episode_video: bool = Field(default=True)
+    use_placeholder_media: bool = Field(default=False, description="本地占位演练模式，不调用真实 LLM、图片和视频接口")
     enable_multi_reference_images: bool = Field(default=True)
     enable_continuity_qc: bool = Field(default=True)
     max_continuity_retries: int = Field(default=1, ge=0, le=3)
