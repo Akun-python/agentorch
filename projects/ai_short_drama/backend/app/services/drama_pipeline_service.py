@@ -16,6 +16,7 @@ from projects.ai_short_drama.backend.app.providers import NanobananaImageProvide
 from projects.ai_short_drama.backend.app.repositories import ProjectRepository
 from projects.ai_short_drama.backend.app.services.agent_team_service import AgentTorchDramaTeamService
 from projects.ai_short_drama.backend.app.services.assembly_service import EpisodeAssemblyService
+from projects.ai_short_drama.backend.app.services.editing_export_service import EditingExportService
 from projects.ai_short_drama.backend.app.services.execution_design_service import ExecutionDesignService
 from projects.ai_short_drama.backend.app.services.preproduction_service import (
     CharacterBibleService,
@@ -315,6 +316,19 @@ class DramaPipelineService:
                     )
                 )
 
+        export_service = EditingExportService(self.repository)
+        export_bundle, export_assets, export_stage = export_service.build_export_bundle(
+            project_id=project_id,
+            project_dir=project_dir,
+            plan=plan,
+            assembly_plan=assembly_plan,
+            subtitle_timeline=subtitle_timeline,
+            audio_cue_sheet=audio_cue_sheet,
+            shot_video_paths=shot_video_paths,
+        )
+        stage_records.append(export_stage)
+        generated_assets.extend(export_assets)
+
         project_index = ProjectFileIndex(
             project_id=project_id,
             items=[
@@ -332,6 +346,11 @@ class DramaPipelineService:
                 ProjectFileIndexItem(stage_name="continuity_checklist", file_path=str(continuity_path), description="连续性检查清单"),
                 ProjectFileIndexItem(stage_name="prop_inventory", file_path=str(prop_inventory_path), description="道具清单"),
                 ProjectFileIndexItem(stage_name="delivery_checklist", file_path=str(delivery_checklist_path), description="交付前检查表"),
+                ProjectFileIndexItem(
+                    stage_name="editing_export_bundle",
+                    file_path=str(self.repository.export_path(project_id, "editing_export_bundle.json")),
+                    description="开放格式导出包总索引，包含 draft/final 字幕与时间线",
+                ),
             ],
         )
         index_path = self.repository.preproduction_path(project_id, "project_index.json")
@@ -388,10 +407,19 @@ class DramaPipelineService:
                     "15. exports/episode_assembly.json",
                     "   看最终装配清单，以及是否具备自动拼接条件。",
                     "",
-                    "16. logs/manifest.json",
+                    "16. exports/editing_export_bundle.json",
+                    "    看开放格式导出包，里面有 draft/final 的 SRT、FCPXML 与导出说明。",
+                    "",
+                    "17. subtitles/captions_draft.srt 与 subtitles/captions_final.srt",
+                    "    给剪映桌面/Web 直接导字幕。",
+                    "",
+                    "18. exports/draft/timeline_draft.fcpxml 与 exports/final/timeline_final.fcpxml",
+                    "    给专业剪辑软件导入时间线；draft 可先审稿，final 仅在镜头齐全时生成。",
+                    "",
+                    "19. logs/manifest.json",
                     "    看所有产物和阶段状态总表。",
                     "",
-                    "17. preproduction/project_index.json",
+                    "20. preproduction/project_index.json",
                     "    这是全文件索引，适合程序或前端直接消费。",
                 ]
             ),

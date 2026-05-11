@@ -321,6 +321,28 @@ class ProjectFileIndex(BaseModel):
     items: list[ProjectFileIndexItem] = Field(default_factory=list)
 
 
+class ExportPackageFile(BaseModel):
+    asset_type: str
+    relative_path: str
+    description: str = Field(default="", description="导出文件说明")
+    editor_target: str = Field(default="", description="目标剪辑软件或交换格式")
+
+
+class EditingExportPackage(BaseModel):
+    package_name: str
+    package_mode: str = Field(default="draft", description="导出包模式")
+    status: str = Field(default="ready", description="导出状态")
+    target_editor: str = Field(default="", description="目标剪辑软件范围")
+    summary: str = Field(default="", description="导出摘要")
+    files: list[ExportPackageFile] = Field(default_factory=list)
+    missing_shot_nos: list[int] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class EditingExportBundle(BaseModel):
+    packages: list[EditingExportPackage] = Field(default_factory=list)
+
+
 class DramaProjectRequest(BaseModel):
     project_name: str = Field(..., description="项目名称")
     premise: str = Field(..., description="故事 premise")

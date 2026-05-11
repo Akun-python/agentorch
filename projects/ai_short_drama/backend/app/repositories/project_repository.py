@@ -23,6 +23,7 @@ class ProjectRepository:
             "script",
             "storyboard",
             "storyboard/images",
+            "subtitles",
             "video",
             "video/shots",
             "video/transitions",
@@ -52,6 +53,15 @@ class ProjectRepository:
 
     def preproduction_path(self, project_id: str, filename: str) -> Path:
         return self.artifacts_root / project_id / "preproduction" / filename
+
+    def subtitle_path(self, project_id: str, filename: str) -> Path:
+        return self.artifacts_root / project_id / "subtitles" / filename
+
+    def export_path(self, project_id: str, *parts: str) -> Path:
+        target_path = self.artifacts_root / project_id / "exports"
+        for part in parts:
+            target_path = target_path / part
+        return target_path
 
     @staticmethod
     def slugify_project_id(raw_name: str) -> str:
