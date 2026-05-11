@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import wave
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
@@ -36,6 +37,18 @@ class TimelineShot:
     has_media: bool
 
 
+@dataclass(slots=True)
+class AudioCueTrack:
+    cue_no: int
+    cue_type: str
+    cue_name: str
+    start_seconds: float
+    duration_seconds: float
+    asset_id: str
+    asset_path: Path
+    lane: int
+
+
 class EditingExportService:
     """输出开放格式工程包，供剪映字幕导入和专业剪辑软件时间线导入使用。"""
 
@@ -55,6 +68,7 @@ class EditingExportService:
     ) -> tuple[EditingExportBundle, list[GeneratedAsset], ProductionStageRecord]:
         shot_path_map = self._build_shot_path_map(shot_video_paths)
         timeline_shots = self._build_timeline_shots(plan=plan, shot_path_map=shot_path_map)
+        cue_tracks = self._build_audio_placeholder_tracks(project_id=project_id, audio_cue_sheet=audio_cue_sheet)
         packages: list[EditingExportPackage] = []
         assets: list[GeneratedAsset] = []
 
@@ -69,6 +83,7 @@ class EditingExportService:
             self._build_fcpxml_content(
                 package_name=f"{plan.project_title}-draft",
                 timeline_shots=timeline_shots,
+                cue_tracks=cue_tracks,
                 subtitle_timeline=subtitle_timeline,
                 assembly_plan=assembly_plan,
                 include_media=False,
@@ -81,6 +96,7 @@ class EditingExportService:
                 self._build_media_manifest_payload(
                     project_dir=project_dir,
                     timeline_shots=timeline_shots,
+                    cue_tracks=cue_tracks,
                     subtitle_timeline=subtitle_timeline,
                     audio_cue_sheet=audio_cue_sheet,
                     assembly_plan=assembly_plan,
@@ -114,6 +130,12 @@ class EditingExportService:
                     asset_type="media_manifest",
                     relative_path=str(draft_media_manifest_path.relative_to(project_dir)),
                     description="骨架时间线的素材占位清单",
+                    editor_target="All",
+                ),
+                ExportPackageFile(
+                    asset_type="audio_placeholders",
+                    relative_path="audio/placeholders/",
+                    description="音频 cue 的静音占位轨目录",
                     editor_target="All",
                 ),
             ],
@@ -155,6 +177,7 @@ class EditingExportService:
                 self._build_media_manifest_payload(
                     project_dir=project_dir,
                     timeline_shots=timeline_shots,
+                    cue_tracks=cue_tracks,
                     subtitle_timeline=subtitle_timeline,
                     audio_cue_sheet=audio_cue_sheet,
                     assembly_plan=assembly_plan,
@@ -184,12 +207,19 @@ class EditingExportService:
                 description="正式时间线素材索引",
                 editor_target="All",
             ),
+            ExportPackageFile(
+                asset_type="audio_placeholders",
+                relative_path="audio/placeholders/",
+                description="音频 cue 的静音占位轨目录",
+                editor_target="All",
+            ),
         ]
         if final_status == "ready":
             final_fcpxml_path.write_text(
                 self._build_fcpxml_content(
                     package_name=f"{plan.project_title}-final",
                     timeline_shots=timeline_shots,
+                    cue_tracks=cue_tracks,
                     subtitle_timeline=subtitle_timeline,
                     assembly_plan=assembly_plan,
                     include_media=True,
@@ -325,6 +355,7 @@ class EditingExportService:
         *,
         package_name: str,
         timeline_shots: list[TimelineShot],
+        cue_tracks: list[AudioCueTrack],
         subtitle_timeline: SubtitleTimeline,
         assembly_plan: AssemblyPlan,
         include_media: bool,
@@ -349,6 +380,19 @@ class EditingExportService:
                 hasAudio="0",
                 format=FCPXML_FORMAT_ID,
                 duration=self._seconds_to_fcpxml_time(shot.duration_seconds),
+            )
+        for cue_track in cue_tracks:
+            SubElement(
+                resources,
+                "asset",
+                id=cue_track.asset_id,
+                name=cue_track.cue_name,
+                src=cue_track.asset_path.resolve().as_uri(),
+                hasVideo="0",
+                hasAudio="1",
+                audioSources="1",
+                audioChannels="1",
+                duration=self._seconds_to_fcpxml_time(cue_track.duration_seconds),
             )
 
         library = SubElement(root, "library")
@@ -398,6 +442,18 @@ class EditingExportService:
                     value=f"转场{transition.transition_no}",
                     note=transition.summary or transition.transition_type,
                 )
+        for cue_track in cue_tracks:
+            SubElement(
+                spine,
+                "asset-clip",
+                name=cue_track.cue_name,
+                ref=cue_track.asset_id,
+                offset=self._seconds_to_fcpxml_time(cue_track.start_seconds),
+                start="0s",
+                duration=self._seconds_to_fcpxml_time(cue_track.duration_seconds),
+                lane=str(-cue_track.lane),
+                role=self._cue_role(cue_track.cue_type),
+            )
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + tostring(root, encoding="unicode")
 
     @staticmethod
@@ -417,6 +473,7 @@ class EditingExportService:
         *,
         project_dir: Path,
         timeline_shots: list[TimelineShot],
+        cue_tracks: list[AudioCueTrack],
         subtitle_timeline: SubtitleTimeline,
         audio_cue_sheet: AudioCueSheet,
         assembly_plan: AssemblyPlan,
@@ -448,12 +505,62 @@ class EditingExportService:
                 }
                 for shot in timeline_shots
             ],
+            "audio_placeholder_tracks": [
+                {
+                    "cue_no": cue_track.cue_no,
+                    "cue_type": cue_track.cue_type,
+                    "cue_name": cue_track.cue_name,
+                    "start_seconds": cue_track.start_seconds,
+                    "duration_seconds": cue_track.duration_seconds,
+                    "asset_path": self._relative_media_path(project_dir=project_dir, media_path=cue_track.asset_path),
+                    "lane": cue_track.lane,
+                }
+                for cue_track in cue_tracks
+            ],
             "audio_cues": [cue.model_dump() for cue in audio_cue_sheet.cues],
         }
 
     @staticmethod
     def _relative_media_path(*, project_dir: Path, media_path: Path) -> str:
         return str(media_path.resolve().relative_to(project_dir.resolve()))
+
+    def _build_audio_placeholder_tracks(self, *, project_id: str, audio_cue_sheet: AudioCueSheet) -> list[AudioCueTrack]:
+        tracks: list[AudioCueTrack] = []
+        for cue in audio_cue_sheet.cues:
+            duration_seconds = max(0.3, round(cue.end_seconds - cue.start_seconds, 3))
+            asset_path = self.repository.audio_placeholder_path(project_id, cue.cue_no, cue.cue_type)
+            self._write_silent_wav(asset_path, duration_seconds=duration_seconds)
+            tracks.append(
+                AudioCueTrack(
+                    cue_no=cue.cue_no,
+                    cue_type=cue.cue_type,
+                    cue_name=f"cue_{cue.cue_no:03d}_{cue.cue_type}",
+                    start_seconds=cue.start_seconds,
+                    duration_seconds=duration_seconds,
+                    asset_id=f"audio_cue_{cue.cue_no:03d}",
+                    asset_path=asset_path,
+                    lane=1 if cue.cue_type in {"dialogue", "voice"} else 2,
+                )
+            )
+        return tracks
+
+    @staticmethod
+    def _write_silent_wav(output_path: Path, *, duration_seconds: float, sample_rate: int = 48000) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        frame_count = max(1, int(duration_seconds * sample_rate))
+        with wave.open(str(output_path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(b"\x00\x00" * frame_count)
+
+    @staticmethod
+    def _cue_role(cue_type: str) -> str:
+        if cue_type in {"dialogue", "voice"}:
+            return "dialogue"
+        if cue_type in {"music", "score"}:
+            return "music"
+        return "effects"
 
     @staticmethod
     def _package_to_assets(

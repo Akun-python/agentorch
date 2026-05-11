@@ -95,7 +95,9 @@ class ExecutionDesignService:
     def build_audio_cue_sheet(self, plan: ShortDramaPlan, assembly_plan: AssemblyPlan) -> AudioCueSheet:
         cues: list[AudioCue] = []
         current_time = 0.0
+        shot_start_map: dict[int, float] = {}
         for shot in plan.shots:
+            shot_start_map[shot.shot_no] = round(current_time, 2)
             duration = float(shot.duration_seconds)
             cues.append(
                 AudioCue(
@@ -129,8 +131,16 @@ class ExecutionDesignService:
                     cue_no=len(cues) + 1,
                     shot_no=None,
                     cue_type="transition",
-                    start_seconds=0.0,
-                    end_seconds=transition.duration_seconds,
+                    start_seconds=round(
+                        shot_start_map.get(transition.from_shot_no, 0.0)
+                        + max(0.0, float(next((shot.duration_seconds for shot in plan.shots if shot.shot_no == transition.from_shot_no), 0.0)) - transition.duration_seconds),
+                        2,
+                    ),
+                    end_seconds=round(
+                        shot_start_map.get(transition.from_shot_no, 0.0)
+                        + float(next((shot.duration_seconds for shot in plan.shots if shot.shot_no == transition.from_shot_no), 0.0)),
+                        2,
+                    ),
                     description=f"转场{transition.transition_no} 音效：{transition.summary or transition.transition_type}",
                     intensity="medium",
                     sync_target=f"{transition.from_shot_no}->{transition.to_shot_no}",

@@ -19,6 +19,8 @@ class ProjectRepository:
             ".",
             "roles",
             "roles/images",
+            "audio",
+            "audio/placeholders",
             "preproduction",
             "script",
             "storyboard",
@@ -56,6 +58,10 @@ class ProjectRepository:
 
     def subtitle_path(self, project_id: str, filename: str) -> Path:
         return self.artifacts_root / project_id / "subtitles" / filename
+
+    def audio_placeholder_path(self, project_id: str, cue_no: int, cue_type: str) -> Path:
+        safe_cue_type = re.sub(r"[^0-9A-Za-z_-]+", "-", cue_type.strip()).strip("-").lower() or "cue"
+        return self.artifacts_root / project_id / "audio" / "placeholders" / f"cue_{cue_no:03d}_{safe_cue_type}.wav"
 
     def export_path(self, project_id: str, *parts: str) -> Path:
         target_path = self.artifacts_root / project_id / "exports"

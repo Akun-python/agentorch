@@ -14,6 +14,7 @@ from projects.ai_short_drama.backend.app.domain.models import (
     TransitionPlan,
 )
 from projects.ai_short_drama.backend.app.repositories import ProjectRepository
+from projects.ai_short_drama.backend.app.services.execution_design_service import ExecutionDesignService
 from projects.ai_short_drama.backend.app.services.editing_export_service import EditingExportService
 
 
@@ -102,7 +103,7 @@ def _build_assembly_plan() -> AssemblyPlan:
 
 
 def _build_audio_cue_sheet() -> AudioCueSheet:
-    return AudioCueSheet(cues=[])
+    return ExecutionDesignService().build_audio_cue_sheet(_build_plan(), _build_assembly_plan())
 
 
 def test_format_srt_time_and_utf8_content() -> None:
@@ -136,6 +137,7 @@ def test_export_bundle_supports_draft_without_videos(tmp_path: Path) -> None:
     assert (project_dir / "subtitles" / "captions_draft.srt").is_file()
     assert (project_dir / "exports" / "draft" / "timeline_draft.fcpxml").is_file()
     assert (project_dir / "exports" / "editing_export_bundle.json").is_file()
+    assert list((project_dir / "audio" / "placeholders").glob("*.wav"))
     assert any(asset.asset_type == "editing_export_bundle" for asset in assets)
 
 
@@ -180,7 +182,21 @@ def test_export_bundle_generates_final_timeline_with_media_and_xml_escape(tmp_pa
     assert "&lt;别回头&gt;" in final_fcpxml
     assert "&amp; 继续走" in final_fcpxml
     assert shot_1.resolve().as_uri() in final_fcpxml
+    assert "audio_cue_" in final_fcpxml
+    assert "lane=\"-2\"" in final_fcpxml or "lane=\"-1\"" in final_fcpxml
 
     final_manifest = json.loads((project_dir / "exports" / "final" / "media_manifest_final.json").read_text(encoding="utf-8"))
     assert final_manifest["include_media"] is True
     assert final_manifest["shots"][0]["has_media"] is True
+    assert final_manifest["audio_placeholder_tracks"]
+
+
+def test_audio_cue_sheet_uses_global_timeline_for_transition() -> None:
+    plan = _build_plan()
+    assembly_plan = _build_assembly_plan()
+
+    cue_sheet = ExecutionDesignService().build_audio_cue_sheet(plan, assembly_plan)
+    transition_cue = next(cue for cue in cue_sheet.cues if cue.cue_type == "transition")
+
+    assert transition_cue.start_seconds > 0.0
+    assert transition_cue.end_seconds == 4.0
