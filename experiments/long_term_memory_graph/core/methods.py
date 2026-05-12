@@ -6,9 +6,9 @@ from time import perf_counter
 from ..api.config import GraphMemoryConfig
 from ..api.models import RecallRequest
 from ..api.plugin import LongTermMemoryGraphPlugin
-from ..baselines import OfficialBaselineRegistry
 from ..domain.scoring import build_fulltext_query
 from ..domain.utils import run_async
+from ..研究对比试验.对比模型 import OfficialBaselineRegistry
 from ..storage.in_memory import InMemoryGraphStore
 from .embeddings import DeterministicEmbeddingProvider
 from .env_config import resolve_embedding_env

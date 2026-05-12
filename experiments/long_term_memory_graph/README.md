@@ -12,13 +12,15 @@ experiments/long_term_memory_graph/
   integrations/       # AgentTorch bridge 与外部记录回填边界
   core/               # 实验共享层：数据集、方法、AgentTorch 探针、judge、统计、产物
   主模型/             # E1/E3/E5：完整星鸦图谱机制主实验
-  研究对比试验/       # E2：强基线对比
+  研究对比试验/       # E2：强基线对比（含对比模型真实实现）
   消融实验/           # E4：机制消融与参数敏感性
   tools/              # CLI 入口
   assets/             # Neo4j Browser 等静态资源
 ```
 
 三类实验入口保持独立，公共逻辑只放在 `core/`，避免把实验矩阵、评测、统计和产物写入堆在一个大脚本里。
+
+其中对比模型相关真实代码现在集中收敛在 `研究对比试验/对比模型/`，便于你直接按 E2 实验包查看；根目录下的 `baselines/` 仅保留旧导入兼容。
 
 ## 对应论文协议
 

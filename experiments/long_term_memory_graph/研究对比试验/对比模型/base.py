@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from ..api.models import MemoryCapsuleCandidate
-from ..core.schemas import ExperimentCase, RetrievalResult
+from ...api.models import MemoryCapsuleCandidate
+from ...core.schemas import ExperimentCase, RetrievalResult
 
 
 OFFICIAL_SDK_BOUNDARY = "official_sdk"

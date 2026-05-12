@@ -4,7 +4,7 @@ import importlib
 import os
 from time import perf_counter
 
-from ..core.schemas import ExperimentCase, RetrievalResult
+from ...core.schemas import ExperimentCase, RetrievalResult
 from .base import OfficialBaselineProbe, build_capsule_metadata, build_official_result, build_scope_id, format_capsule_text
 
 

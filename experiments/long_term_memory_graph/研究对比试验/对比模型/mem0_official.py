@@ -5,7 +5,7 @@ import os
 from time import perf_counter
 from typing import Any
 
-from ..core.schemas import ExperimentCase, RetrievalResult
+from ...core.schemas import ExperimentCase, RetrievalResult
 from .base import OfficialBaselineProbe, build_capsule_metadata, build_official_result, build_scope_id, format_capsule_text
 
 
@@ -39,7 +39,6 @@ class Mem0OfficialAdapter:
         try:
             client.delete_all(options=delete_options_cls(filters=filters))
         except Exception:
-            # Hosted环境可能没有历史数据，删除失败不影响当前构建。
             pass
 
         for capsule in case.capsules:

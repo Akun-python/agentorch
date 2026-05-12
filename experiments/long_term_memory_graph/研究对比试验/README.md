@@ -2,6 +2,20 @@
 
 该目录对应论文 E2 强基线对比实验。实验结构参考 `参考文献/长期记忆对比参考文献.pdf` 的 HyperMem 主实验：LoCoMo-style 四类问题、RAG 与 memory system 两组强基线、LLM-as-a-judge accuracy、3 次独立运行均值，以及以 Mem0 为 1.0x 基准的 token-efficiency 对比。所有方法都通过 AgentTorch 统一承载答案生成、线程追踪、token 统计和产物落盘。
 
+当前对比模型的真实实现代码集中放在：
+
+- `研究对比试验/对比模型/`
+
+其中：
+
+- `mem0_official.py`：Mem0 官方 SDK adapter
+- `langmem_official.py`：LangMem 官方 adapter
+- `zep_official.py`：Zep 官方 SDK adapter
+- `registry.py`：对比模型统一注册入口
+- `base.py`：官方 adapter 公共结果封装
+
+`long_term_memory_graph/baselines/` 只保留旧导入路径兼容层，不再作为真实实现目录继续扩展。
+
 默认主对比矩阵为：
 
 - `no_long_term_memory`

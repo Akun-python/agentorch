@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..core.schemas import ExperimentCase, RetrievalResult
+from ...core.schemas import ExperimentCase, RetrievalResult
 from .base import OfficialBaselineProbe
 from .langmem_official import LangMemOfficialAdapter
 from .mem0_official import Mem0OfficialAdapter
