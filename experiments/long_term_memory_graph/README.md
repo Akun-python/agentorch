@@ -23,8 +23,9 @@ experiments/long_term_memory_graph/
 ## 对应论文协议
 
 - E1 长期记忆问答主实验：Single-hop、Multi-hop、Temporal、Open Domain、Overall。
-- E2 强基线对比：默认主对比只跑无长期记忆、向量记忆、平面摘要、朴素图和完整星鸦图谱；proxy 扩展与文献记录单独标注。
-- E2 proxy 扩展候选：`rag_chunk_memory`、`graph_rag_memory`、`light_rag_memory`、`hippo_rag2_memory`、`hypergraph_rag_memory`、`openai_memory`、`langmem_memory`、`zep_memory`、`amem_memory`、`mem0_memory`、`mem0_graph_memory`、`mirix_memory`、`memobase_memory`、`memu_memory`、`memos_memory`。
+- E2 强基线对比：默认主对比只跑无长期记忆、向量记忆、平面摘要、朴素图和完整星鸦图谱；官方 baseline adapter 与 proxy 扩展单独标注。
+- E2 proxy 扩展候选：`rag_chunk_memory`、`graph_rag_memory`、`light_rag_memory`、`hippo_rag2_memory`、`hypergraph_rag_memory`、`openai_memory`、`amem_memory`、`mem0_graph_memory`、`mirix_memory`、`memobase_memory`、`memu_memory`、`memos_memory`。
+- E2 当前已接入官方 adapter：`mem0_memory`、`langmem_memory`、`zep_memory`。
 - E3 结构化机制指标：胶囊召回、关系命中、证据完整性、陈旧节点注入、冲突裁决、返回记忆可用性。
 - E4 消融与参数敏感性：场景索引、时间边、修正边、冲突抑制、陈旧抑制、图无治理、top-k 和权重扫描。
 - E4 固定变体：`full`、`wo_scene_match`、`wo_temporal_edges`、`wo_revision_edges`、`wo_conflict_suppression`、`wo_stale_suppression`、`graph_no_policy`、`multi_level_topk`、`scene_weight_0_3`、`scene_weight_1_2`、`topk_small`、`topk_large`。
@@ -70,6 +71,12 @@ python -m experiments.long_term_memory_graph main `
 
 ```powershell
 python -m experiments.long_term_memory_graph compare --include-proxy-extension --case-limit 4 --runs 1 --output-dir artifacts/long_term_memory_graph/comparison_proxy
+```
+
+如果只想把官方 baseline 一起拉进对比，而不混入其它 proxy，可显式加：
+
+```powershell
+python -m experiments.long_term_memory_graph compare --include-official-baselines --case-limit 4 --runs 1 --output-dir artifacts/long_term_memory_graph/comparison_official
 ```
 
 也可以先只检查 `.env` 加载链路，不发起模型请求：
@@ -212,7 +219,7 @@ powershell -ExecutionPolicy Bypass -File experiments/long_term_memory_graph/tool
 
 ## 当前边界
 
-当前代码已经把实验安装、方法矩阵、对比实验、消融实验和产物格式整理为可运行结构；但默认 `deterministic_probe` 只用于工程验证。正式投稿前必须替换为真实模型、真实 judge、三次独立运行、人工复核或双 judge 一致性检查，并从生成的 CSV/JSONL 回填论文数值。
+当前代码已经把实验安装、方法矩阵、对比实验、消融实验和产物格式整理为可运行结构；其中 `mem0_memory`、`langmem_memory`、`zep_memory` 已可走官方 SDK 入口，但默认 `deterministic_probe` 仍只用于工程验证。正式投稿前必须替换为真实模型、真实 judge、三次独立运行、人工复核或双 judge 一致性检查，并从生成的 CSV/JSONL 回填论文数值。
 
 ## 环境约束
 

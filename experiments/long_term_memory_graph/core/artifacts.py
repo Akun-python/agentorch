@@ -222,15 +222,23 @@ def _summary_design_section(*, suite: str, manifest: dict[str, Any]) -> list[str
         lines.extend(
             [
                 "",
-                "| Method | Selected | Boundary | Has Literature Ref | References |",
-                "| --- | --- | --- | --- | --- |",
+                "| Method | Selected | Boundary | Official Adapter | Has Literature Ref | References |",
+                "| --- | --- | --- | --- | --- | --- |",
             ]
         )
         for method, meta in catalog.items():
-            boundary = "core_local" if meta.get("is_core_local") else ("proxy_extension" if meta.get("is_proxy_extension") else "other")
+            if meta.get("is_core_local"):
+                boundary = "core_local"
+            elif meta.get("has_official_adapter"):
+                boundary = "official_adapter"
+            elif meta.get("is_proxy_extension"):
+                boundary = "proxy_extension"
+            else:
+                boundary = "other"
             refs = ", ".join(meta.get("references", []))
             lines.append(
                 f"| `{method}` | {'yes' if meta.get('selected') else 'no'} | `{boundary}` | "
+                f"{'yes' if meta.get('has_official_adapter') else 'no'} | "
                 f"{'yes' if meta.get('has_literature_reference') else 'no'} | `{refs}` |"
             )
     if suite == "ablation" and protocol:

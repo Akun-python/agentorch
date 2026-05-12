@@ -118,6 +118,7 @@ def _build_full_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     parser.add_argument("--dataset-path", default=None)
     parser.add_argument("--resume", action="store_true", help="从现有输出根目录续跑各子实验。")
     parser.add_argument("--judge-backend", default="deterministic_probe")
+    parser.add_argument("--include-official-baselines", action="store_true", help="compare/full 时把已接入的官方 baseline adapter 加入本地运行。")
     parser.add_argument("--include-proxy-extension", action="store_true", help="compare/full 时把 proxy 扩展方法加入本地运行。")
     parser.add_argument("--judge-model-backend", default=None, choices=["openai", "openai_http"])
     parser.add_argument("--judge-model", default=None, help="真实 judge 使用的模型名；也可由 OPENAI_MODEL/MODEL_NAME 提供。")
@@ -156,6 +157,7 @@ def _run_full_from_args(args: argparse.Namespace) -> dict[str, Any]:
     main_manifest = _main_runner().run_main_experiment(output_dir=root / "main", **common)
     comparison_manifest = _comparison_runner().run_comparison_experiment(
         output_dir=root / "comparison",
+        include_official_baselines=args.include_official_baselines,
         include_proxy_extension=args.include_proxy_extension,
         **common,
     )

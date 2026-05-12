@@ -16,6 +16,8 @@ from .schemas import (
     ABLATION_VARIANTS,
     CORE_LOCAL_BASELINE_METHODS,
     MAIN_METHOD,
+    NON_OFFICIAL_PROXY_EXTENSION_METHODS,
+    OFFICIAL_BASELINE_METHODS,
     PROXY_EXTENSION_METHODS,
     SUPPORTED_BASELINE_METHODS,
     ExperimentRecord,
@@ -184,7 +186,10 @@ def run_suite(config: ExperimentRunConfig) -> ExperimentSuiteResult:
     if config.protocol_metadata:
         manifest["protocol"] = config.protocol_metadata
     if config.suite == "comparison":
-        selected_proxy = [method for method in config.methods if method in PROXY_EXTENSION_METHODS]
+        selected_official = [method for method in config.methods if method in OFFICIAL_BASELINE_METHODS]
+        selected_proxy = [method for method in config.methods if method in NON_OFFICIAL_PROXY_EXTENSION_METHODS]
+        manifest["include_official_baselines"] = bool(selected_official)
+        manifest["official_adapter_selected_methods"] = selected_official
         manifest["include_proxy_extension"] = bool(selected_proxy)
         manifest["proxy_extension_selected_methods"] = selected_proxy
     artifact_paths = write_artifacts(
@@ -260,6 +265,12 @@ def _source_boundary_for_method(method: str) -> tuple[str, bool]:
     return ("literature_only", False)
 
 
+def _source_boundary_for_retrieval(retrieval) -> tuple[str, bool]:
+    if retrieval.source_boundary:
+        return (retrieval.source_boundary, bool(retrieval.is_proxy))
+    return _source_boundary_for_method(retrieval.method)
+
+
 def _build_record(
     *,
     suite: str,
@@ -293,7 +304,7 @@ def _build_record(
         + (1.0 - stale_rate)
         + conflict_success
     ) / 6.0
-    source_boundary, is_proxy = _source_boundary_for_method(retrieval.method)
+    source_boundary, is_proxy = _source_boundary_for_retrieval(retrieval)
     returned_evidence_count = sum(1 for edge in retrieval.returned_edge_keys if "EVIDENCE_SUPPORTS" in edge)
     return ExperimentRecord(
         suite=suite,

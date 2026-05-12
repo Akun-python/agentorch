@@ -9,10 +9,22 @@ from pathlib import Path
 if __package__ in {None, ""}:
     project_root = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(project_root))
-    from experiments.long_term_memory_graph.core import CORE_LOCAL_BASELINE_METHODS, PROXY_EXTENSION_METHODS, ExperimentRunConfig, run_suite
+    from experiments.long_term_memory_graph.core import (
+        CORE_LOCAL_BASELINE_METHODS,
+        NON_OFFICIAL_PROXY_EXTENSION_METHODS,
+        OFFICIAL_BASELINE_METHODS,
+        ExperimentRunConfig,
+        run_suite,
+    )
     from experiments.long_term_memory_graph.研究对比试验.protocol import build_comparison_protocol_metadata
 else:
-    from ..core import CORE_LOCAL_BASELINE_METHODS, PROXY_EXTENSION_METHODS, ExperimentRunConfig, run_suite
+    from ..core import (
+        CORE_LOCAL_BASELINE_METHODS,
+        NON_OFFICIAL_PROXY_EXTENSION_METHODS,
+        OFFICIAL_BASELINE_METHODS,
+        ExperimentRunConfig,
+        run_suite,
+    )
     from .protocol import build_comparison_protocol_metadata
 
 
@@ -20,6 +32,7 @@ def run_comparison_experiment(
     *,
     output_dir: str | Path,
     methods: tuple[str, ...] = CORE_LOCAL_BASELINE_METHODS,
+    include_official_baselines: bool = False,
     include_proxy_extension: bool = False,
     case_limit: int | None = None,
     case_offset: int = 0,
@@ -40,7 +53,11 @@ def run_comparison_experiment(
     load_env: bool = True,
     overwrite_env: bool = False,
 ) -> dict[str, object]:
-    selected_methods = _resolve_methods(methods, include_proxy_extension=include_proxy_extension)
+    selected_methods = _resolve_methods(
+        methods,
+        include_official_baselines=include_official_baselines,
+        include_proxy_extension=include_proxy_extension,
+    )
     result = run_suite(
         ExperimentRunConfig(
             suite="comparison",
@@ -73,9 +90,10 @@ def run_comparison_experiment(
 def build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(
         "compare",
-        help="运行 E2：无记忆、向量、摘要、朴素图、GraphRAG、Mem0/Zep、超图代理和完整方法对比。",
+        help="运行 E2：默认跑本地核心基线；可按需加入官方 baseline 或 proxy 扩展。",
     )
     parser.add_argument("--methods", default=",".join(CORE_LOCAL_BASELINE_METHODS))
+    parser.add_argument("--include-official-baselines", action="store_true", help="把已接入的官方 baseline adapter 加入本地对比运行。")
     parser.add_argument("--include-proxy-extension", action="store_true", help="显式把 proxy 扩展方法加入本地对比运行。")
     _add_common_args(parser, default_output="artifacts/long_term_memory_graph/comparison")
     parser.set_defaults(handler=run_from_args)
@@ -86,6 +104,7 @@ def run_from_args(args: argparse.Namespace) -> dict[str, object]:
     return run_comparison_experiment(
         output_dir=args.output_dir,
         methods=methods,
+        include_official_baselines=args.include_official_baselines,
         include_proxy_extension=args.include_proxy_extension,
         case_limit=args.case_limit,
         case_offset=args.case_offset,
@@ -130,15 +149,24 @@ def _add_common_args(parser: argparse.ArgumentParser, *, default_output: str) ->
     parser.add_argument("--overwrite-env", action="store_true", help="允许 env 文件覆盖当前进程已有环境变量。")
 
 
-def _resolve_methods(methods: tuple[str, ...], *, include_proxy_extension: bool) -> tuple[str, ...]:
-    if not include_proxy_extension:
-        return methods
-    return tuple(dict.fromkeys((*methods, *PROXY_EXTENSION_METHODS)))
+def _resolve_methods(
+    methods: tuple[str, ...],
+    *,
+    include_official_baselines: bool,
+    include_proxy_extension: bool,
+) -> tuple[str, ...]:
+    selected = list(methods)
+    if include_official_baselines:
+        selected.extend(OFFICIAL_BASELINE_METHODS)
+    if include_proxy_extension:
+        selected.extend(NON_OFFICIAL_PROXY_EXTENSION_METHODS)
+    return tuple(dict.fromkeys(selected))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="直接运行 E2 强基线对比实验。")
     parser.add_argument("--methods", default=",".join(CORE_LOCAL_BASELINE_METHODS))
+    parser.add_argument("--include-official-baselines", action="store_true")
     parser.add_argument("--include-proxy-extension", action="store_true")
     _add_common_args(parser, default_output="artifacts/long_term_memory_graph/comparison")
     args = parser.parse_args(list(argv) if argv is not None else None)

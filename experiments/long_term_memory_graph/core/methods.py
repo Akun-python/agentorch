@@ -6,6 +6,7 @@ from time import perf_counter
 from ..api.config import GraphMemoryConfig
 from ..api.models import RecallRequest
 from ..api.plugin import LongTermMemoryGraphPlugin
+from ..baselines import OfficialBaselineRegistry
 from ..domain.scoring import build_fulltext_query
 from ..domain.utils import run_async
 from ..storage.in_memory import InMemoryGraphStore
@@ -52,10 +53,14 @@ class ExperimentMethodRunner:
         self.embedding_backend = embedding_backend
         self.embedding_model = embedding_model
         self.embedding_dimensions = embedding_dimensions
+        self.official_registry = OfficialBaselineRegistry(seed=seed)
 
     def run(self, case: ExperimentCase, *, method: str, variant: str = "full") -> RetrievalResult:
         if method == "no_long_term_memory":
             return RetrievalResult(method=method, variant=variant, prompt_summary="No long-term memory was provided.")
+        official_result = self.official_registry.maybe_run(case, method=method, variant=variant, max_nodes=self.max_nodes)
+        if official_result is not None:
+            return official_result
         plugin, store, provider = self._build_graph(case, variant=variant)
         if method == "rag_chunk_memory":
             return self._rag_chunk_memory(case, method=method, variant=variant, store=store, provider=provider)

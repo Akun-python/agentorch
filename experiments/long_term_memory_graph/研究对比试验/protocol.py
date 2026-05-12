@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core import BASELINE_METHODS, CORE_LOCAL_BASELINE_METHODS, LITERATURE_ONLY_METHODS, PROXY_EXTENSION_METHODS
+from ..core import (
+    BASELINE_METHODS,
+    CORE_LOCAL_BASELINE_METHODS,
+    LITERATURE_ONLY_METHODS,
+    NON_OFFICIAL_PROXY_EXTENSION_METHODS,
+    OFFICIAL_BASELINE_METHODS,
+    PROXY_EXTENSION_METHODS,
+)
 
 
 HYPERMEM_REFERENCE_PROTOCOL: dict[str, Any] = {
@@ -20,7 +27,7 @@ HYPERMEM_REFERENCE_PROTOCOL: dict[str, Any] = {
     },
     "implementation_boundary": (
         "本实验用 AgentTorch 统一承载答案生成、线程追踪、token 统计和产物落盘；"
-        "未接入官方实现的方法以受控 proxy adapter 表示，正式投稿结果必须替换为官方实现或明确标注。"
+        "当前已接入的官方 adapter 为 mem0、LangMem、Zep；其余方法仍以受控 proxy adapter 表示，正式投稿结果必须替换为官方实现或明确标注。"
     ),
 }
 
@@ -56,10 +63,10 @@ METHOD_DESCRIPTIONS: dict[str, str] = {
     "hippo_rag2_memory": "HippoRAG 2 proxy; episodic/temporal path-oriented graph retrieval.",
     "hypergraph_rag_memory": "HyperGraphRAG proxy; task/topic cluster retrieval as a hyperedge-like control.",
     "openai_memory": "OpenAI memory proxy; recent high-confidence persistent memories.",
-    "langmem_memory": "LangMem proxy; task/thread namespace memory retrieval.",
-    "zep_memory": "Zep proxy; entity-centered graph memory retrieval.",
+    "langmem_memory": "LangMem baseline; official adapter available when configured, otherwise fallback proxy.",
+    "zep_memory": "Zep baseline; official adapter available when configured, otherwise fallback proxy.",
     "amem_memory": "A-Mem proxy; adaptive salient memory selection.",
-    "mem0_memory": "Mem0 proxy; compact fact-style memory and token-efficiency baseline.",
+    "mem0_memory": "Mem0 baseline; official adapter available when configured, otherwise fallback proxy.",
     "mem0_graph_memory": "Mem0g proxy; Mem0-style graph expansion.",
     "mirix_memory": "MIRIX proxy; episodic state plus graph relation retrieval.",
     "memobase_memory": "Memobase proxy; profile and event memory retrieval.",
@@ -206,7 +213,8 @@ def build_comparison_protocol_metadata(methods: tuple[str, ...]) -> dict[str, An
             "description": METHOD_DESCRIPTIONS.get(method, ""),
             "references": METHOD_REFERENCES.get(method, []),
             "is_core_local": method in CORE_LOCAL_BASELINE_METHODS,
-            "is_proxy_extension": method in PROXY_EXTENSION_METHODS,
+            "is_proxy_extension": method in NON_OFFICIAL_PROXY_EXTENSION_METHODS,
+            "has_official_adapter": method in OFFICIAL_BASELINE_METHODS,
             "has_literature_reference": method in LITERATURE_ONLY_METHODS,
             "selected": method in methods,
         }
@@ -215,12 +223,14 @@ def build_comparison_protocol_metadata(methods: tuple[str, ...]) -> dict[str, An
     return {
         **HYPERMEM_REFERENCE_PROTOCOL,
         "default_execution_methods": list(CORE_LOCAL_BASELINE_METHODS),
-        "available_proxy_extension_methods": list(PROXY_EXTENSION_METHODS),
+        "available_proxy_extension_methods": list(NON_OFFICIAL_PROXY_EXTENSION_METHODS),
+        "available_official_adapter_methods": list(OFFICIAL_BASELINE_METHODS),
         "literature_reference_methods": list(LITERATURE_ONLY_METHODS),
         "selected_methods": list(methods),
         "comparison_layers": {
             "core_local": core_local,
-            "proxy_extension": proxy_extension,
+            "official_adapter": [method for method in OFFICIAL_BASELINE_METHODS if method in methods],
+            "proxy_extension": [method for method in NON_OFFICIAL_PROXY_EXTENSION_METHODS if method in methods],
             "literature_only": literature_only,
         },
         "baseline_groups": grouped,

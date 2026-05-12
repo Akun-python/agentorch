@@ -10,6 +10,12 @@ QUESTION_TYPES: tuple[str, ...] = ("Single-hop", "Multi-hop", "Temporal", "Open 
 
 MAIN_METHOD = "clarks_nutcracker_graph"
 
+OFFICIAL_BASELINE_METHODS: tuple[str, ...] = (
+    "langmem_memory",
+    "mem0_memory",
+    "zep_memory",
+)
+
 CORE_LOCAL_BASELINE_METHODS: tuple[str, ...] = (
     "no_long_term_memory",
     "vector_memory",
@@ -38,6 +44,10 @@ BASELINE_METHODS: tuple[str, ...] = (
 )
 
 PROXY_EXTENSION_METHODS: tuple[str, ...] = tuple(method for method in BASELINE_METHODS if method not in CORE_LOCAL_BASELINE_METHODS)
+
+NON_OFFICIAL_PROXY_EXTENSION_METHODS: tuple[str, ...] = tuple(
+    method for method in PROXY_EXTENSION_METHODS if method not in OFFICIAL_BASELINE_METHODS
+)
 
 LITERATURE_ONLY_METHODS: tuple[str, ...] = (
     "graph_rag_memory",
@@ -200,6 +210,8 @@ class RetrievalResult:
     detail_lookup_latency_ms: float = 0.0
     latency_breakdown: dict[str, float] = field(default_factory=dict)
     latency_ms: float = 0.0
+    source_boundary: str | None = None
+    is_proxy: bool | None = None
 
 
 @dataclass
