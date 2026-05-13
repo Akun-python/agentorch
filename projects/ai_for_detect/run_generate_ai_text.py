@@ -78,9 +78,23 @@ def main() -> None:
     total_skipped = sum(item.skipped_rows for item in summaries)
     total_failed = sum(item.failed_rows for item in summaries)
     total_rows = sum(item.total_rows for item in summaries)
+    total_prompt_tokens = sum(item.prompt_tokens for item in summaries)
+    total_completion_tokens = sum(item.completion_tokens for item in summaries)
+    total_tokens = sum(item.total_tokens for item in summaries)
+    latency_denominator = max(total_generated, 1)
+    average_first_token_latency = sum(
+        item.average_first_token_latency_seconds * item.generated_rows for item in summaries
+    ) / latency_denominator
+    average_total_latency = sum(
+        item.average_total_latency_seconds * item.generated_rows for item in summaries
+    ) / latency_denominator
     print(
         f"全部完成：目标 {total_rows} 条，新增 {total_generated} 条，"
         f"跳过 {total_skipped} 条，失败 {total_failed} 条。"
+    )
+    print(
+        f"Token统计：提示 {total_prompt_tokens}，补全 {total_completion_tokens}，总计 {total_tokens}；"
+        f"平均首token延迟 {average_first_token_latency:.3f} 秒，平均总耗时 {average_total_latency:.3f} 秒。"
     )
     print(f"输出目录：{args.output_dir.resolve()}")
 

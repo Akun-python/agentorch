@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import asyncio
+from time import perf_counter
 from typing import Protocol
 
 from pydantic import BaseModel, Field
@@ -8,6 +10,7 @@ from pydantic import BaseModel, Field
 import agentorch
 
 from .config import resolve_model_name, resolve_model_names
+from .metrics import RewriteMetrics, RewriteResult
 from .prompts import SYSTEM_PROMPT, build_rewrite_prompt
 
 
@@ -16,6 +19,9 @@ class SentenceGenerator(Protocol):
     model_names: list[str]
 
     def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> str:
+        ...
+
+    def rewrite_record(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> RewriteResult:
         ...
 
     def close(self) -> None:
@@ -70,16 +76,79 @@ class AgentTorchSentenceGenerator:
             enable_tools=False,
             enable_rag=False,
             enable_memory=False,
+            enable_streaming=True,
         )
 
     def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> str:
-        prompt = build_rewrite_prompt(source_text=source_text, domain_label=domain_label)
-        result = self._agent.run_parsed_sync(
-            prompt,
-            parser=self._parser,
+        return self.rewrite_record(
+            source_text=source_text,
+            domain_label=domain_label,
             thread_id=thread_id,
+            row_index=row_index,
+        ).text
+
+    def rewrite_record(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> RewriteResult:
+        prompt = build_rewrite_prompt(source_text=source_text, domain_label=domain_label)
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self._rewrite_record_async(prompt=prompt, thread_id=thread_id))
+        raise RuntimeError(
+            "rewrite_record() 不能在运行中的事件循环里直接调用。"
+            "若在 notebook/async 场景使用，请补一个 async 入口。"
         )
-        return normalize_generated_text(result.parsed.ai_text)
+
+    async def _rewrite_record_async(self, *, prompt: str, thread_id: str) -> RewriteResult:
+        start_time = perf_counter()
+        formatted_prompt = self._parser.with_prompt(prompt)
+        first_token_latency_seconds: float | None = None
+        final_result = None
+
+        try:
+            async for event in self._agent.run(formatted_prompt, thread_id=thread_id, stream=True):
+                if event.event_type == "model_delta" and first_token_latency_seconds is None and event.delta_text:
+                    first_token_latency_seconds = perf_counter() - start_time
+                if event.event_type == "final_result":
+                    final_result = event.result
+        except Exception:
+            return self._rewrite_record_sync_fallback(prompt=formatted_prompt, thread_id=thread_id, start_time=start_time)
+
+        if final_result is None:
+            raise RuntimeError("流式生成未返回 final_result，无法完成统计。")
+
+        parsed = await self._parser.parse(final_result.output_text)
+        total_latency_seconds = perf_counter() - start_time
+        metrics = RewriteMetrics(
+            prompt_tokens=int(final_result.usage.prompt_tokens or 0),
+            completion_tokens=int(final_result.usage.completion_tokens or 0),
+            total_tokens=int(final_result.usage.total_tokens or 0),
+            first_token_latency_seconds=first_token_latency_seconds or total_latency_seconds,
+            total_latency_seconds=total_latency_seconds,
+            finish_reason=final_result.finish_reason or "",
+        )
+        return RewriteResult(
+            text=normalize_generated_text(parsed.ai_text),
+            model_name=self.model_name,
+            metrics=metrics,
+        )
+
+    def _rewrite_record_sync_fallback(self, *, prompt: str, thread_id: str, start_time: float) -> RewriteResult:
+        run_result = self._agent.run_sync(prompt, thread_id=thread_id)
+        parsed = self._parser.parse_sync(run_result.output_text)
+        total_latency_seconds = perf_counter() - start_time
+        metrics = RewriteMetrics(
+            prompt_tokens=int(run_result.usage.prompt_tokens or 0),
+            completion_tokens=int(run_result.usage.completion_tokens or 0),
+            total_tokens=int(run_result.usage.total_tokens or 0),
+            first_token_latency_seconds=total_latency_seconds,
+            total_latency_seconds=total_latency_seconds,
+            finish_reason=run_result.finish_reason or "",
+        )
+        return RewriteResult(
+            text=normalize_generated_text(parsed.ai_text),
+            model_name=self.model_name,
+            metrics=metrics,
+        )
 
     def close(self) -> None:
         self._agent.close()
@@ -129,14 +198,24 @@ class MultiModelSentenceGenerator:
         return self.select_model(row_index=row_index).model_name
 
     def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> str:
+        return self.rewrite_record(
+            source_text=source_text,
+            domain_label=domain_label,
+            thread_id=thread_id,
+            row_index=row_index,
+        ).text
+
+    def rewrite_record(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> RewriteResult:
         model_name = self.resolve_model_for_row(row_index=row_index)
         generator = self._generators[model_name]
-        return generator.rewrite_text(
+        result = generator.rewrite_record(
             source_text=source_text,
             domain_label=domain_label,
             thread_id=thread_id,
             row_index=row_index,
         )
+        result.model_name = model_name
+        return result
 
     def close(self) -> None:
         for generator in self._generators.values():

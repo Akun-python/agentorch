@@ -52,6 +52,7 @@ class StreamChunk(BaseModel):
     delta_text: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
     finish_reason: str | None = None
+    usage: UsageInfo = Field(default_factory=UsageInfo)
     raw: Any | None = None
 
 

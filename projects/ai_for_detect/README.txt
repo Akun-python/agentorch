@@ -52,8 +52,20 @@ py -3.14 -m projects.ai_for_detect.run_generate_ai_text `
 - `--min-request-interval 0.5`：给接口限速
 - `--models "a,b,c"`：一个 Excel 内交叉使用多个模型
 
+先用 `电信.xlsx` 跑一部分样例：
+py -3.14 -m projects.ai_for_detect.run_generate_ai_text `
+  --input-path "projects/ai_for_detect/自建ai数据集/电信.xlsx" `
+  --output-dir "projects/ai_for_detect/outputs_sample" `
+  --max-rows 30
+
 输出列
 - `AI生成文本`
 - `AI生成模型`
 - `生成线程ID`
 - `生成状态`
+- `提示token数`
+- `补全token数`
+- `总token数`
+- `首token延迟秒`
+- `总耗时秒`
+- `完成原因`

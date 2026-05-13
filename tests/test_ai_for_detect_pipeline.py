@@ -11,6 +11,7 @@ pytest.importorskip("openpyxl")
 from projects.ai_for_detect.config import resolve_model_names
 from projects.ai_for_detect.env_loader import load_project_env
 from projects.ai_for_detect.generator import MultiModelSentenceGenerator
+from projects.ai_for_detect.metrics import RewriteMetrics, RewriteResult
 from projects.ai_for_detect.pipeline import AIDetectBatchPipeline, PipelineConfig
 from projects.ai_for_detect.prompts import build_rewrite_prompt
 
@@ -25,6 +26,21 @@ class FakeSentenceGenerator:
     def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> str:
         self.calls.append((source_text, domain_label, thread_id))
         return f"AI::{domain_label}::{source_text}"
+
+    def rewrite_record(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> RewriteResult:
+        self.calls.append((source_text, domain_label, thread_id))
+        return RewriteResult(
+            text=f"AI::{domain_label}::{source_text}",
+            model_name=self.model_name,
+            metrics=RewriteMetrics(
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                first_token_latency_seconds=0.25,
+                total_latency_seconds=0.8,
+                finish_reason="stop",
+            ),
+        )
 
     def close(self) -> None:
         return None
@@ -112,6 +128,10 @@ def test_pipeline_writes_output_and_resume_skips_existing_rows(tmp_path: Path) -
         "AI::银行::手机银行一个手机号只能绑定一次",
     ]
     assert output_df["生成状态"].tolist() == ["success", "success"]
+    assert output_df["提示token数"].tolist() == [10, 10]
+    assert output_df["补全token数"].tolist() == [5, 5]
+    assert output_df["总token数"].tolist() == [15, 15]
+    assert output_df["完成原因"].tolist() == ["stop", "stop"]
 
     second_generator = FakeSentenceGenerator()
     second_pipeline = AIDetectBatchPipeline(
@@ -163,3 +183,4 @@ def test_pipeline_records_rotated_model_names(tmp_path: Path) -> None:
 
     output_df = pd.read_excel(output_dir / "金融_ai生成.xlsx")
     assert output_df["AI生成模型"].tolist() == ["model-a", "model-b", "model-a"]
+    assert output_df["总token数"].tolist() == [15, 15, 15]

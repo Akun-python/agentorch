@@ -518,6 +518,7 @@ class OpenAIModel(
             delta_text = ""
             tool_calls: list[ToolCall] = []
             finish_reason = None
+            usage = UsageInfo()
             if chunk.choices:
                 choice = chunk.choices[0]
                 finish_reason = choice.finish_reason
@@ -559,7 +560,20 @@ class OpenAIModel(
                                 arguments=arguments,
                             )
                         )
-            yield StreamChunk(delta_text=delta_text, tool_calls=tool_calls, finish_reason=finish_reason, raw=chunk)
+            raw_usage = getattr(chunk, "usage", None)
+            if raw_usage is not None:
+                usage = UsageInfo(
+                    prompt_tokens=getattr(raw_usage, "prompt_tokens", 0) or 0,
+                    completion_tokens=getattr(raw_usage, "completion_tokens", 0) or 0,
+                    total_tokens=getattr(raw_usage, "total_tokens", 0) or 0,
+                )
+            yield StreamChunk(
+                delta_text=delta_text,
+                tool_calls=tool_calls,
+                finish_reason=finish_reason,
+                usage=usage,
+                raw=chunk,
+            )
 
     def _build_payload(self, request: ModelRequest, stream: bool) -> dict[str, Any]:
         selected_model = self._resolve_chat_model(self._request_model_override(request))
@@ -576,6 +590,8 @@ class OpenAIModel(
             payload["tool_choice"] = request.tool_choice
         if request.response_format is not None:
             payload["response_format"] = request.response_format
+        if stream:
+            payload["stream_options"] = {"include_usage": True}
         return {key: value for key, value in payload.items() if value is not None}
 
     def _message_to_openai(self, message: Message) -> dict[str, Any]:

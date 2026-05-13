@@ -13,7 +13,12 @@ class BaseModelAdapter(ABC):
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[StreamChunk]:
         response = await self.generate(request)
-        yield StreamChunk(delta_text=response.content, tool_calls=response.tool_calls, finish_reason=response.finish_reason)
+        yield StreamChunk(
+            delta_text=response.content,
+            tool_calls=response.tool_calls,
+            finish_reason=response.finish_reason,
+            usage=response.usage,
+        )
 
     async def aclose(self) -> None:
         return None
