@@ -78,6 +78,7 @@ class AIDetectBatchPipeline:
         self.generator = generator
         self.config = config
         self.combined_dataset_csv_path: Path | None = None
+        self._global_row_cursor = 0
 
     def run(self) -> list[FileRunSummary]:
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
@@ -127,14 +128,15 @@ class AIDetectBatchPipeline:
             domain_value = work_df.at[row_index, self.config.label_column] if self.config.label_column in work_df.columns else None
             domain_label = None if pd.isna(domain_value) else str(domain_value).strip()
             thread_id = self._build_thread_id(source_path=source_path, row_index=row_index)
-            model_name = self._resolve_model_name_for_row(row_index=row_index)
+            global_row_index = self._global_row_cursor
+            model_name = self._resolve_model_name_for_row(row_index=global_row_index)
 
             try:
                 rewrite_result = self._rewrite_row(
                     source_text=source_text,
                     domain_label=domain_label,
                     thread_id=thread_id,
-                    row_index=row_index,
+                    row_index=global_row_index,
                 )
                 work_df.at[row_index, self.config.output_column] = rewrite_result.text
                 work_df.at[row_index, self.config.model_column] = model_name
@@ -148,8 +150,12 @@ class AIDetectBatchPipeline:
                 first_token_latency_sum += rewrite_result.metrics.first_token_latency_seconds
                 total_latency_sum += rewrite_result.metrics.total_latency_seconds
             except Exception as exc:  # pragma: no cover - 真实接口错误保留到运行期
+                work_df.at[row_index, self.config.model_column] = model_name
+                work_df.at[row_index, self.config.thread_column] = thread_id
                 work_df.at[row_index, self.config.status_column] = f"error: {exc}"
                 failed_rows += 1
+            finally:
+                self._global_row_cursor += 1
 
             processed_rows = generated_rows + failed_rows
             if processed_rows and processed_rows % max(self.config.flush_every, 1) == 0:

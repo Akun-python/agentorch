@@ -208,6 +208,48 @@ def test_pipeline_records_rotated_model_names(tmp_path: Path) -> None:
     assert dataset_df["原始人类文本"].tolist() == ["文本1", "文本2", "文本3"]
 
 
+def test_pipeline_rotates_models_globally_across_files(tmp_path: Path) -> None:
+    class RotatingFakeGenerator(FakeSentenceGenerator):
+        model_names = ["model-a", "model-b", "model-c"]
+
+        def resolve_model_for_row(self, *, row_index: int) -> str:
+            return self.model_names[row_index % len(self.model_names)]
+
+    input_dir = tmp_path / "data_global"
+    output_dir = tmp_path / "outputs_global"
+    input_dir.mkdir()
+
+    pd.DataFrame(
+        [
+            {"文本": "文件1-文本1", "领域标签": "A"},
+            {"文本": "文件1-文本2", "领域标签": "A"},
+        ]
+    ).to_excel(input_dir / "A.xlsx", index=False)
+    pd.DataFrame(
+        [
+            {"文本": "文件2-文本1", "领域标签": "B"},
+            {"文本": "文件2-文本2", "领域标签": "B"},
+        ]
+    ).to_excel(input_dir / "B.xlsx", index=False)
+
+    generator = RotatingFakeGenerator()
+    pipeline = AIDetectBatchPipeline(
+        generator=generator,
+        config=PipelineConfig(
+            input_path=input_dir,
+            output_dir=output_dir,
+            flush_every=1,
+        ),
+    )
+
+    pipeline.run()
+
+    first_df = pd.read_excel(output_dir / "A_ai生成.xlsx")
+    second_df = pd.read_excel(output_dir / "B_ai生成.xlsx")
+    assert first_df["AI生成模型"].tolist() == ["model-a", "model-b"]
+    assert second_df["AI生成模型"].tolist() == ["model-c", "model-a"]
+
+
 def test_dataset_csv_honors_max_rows_limit(tmp_path: Path) -> None:
     input_dir = tmp_path / "data_limit"
     output_dir = tmp_path / "outputs_limit"

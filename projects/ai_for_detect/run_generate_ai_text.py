@@ -9,6 +9,7 @@ from .config import (
     DEFAULT_OUTPUT_COLUMN,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_SOURCE_COLUMN,
+    resolve_model_names,
 )
 from .env_loader import load_project_env
 from .generator import AgentTorchSentenceGenerator, MultiModelSentenceGenerator
@@ -40,9 +41,10 @@ def main() -> None:
     if loaded_env_path is not None:
         print(f"已加载环境变量文件：{loaded_env_path}")
     args = build_arg_parser().parse_args()
-    if args.models:
+    resolved_model_names = resolve_model_names(args.models) if args.models is not None else resolve_model_names(None)
+    if len(resolved_model_names) > 1:
         generator = MultiModelSentenceGenerator(
-            model_names=args.models,
+            model_names=resolved_model_names,
             temperature=args.temperature,
             max_tokens=args.max_tokens,
             min_request_interval=args.min_request_interval,
