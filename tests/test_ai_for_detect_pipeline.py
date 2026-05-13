@@ -9,6 +9,7 @@ pd = pytest.importorskip("pandas")
 pytest.importorskip("openpyxl")
 
 from projects.ai_for_detect.config import resolve_model_names
+from projects.ai_for_detect.dataset_export import DATASET_COLUMNS
 from projects.ai_for_detect.env_loader import load_project_env
 from projects.ai_for_detect.generator import MultiModelSentenceGenerator
 from projects.ai_for_detect.metrics import RewriteMetrics, RewriteResult
@@ -120,6 +121,7 @@ def test_pipeline_writes_output_and_resume_skips_existing_rows(tmp_path: Path) -
     assert len(first_summaries) == 1
     assert first_summaries[0].generated_rows == 2
     assert len(first_generator.calls) == 2
+    assert first_summaries[0].dataset_csv_path.name == "银行_数据集.csv"
 
     output_path = output_dir / "银行_ai生成.xlsx"
     output_df = pd.read_excel(output_path)
@@ -132,6 +134,17 @@ def test_pipeline_writes_output_and_resume_skips_existing_rows(tmp_path: Path) -
     assert output_df["补全token数"].tolist() == [5, 5]
     assert output_df["总token数"].tolist() == [15, 15]
     assert output_df["完成原因"].tolist() == ["stop", "stop"]
+
+    dataset_path = output_dir / "银行_数据集.csv"
+    dataset_df = pd.read_csv(dataset_path, encoding="utf-8-sig")
+    assert dataset_df.columns.tolist() == DATASET_COLUMNS
+    assert dataset_df["原始人类文本"].tolist() == ["一万不过一般都是的存", "手机银行一个手机号只能绑定一次"]
+    assert dataset_df["AI文本"].tolist() == [
+        "AI::银行::一万不过一般都是的存",
+        "AI::银行::手机银行一个手机号只能绑定一次",
+    ]
+    assert dataset_df["AI生成模型"].tolist() == ["fake-model", "fake-model"]
+    assert dataset_df["总token数"].tolist() == [15.0, 15.0]
 
     second_generator = FakeSentenceGenerator()
     second_pipeline = AIDetectBatchPipeline(
@@ -147,6 +160,10 @@ def test_pipeline_writes_output_and_resume_skips_existing_rows(tmp_path: Path) -
     assert second_summaries[0].generated_rows == 0
     assert second_summaries[0].skipped_rows == 2
     assert second_generator.calls == []
+
+    merged_dataset_df = pd.read_csv(output_dir / "ai_for_detect_数据集.csv", encoding="utf-8-sig")
+    assert merged_dataset_df.columns.tolist() == DATASET_COLUMNS
+    assert len(merged_dataset_df) == 2
 
 
 def test_pipeline_records_rotated_model_names(tmp_path: Path) -> None:
@@ -184,3 +201,7 @@ def test_pipeline_records_rotated_model_names(tmp_path: Path) -> None:
     output_df = pd.read_excel(output_dir / "金融_ai生成.xlsx")
     assert output_df["AI生成模型"].tolist() == ["model-a", "model-b", "model-a"]
     assert output_df["总token数"].tolist() == [15, 15, 15]
+
+    dataset_df = pd.read_csv(output_dir / "金融_数据集.csv", encoding="utf-8-sig")
+    assert dataset_df["AI生成模型"].tolist() == ["model-a", "model-b", "model-a"]
+    assert dataset_df["原始人类文本"].tolist() == ["文本1", "文本2", "文本3"]

@@ -96,6 +96,8 @@ def main() -> None:
         f"Token统计：提示 {total_prompt_tokens}，补全 {total_completion_tokens}，总计 {total_tokens}；"
         f"平均首token延迟 {average_first_token_latency:.3f} 秒，平均总耗时 {average_total_latency:.3f} 秒。"
     )
+    if pipeline.combined_dataset_csv_path is not None:
+        print(f"汇总数据集：{pipeline.combined_dataset_csv_path.resolve()}")
     print(f"输出目录：{args.output_dir.resolve()}")
 
 

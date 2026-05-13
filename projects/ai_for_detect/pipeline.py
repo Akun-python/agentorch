@@ -22,6 +22,13 @@ from .config import (
     DEFAULT_TOTAL_LATENCY_COLUMN,
     DEFAULT_TOTAL_TOKENS_COLUMN,
 )
+from .dataset_export import (
+    build_dataset_frame,
+    combined_dataset_csv_path,
+    dataset_csv_path,
+    merge_dataset_frames,
+    save_dataset_csv,
+)
 from .generator import SentenceGenerator
 from .metrics import RewriteMetrics, RewriteResult
 
@@ -52,6 +59,7 @@ class PipelineConfig:
 class FileRunSummary:
     input_path: Path
     output_path: Path
+    dataset_csv_path: Path
     total_rows: int
     generated_rows: int
     skipped_rows: int
@@ -69,12 +77,19 @@ class AIDetectBatchPipeline:
     def __init__(self, *, generator: SentenceGenerator, config: PipelineConfig) -> None:
         self.generator = generator
         self.config = config
+        self.combined_dataset_csv_path: Path | None = None
 
     def run(self) -> list[FileRunSummary]:
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
         summaries: list[FileRunSummary] = []
+        dataset_frames: list[pd.DataFrame] = []
         for source_path in self._iter_input_files():
-            summaries.append(self._run_single_file(source_path))
+            summary, dataset_df = self._run_single_file(source_path)
+            summaries.append(summary)
+            dataset_frames.append(dataset_df)
+        merged_dataset_df = merge_dataset_frames(dataset_frames)
+        self.combined_dataset_csv_path = combined_dataset_csv_path(output_dir=self.config.output_dir)
+        save_dataset_csv(dataset_df=merged_dataset_df, output_path=self.combined_dataset_csv_path)
         return summaries
 
     def _iter_input_files(self) -> list[Path]:
@@ -85,10 +100,11 @@ class AIDetectBatchPipeline:
             raise FileNotFoundError(f"输入路径不存在：{input_path}")
         return sorted(path for path in input_path.glob(self.config.file_glob) if path.is_file())
 
-    def _run_single_file(self, source_path: Path) -> FileRunSummary:
+    def _run_single_file(self, source_path: Path) -> tuple[FileRunSummary, pd.DataFrame]:
         source_df = pd.read_excel(source_path)
         self._validate_columns(source_df, source_path)
         output_path = self.config.output_dir / f"{source_path.stem}_ai生成.xlsx"
+        csv_output_path = dataset_csv_path(output_dir=self.config.output_dir, source_path=source_path)
         work_df = self._prepare_work_dataframe(source_df=source_df, output_path=output_path)
 
         limit = min(len(work_df), self.config.max_rows) if self.config.max_rows is not None else len(work_df)
@@ -143,14 +159,18 @@ class AIDetectBatchPipeline:
         self._save_output(work_df, output_path)
         average_first_token_latency_seconds = first_token_latency_sum / generated_rows if generated_rows else 0.0
         average_total_latency_seconds = total_latency_sum / generated_rows if generated_rows else 0.0
+        dataset_df = self._build_dataset_frame(work_df=work_df, source_path=source_path)
+        save_dataset_csv(dataset_df=dataset_df, output_path=csv_output_path)
         print(
             f"[{source_path.name}] 完成，目标 {limit} 条，新增 {generated_rows} 条，"
             f"跳过 {skipped_rows} 条，失败 {failed_rows} 条，"
-            f"总token {total_tokens}，平均首token延迟 {average_first_token_latency_seconds:.3f} 秒。"
+            f"总token {total_tokens}，平均首token延迟 {average_first_token_latency_seconds:.3f} 秒，"
+            f"数据集 {csv_output_path.name}。"
         )
         return FileRunSummary(
             input_path=source_path,
             output_path=output_path,
+            dataset_csv_path=csv_output_path,
             total_rows=limit,
             generated_rows=generated_rows,
             skipped_rows=skipped_rows,
@@ -160,7 +180,7 @@ class AIDetectBatchPipeline:
             total_tokens=total_tokens,
             average_first_token_latency_seconds=average_first_token_latency_seconds,
             average_total_latency_seconds=average_total_latency_seconds,
-        )
+        ), dataset_df
 
     def _validate_columns(self, source_df: pd.DataFrame, source_path: Path) -> None:
         if self.config.source_column not in source_df.columns:
@@ -252,3 +272,21 @@ class AIDetectBatchPipeline:
         work_df.at[row_index, self.config.first_token_latency_column] = round(metrics.first_token_latency_seconds, 6)
         work_df.at[row_index, self.config.total_latency_column] = round(metrics.total_latency_seconds, 6)
         work_df.at[row_index, self.config.finish_reason_column] = metrics.finish_reason
+
+    def _build_dataset_frame(self, *, work_df: pd.DataFrame, source_path: Path) -> pd.DataFrame:
+        return build_dataset_frame(
+            work_df=work_df,
+            source_path=source_path,
+            source_column=self.config.source_column,
+            label_column=self.config.label_column,
+            output_column=self.config.output_column,
+            model_column=self.config.model_column,
+            thread_column=self.config.thread_column,
+            status_column=self.config.status_column,
+            prompt_tokens_column=self.config.prompt_tokens_column,
+            completion_tokens_column=self.config.completion_tokens_column,
+            total_tokens_column=self.config.total_tokens_column,
+            first_token_latency_column=self.config.first_token_latency_column,
+            total_latency_column=self.config.total_latency_column,
+            finish_reason_column=self.config.finish_reason_column,
+        )

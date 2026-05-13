@@ -69,3 +69,19 @@ py -3.14 -m projects.ai_for_detect.run_generate_ai_text `
 - `首token延迟秒`
 - `总耗时秒`
 - `完成原因`
+
+CSV 数据集
+- 每个输入文件会额外生成一个 `*_数据集.csv`
+- 输出目录下还会额外生成一个汇总文件：`ai_for_detect_数据集.csv`
+
+CSV 关键字段
+- `原始人类文本`
+- `AI文本`
+- `AI生成模型`
+- `提示token数`
+- `补全token数`
+- `总token数`
+- `首token延迟秒`
+- `总耗时秒`
+- `完成原因`
+- `生成状态`
