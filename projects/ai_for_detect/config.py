@@ -20,6 +20,10 @@ MODEL_ENV_NAMES = (
     "OPENAI_CHAT_MODEL",
     "AGENTORCH_MODEL",
 )
+MODEL_LIST_ENV_NAMES = (
+    "AI_FOR_DETECT_MODELS",
+    "OPENAI_MODELS",
+)
 
 
 def resolve_model_name(explicit_model: str | None) -> str:
@@ -34,3 +38,27 @@ def resolve_model_name(explicit_model: str | None) -> str:
         "未配置模型名。请通过 --model 传入，或在当前 shell 中设置 "
         "AI_FOR_DETECT_MODEL / OPENAI_MODEL / OPENAI_CHAT_MODEL / AGENTORCH_MODEL。"
     )
+
+
+def parse_model_list(raw_value: str | None) -> list[str]:
+    if raw_value is None:
+        return []
+    values = [item.strip() for item in raw_value.replace("\n", ",").split(",")]
+    return [item for item in values if item]
+
+
+def resolve_model_names(explicit_models: str | list[str] | None) -> list[str]:
+    if isinstance(explicit_models, str):
+        parsed = parse_model_list(explicit_models)
+        if parsed:
+            return parsed
+    elif explicit_models:
+        cleaned = [str(item).strip() for item in explicit_models if str(item).strip()]
+        if cleaned:
+            return cleaned
+
+    for env_name in MODEL_LIST_ENV_NAMES:
+        parsed = parse_model_list(os.getenv(env_name))
+        if parsed:
+            return parsed
+    return [resolve_model_name(None)]

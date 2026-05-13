@@ -11,7 +11,7 @@ from .config import (
     DEFAULT_SOURCE_COLUMN,
 )
 from .env_loader import load_project_env
-from .generator import AgentTorchSentenceGenerator
+from .generator import AgentTorchSentenceGenerator, MultiModelSentenceGenerator
 from .pipeline import AIDetectBatchPipeline, PipelineConfig
 
 
@@ -20,6 +20,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-path", type=Path, default=DEFAULT_INPUT_PATH, help="输入目录或单个 xlsx 文件路径。")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="输出目录。")
     parser.add_argument("--model", type=str, default=None, help="模型名；未传时从当前 shell 环境变量读取。")
+    parser.add_argument("--models", type=str, default=None, help="多个模型名，逗号分隔；同一 Excel 内按行交叉使用。")
     parser.add_argument("--source-column", type=str, default=DEFAULT_SOURCE_COLUMN, help="原始文本列名。")
     parser.add_argument("--label-column", type=str, default=DEFAULT_LABEL_COLUMN, help="领域标签列名。")
     parser.add_argument("--output-column", type=str, default=DEFAULT_OUTPUT_COLUMN, help="输出文本列名。")
@@ -39,14 +40,24 @@ def main() -> None:
     if loaded_env_path is not None:
         print(f"已加载环境变量文件：{loaded_env_path}")
     args = build_arg_parser().parse_args()
-    generator = AgentTorchSentenceGenerator(
-        model_name=args.model,
-        temperature=args.temperature,
-        max_tokens=args.max_tokens,
-        min_request_interval=args.min_request_interval,
-        timeout=args.timeout,
-        max_retries=args.max_retries,
-    )
+    if args.models:
+        generator = MultiModelSentenceGenerator(
+            model_names=args.models,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            min_request_interval=args.min_request_interval,
+            timeout=args.timeout,
+            max_retries=args.max_retries,
+        )
+    else:
+        generator = AgentTorchSentenceGenerator(
+            model_name=args.model,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            min_request_interval=args.min_request_interval,
+            timeout=args.timeout,
+            max_retries=args.max_retries,
+        )
     try:
         config = PipelineConfig(
             input_path=args.input_path,

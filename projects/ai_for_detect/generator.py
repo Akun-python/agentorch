@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 
 from pydantic import BaseModel, Field
 
 import agentorch
 
-from .config import resolve_model_name
+from .config import resolve_model_name, resolve_model_names
 from .prompts import SYSTEM_PROMPT, build_rewrite_prompt
 
 
 class SentenceGenerator(Protocol):
     model_name: str
+    model_names: list[str]
 
-    def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str) -> str:
+    def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> str:
         ...
 
     def close(self) -> None:
@@ -51,6 +53,7 @@ class AgentTorchSentenceGenerator:
         max_retries: int = 2,
     ) -> None:
         self.model_name = resolve_model_name(model_name)
+        self.model_names = [self.model_name]
         self._parser = agentorch.PydanticParser(GeneratedSentencePayload)
         self._agent = agentorch.create_agent(
             model={
@@ -69,7 +72,7 @@ class AgentTorchSentenceGenerator:
             enable_memory=False,
         )
 
-    def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str) -> str:
+    def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> str:
         prompt = build_rewrite_prompt(source_text=source_text, domain_label=domain_label)
         result = self._agent.run_parsed_sync(
             prompt,
@@ -80,3 +83,61 @@ class AgentTorchSentenceGenerator:
 
     def close(self) -> None:
         self._agent.close()
+
+
+@dataclass(slots=True)
+class ModelSelection:
+    model_name: str
+    slot_index: int
+
+
+class MultiModelSentenceGenerator:
+    """在多个模型之间按行轮转分配请求。"""
+
+    def __init__(
+        self,
+        *,
+        model_names: str | list[str] | None = None,
+        temperature: float = 0.8,
+        max_tokens: int = 256,
+        min_request_interval: float = 0.0,
+        timeout: float = 60.0,
+        max_retries: int = 2,
+    ) -> None:
+        self.model_names = resolve_model_names(model_names)
+        self.model_name = ",".join(self.model_names)
+        self._generators = {
+            name: AgentTorchSentenceGenerator(
+                model_name=name,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                min_request_interval=min_request_interval,
+                timeout=timeout,
+                max_retries=max_retries,
+            )
+            for name in self.model_names
+        }
+
+    def select_model(self, *, row_index: int) -> ModelSelection:
+        slot_index = row_index % len(self.model_names)
+        return ModelSelection(
+            model_name=self.model_names[slot_index],
+            slot_index=slot_index,
+        )
+
+    def resolve_model_for_row(self, *, row_index: int) -> str:
+        return self.select_model(row_index=row_index).model_name
+
+    def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> str:
+        model_name = self.resolve_model_for_row(row_index=row_index)
+        generator = self._generators[model_name]
+        return generator.rewrite_text(
+            source_text=source_text,
+            domain_label=domain_label,
+            thread_id=thread_id,
+            row_index=row_index,
+        )
+
+    def close(self) -> None:
+        for generator in self._generators.values():
+            generator.close()

@@ -88,15 +88,17 @@ class AIDetectBatchPipeline:
             domain_value = work_df.at[row_index, self.config.label_column] if self.config.label_column in work_df.columns else None
             domain_label = None if pd.isna(domain_value) else str(domain_value).strip()
             thread_id = self._build_thread_id(source_path=source_path, row_index=row_index)
+            model_name = self._resolve_model_name_for_row(row_index=row_index)
 
             try:
                 ai_text = self.generator.rewrite_text(
                     source_text=source_text,
                     domain_label=domain_label,
                     thread_id=thread_id,
+                    row_index=row_index,
                 )
                 work_df.at[row_index, self.config.output_column] = ai_text
-                work_df.at[row_index, self.config.model_column] = getattr(self.generator, "model_name", "")
+                work_df.at[row_index, self.config.model_column] = model_name
                 work_df.at[row_index, self.config.thread_column] = thread_id
                 work_df.at[row_index, self.config.status_column] = "success"
                 generated_rows += 1
@@ -158,3 +160,9 @@ class AIDetectBatchPipeline:
     def _build_thread_id(self, *, source_path: Path, row_index: int) -> str:
         digest = hashlib.md5(source_path.stem.encode("utf-8")).hexdigest()[:10]
         return f"ai-for-detect-{digest}-{row_index:06d}"
+
+    def _resolve_model_name_for_row(self, *, row_index: int) -> str:
+        resolver = getattr(self.generator, "resolve_model_for_row", None)
+        if callable(resolver):
+            return str(resolver(row_index=row_index))
+        return str(getattr(self.generator, "model_name", ""))

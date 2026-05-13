@@ -8,18 +8,21 @@ import pytest
 pd = pytest.importorskip("pandas")
 pytest.importorskip("openpyxl")
 
+from projects.ai_for_detect.config import resolve_model_names
 from projects.ai_for_detect.env_loader import load_project_env
+from projects.ai_for_detect.generator import MultiModelSentenceGenerator
 from projects.ai_for_detect.pipeline import AIDetectBatchPipeline, PipelineConfig
 from projects.ai_for_detect.prompts import build_rewrite_prompt
 
 
 class FakeSentenceGenerator:
     model_name = "fake-model"
+    model_names = ["fake-model"]
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, str | None, str]] = []
 
-    def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str) -> str:
+    def rewrite_text(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> str:
         self.calls.append((source_text, domain_label, thread_id))
         return f"AI::{domain_label}::{source_text}"
 
@@ -54,6 +57,23 @@ def test_load_project_env_reads_local_env_file(tmp_path: Path, monkeypatch: pyte
     assert os.getenv("OPENAI_API_KEY") == "test-key"
     assert os.getenv("OPENAI_BASE_URL") == "https://example.com/v1"
     assert os.getenv("AI_FOR_DETECT_MODEL") == "test-model"
+
+
+def test_resolve_model_names_prefers_multi_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_FOR_DETECT_MODELS", "model-a, model-b,model-c")
+    monkeypatch.delenv("AI_FOR_DETECT_MODEL", raising=False)
+
+    assert resolve_model_names(None) == ["model-a", "model-b", "model-c"]
+
+
+def test_multi_model_sentence_generator_rotates_models() -> None:
+    generator = MultiModelSentenceGenerator.__new__(MultiModelSentenceGenerator)
+    generator.model_names = ["model-a", "model-b", "model-c"]
+
+    assert generator.select_model(row_index=0).model_name == "model-a"
+    assert generator.select_model(row_index=1).model_name == "model-b"
+    assert generator.select_model(row_index=2).model_name == "model-c"
+    assert generator.select_model(row_index=3).model_name == "model-a"
 
 
 def test_pipeline_writes_output_and_resume_skips_existing_rows(tmp_path: Path) -> None:
@@ -107,3 +127,39 @@ def test_pipeline_writes_output_and_resume_skips_existing_rows(tmp_path: Path) -
     assert second_summaries[0].generated_rows == 0
     assert second_summaries[0].skipped_rows == 2
     assert second_generator.calls == []
+
+
+def test_pipeline_records_rotated_model_names(tmp_path: Path) -> None:
+    class RotatingFakeGenerator(FakeSentenceGenerator):
+        model_names = ["model-a", "model-b"]
+
+        def resolve_model_for_row(self, *, row_index: int) -> str:
+            return self.model_names[row_index % len(self.model_names)]
+
+    input_dir = tmp_path / "data_multi"
+    output_dir = tmp_path / "outputs_multi"
+    input_dir.mkdir()
+
+    source_path = input_dir / "金融.xlsx"
+    pd.DataFrame(
+        [
+            {"文本": "文本1", "领域标签": "金融"},
+            {"文本": "文本2", "领域标签": "金融"},
+            {"文本": "文本3", "领域标签": "金融"},
+        ]
+    ).to_excel(source_path, index=False)
+
+    generator = RotatingFakeGenerator()
+    pipeline = AIDetectBatchPipeline(
+        generator=generator,
+        config=PipelineConfig(
+            input_path=input_dir,
+            output_dir=output_dir,
+            flush_every=1,
+        ),
+    )
+
+    pipeline.run()
+
+    output_df = pd.read_excel(output_dir / "金融_ai生成.xlsx")
+    assert output_df["AI生成模型"].tolist() == ["model-a", "model-b", "model-a"]

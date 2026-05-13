@@ -21,8 +21,21 @@ ai_for_detect - AgentTorch 批量改写中文句子
 - `OPENAI_BASE_URL`
 - `AI_FOR_DETECT_MODEL` 或 `OPENAI_MODEL` 或 `OPENAI_CHAT_MODEL`
 
+如果你希望同一个 Excel 里交叉使用多个模型，直接在 `.env` 里填写：
+- `AI_FOR_DETECT_MODELS=model-a,model-b,model-c`
+
+交叉规则
+- 按行轮转
+- 第 1 行用第 1 个模型
+- 第 2 行用第 2 个模型
+- 第 3 行用第 3 个模型
+- 第 4 行回到第 1 个模型
+
 示例运行：
 py -3.14 -m projects.ai_for_detect.run_generate_ai_text --model gpt-4.1-mini --max-rows 20
+
+同一 Excel 交叉使用多个模型：
+py -3.14 -m projects.ai_for_detect.run_generate_ai_text --models "gpt-4.1-mini,deepseek-v4-flash,qwen-max"
 
 处理全部文件：
 py -3.14 -m projects.ai_for_detect.run_generate_ai_text
@@ -37,6 +50,7 @@ py -3.14 -m projects.ai_for_detect.run_generate_ai_text `
 - `--flush-every 10`：每 10 条落盘一次，便于中断续跑
 - `--overwrite`：忽略旧输出重新生成
 - `--min-request-interval 0.5`：给接口限速
+- `--models "a,b,c"`：一个 Excel 内交叉使用多个模型
 
 输出列
 - `AI生成文本`
