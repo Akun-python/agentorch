@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import asyncio
 from time import perf_counter
 from typing import Protocol
 
 from pydantic import BaseModel, Field
 
 import agentorch
+from agentorch._facade_support import BackgroundRuntimeBridge
 
 from .config import resolve_model_name, resolve_model_names
 from .metrics import RewriteMetrics, RewriteResult
 from .prompts import SYSTEM_PROMPT, build_rewrite_prompt
+
+_GENERATOR_BACKGROUND_BRIDGE = BackgroundRuntimeBridge()
 
 
 class SentenceGenerator(Protocol):
@@ -89,13 +91,8 @@ class AgentTorchSentenceGenerator:
 
     def rewrite_record(self, *, source_text: str, domain_label: str | None, thread_id: str, row_index: int = 0) -> RewriteResult:
         prompt = build_rewrite_prompt(source_text=source_text, domain_label=domain_label)
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(self._rewrite_record_async(prompt=prompt, thread_id=thread_id))
-        raise RuntimeError(
-            "rewrite_record() 不能在运行中的事件循环里直接调用。"
-            "若在 notebook/async 场景使用，请补一个 async 入口。"
+        return _GENERATOR_BACKGROUND_BRIDGE.run(
+            self._rewrite_record_async(prompt=prompt, thread_id=thread_id)
         )
 
     async def _rewrite_record_async(self, *, prompt: str, thread_id: str) -> RewriteResult:
@@ -151,7 +148,7 @@ class AgentTorchSentenceGenerator:
         )
 
     def close(self) -> None:
-        self._agent.close()
+        _GENERATOR_BACKGROUND_BRIDGE.run(self._agent.aclose())
 
 
 @dataclass(slots=True)
