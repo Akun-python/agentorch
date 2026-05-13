@@ -1,9 +1,9 @@
-ai_for_detect - AgentTorch 批量生成 AI 风格句子
+ai_for_detect - AgentTorch 批量改写中文句子
 
 用途
 1. 读取 `自建ai数据集` 里的 xlsx 文件
 2. 对每条 `文本` 调用 AgentTorch
-3. 生成一条“原意不变，但更像 AI 写作”的中文句子
+3. 生成一条“原意不变、表达不同”的改写句子
 4. 输出到 `outputs/*_ai生成.xlsx`
 
 输入要求

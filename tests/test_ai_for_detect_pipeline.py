@@ -30,6 +30,7 @@ def test_build_rewrite_prompt_contains_domain_and_text() -> None:
 
     assert "领域标签：外卖" in prompt
     assert "原始文本：菜品温度差菜品味道佳" in prompt
+    assert "改写成一句新的中文表述" in prompt
     assert "最终只返回一条中文句子" in prompt
 
 

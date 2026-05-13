@@ -2,7 +2,7 @@ from __future__ import annotations
 
 SYSTEM_PROMPT = """你是中文文本改写助手。
 
-你的唯一任务，是把用户提供的人类文本改写成一条更像大模型生成的中文句子。
+你的唯一任务，是把用户提供的中文文本改写成另一条语义等价、表达自然的新句子。
 必须严格遵守：
 1. 保持原意、事实、情绪倾向、立场不变。
 2. 保留关键术语、专有名词、数字与业务领域信息。
@@ -16,13 +16,14 @@ def build_rewrite_prompt(*, source_text: str, domain_label: str | None) -> str:
     if not cleaned_text:
         raise ValueError("原始文本不能为空。")
     cleaned_domain = (domain_label or "").strip() or "未标注"
-    return f"""请把下面的人类文本改写成一条更像 AI 生成的中文句子。
+    return f"""请把下面的中文文本改写成一句新的中文表述。
 
 约束：
 1. 保持核心语义、事实、情绪倾向与结论不变。
 2. 保留领域相关术语和关键词，不要新增事实。
-3. 表达可以更规整、更完整，但不要明显拉长。
-4. 最终只返回一条中文句子。
+3. 在不改变原意的前提下，可以调整措辞、语序和句式。
+4. 表达自然、通顺、完整，不要明显拉长。
+5. 最终只返回一条中文句子。
 
 领域标签：{cleaned_domain}
 原始文本：{cleaned_text}"""
