@@ -11,16 +11,21 @@ ai_for_detect - AgentTorch 批量改写中文句子
 - 默认标签列：`领域标签`
 
 运行前准备
-本项目不会主动读取 `.env`。
-请先在当前 PowerShell 会话里注入接口环境变量，再执行脚本。
+本项目启动时会自动加载同目录下的 `.env`：
+`projects/ai_for_detect/.env`
 
-示例：
-$env:OPENAI_API_KEY="你的key"
-$env:OPENAI_BASE_URL="你的base_url"
+默认提供了本地 `.env` 模板，你只需要把里面的 key 改成自己的即可。
+
+最小必填项
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `AI_FOR_DETECT_MODEL` 或 `OPENAI_MODEL` 或 `OPENAI_CHAT_MODEL`
+
+示例运行：
 py -3.14 -m projects.ai_for_detect.run_generate_ai_text --model gpt-4.1-mini --max-rows 20
 
 处理全部文件：
-py -3.14 -m projects.ai_for_detect.run_generate_ai_text --model gpt-4.1-mini
+py -3.14 -m projects.ai_for_detect.run_generate_ai_text
 
 处理单个文件：
 py -3.14 -m projects.ai_for_detect.run_generate_ai_text `

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_ENV_PATH = PROJECT_ROOT / ".env"
 DEFAULT_INPUT_PATH = PROJECT_ROOT / "自建ai数据集"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs"
 DEFAULT_SOURCE_COLUMN = "文本"

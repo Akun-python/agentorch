@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 pd = pytest.importorskip("pandas")
 pytest.importorskip("openpyxl")
 
+from projects.ai_for_detect.env_loader import load_project_env
 from projects.ai_for_detect.pipeline import AIDetectBatchPipeline, PipelineConfig
 from projects.ai_for_detect.prompts import build_rewrite_prompt
 
@@ -32,6 +34,26 @@ def test_build_rewrite_prompt_contains_domain_and_text() -> None:
     assert "原始文本：菜品温度差菜品味道佳" in prompt
     assert "改写成一句新的中文表述" in prompt
     assert "最终只返回一条中文句子" in prompt
+
+
+def test_load_project_env_reads_local_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "OPENAI_API_KEY=test-key\n"
+        "OPENAI_BASE_URL=https://example.com/v1\n"
+        "AI_FOR_DETECT_MODEL=test-model\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("AI_FOR_DETECT_MODEL", raising=False)
+
+    loaded_path = load_project_env(env_path)
+
+    assert loaded_path == env_path
+    assert os.getenv("OPENAI_API_KEY") == "test-key"
+    assert os.getenv("OPENAI_BASE_URL") == "https://example.com/v1"
+    assert os.getenv("AI_FOR_DETECT_MODEL") == "test-model"
 
 
 def test_pipeline_writes_output_and_resume_skips_existing_rows(tmp_path: Path) -> None:

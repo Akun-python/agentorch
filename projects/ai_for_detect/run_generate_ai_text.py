@@ -10,12 +10,13 @@ from .config import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_SOURCE_COLUMN,
 )
+from .env_loader import load_project_env
 from .generator import AgentTorchSentenceGenerator
 from .pipeline import AIDetectBatchPipeline, PipelineConfig
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="用 AgentTorch 批量把人类文本改写成 AI 风格句子。")
+    parser = argparse.ArgumentParser(description="用 AgentTorch 批量改写中文句子。")
     parser.add_argument("--input-path", type=Path, default=DEFAULT_INPUT_PATH, help="输入目录或单个 xlsx 文件路径。")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="输出目录。")
     parser.add_argument("--model", type=str, default=None, help="模型名；未传时从当前 shell 环境变量读取。")
@@ -34,6 +35,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    loaded_env_path = load_project_env()
+    if loaded_env_path is not None:
+        print(f"已加载环境变量文件：{loaded_env_path}")
     args = build_arg_parser().parse_args()
     generator = AgentTorchSentenceGenerator(
         model_name=args.model,
