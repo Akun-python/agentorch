@@ -24,6 +24,7 @@ def build_rewrite_prompt(*, source_text: str, domain_label: str | None) -> str:
 3. 在不改变原意的前提下，可以调整措辞、语序和句式。
 4. 表达自然、通顺、完整，不要明显拉长。
 5. 最终只返回一条中文句子。
+6. 不要返回 JSON、代码块、XML 标签、工具调用标记或额外说明。
 
 领域标签：{cleaned_domain}
 原始文本：{cleaned_text}"""

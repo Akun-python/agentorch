@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import re
 from time import perf_counter
 from typing import Protocol
-
-from pydantic import BaseModel, Field
 
 import agentorch
 from agentorch._facade_support import BackgroundRuntimeBridge
@@ -30,10 +30,6 @@ class SentenceGenerator(Protocol):
         ...
 
 
-class GeneratedSentencePayload(BaseModel):
-    ai_text: str = Field(description="保持原意、但表达更像 AI 生成的中文单句。")
-
-
 def normalize_generated_text(text: str) -> str:
     cleaned = (text or "").strip()
     pairs = {
@@ -44,6 +40,82 @@ def normalize_generated_text(text: str) -> str:
     }
     if len(cleaned) >= 2 and cleaned[0] in pairs and cleaned[-1] == pairs[cleaned[0]]:
         cleaned = cleaned[1:-1].strip()
+    return cleaned
+
+
+def extract_ai_text(payload: str) -> str:
+    cleaned = (payload or "").strip()
+    if not cleaned:
+        raise ValueError("模型返回空文本。")
+
+    for candidate in _candidate_payloads(cleaned):
+        text = _extract_from_json_like(candidate)
+        if text:
+            return normalize_generated_text(text)
+        text = _extract_plain_sentence(candidate)
+        if text:
+            return normalize_generated_text(text)
+
+    raise ValueError(f"无法从模型输出中提取有效改写文本：{cleaned[:200]}")
+
+
+def _candidate_payloads(text: str) -> list[str]:
+    candidates: list[str] = [text]
+    stripped = text.strip()
+    if stripped.startswith("```") and stripped.endswith("```"):
+        inner = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", stripped)
+        inner = re.sub(r"\s*```$", "", inner).strip()
+        if inner:
+            candidates.append(inner)
+    return candidates
+
+
+def _extract_from_json_like(text: str) -> str | None:
+    for candidate in _json_variants(text):
+        try:
+            payload = json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            for key in ("ai_text", "text", "content", "rewritten_text", "rewrite", "value"):
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    for pattern in (
+        r'"ai_text"\s*:\s*"(?P<value>(?:[^"\\]|\\.)*)"',
+        r'"text"\s*:\s*"(?P<value>(?:[^"\\]|\\.)*)"',
+        r'"value"\s*:\s*"(?P<value>(?:[^"\\]|\\.)*)"',
+    ):
+        match = re.search(pattern, text, flags=re.DOTALL)
+        if match:
+            raw_value = match.group("value")
+            try:
+                return json.loads(f'"{raw_value}"').strip()
+            except Exception:
+                return raw_value.strip()
+    return None
+
+
+def _json_variants(text: str) -> list[str]:
+    variants = [text]
+    if '""' in text:
+        variants.append(text.replace('""', '"'))
+    return variants
+
+
+def _extract_plain_sentence(text: str) -> str | None:
+    cleaned = text.strip()
+    if not cleaned:
+        return None
+    if cleaned.startswith("<") and ">" in cleaned:
+        without_tags = re.sub(r"<[^>]+>", " ", cleaned).strip()
+        if not without_tags:
+            return None
+        cleaned = without_tags
+    if cleaned.startswith("{") and cleaned.endswith("}"):
+        return None
+    if cleaned.lower().startswith("json"):
+        return None
     return cleaned
 
 
@@ -62,7 +134,6 @@ class AgentTorchSentenceGenerator:
     ) -> None:
         self.model_name = resolve_model_name(model_name)
         self.model_names = [self.model_name]
-        self._parser = agentorch.PydanticParser(GeneratedSentencePayload)
         self._agent = agentorch.create_agent(
             model={
                 "provider": "openai",
@@ -97,23 +168,22 @@ class AgentTorchSentenceGenerator:
 
     async def _rewrite_record_async(self, *, prompt: str, thread_id: str) -> RewriteResult:
         start_time = perf_counter()
-        formatted_prompt = self._parser.with_prompt(prompt)
         first_token_latency_seconds: float | None = None
         final_result = None
 
         try:
-            async for event in self._agent.run(formatted_prompt, thread_id=thread_id, stream=True):
+            async for event in self._agent.run(prompt, thread_id=thread_id, stream=True):
                 if event.event_type == "model_delta" and first_token_latency_seconds is None and event.delta_text:
                     first_token_latency_seconds = perf_counter() - start_time
                 if event.event_type == "final_result":
                     final_result = event.result
         except Exception:
-            return await self._rewrite_record_async_fallback(prompt=formatted_prompt, thread_id=thread_id, start_time=start_time)
+            return await self._rewrite_record_async_fallback(prompt=prompt, thread_id=thread_id, start_time=start_time)
 
         if final_result is None:
             raise RuntimeError("流式生成未返回 final_result，无法完成统计。")
 
-        parsed = await self._parser.parse(final_result.output_text)
+        extracted_text = extract_ai_text(final_result.output_text)
         total_latency_seconds = perf_counter() - start_time
         metrics = RewriteMetrics(
             prompt_tokens=int(final_result.usage.prompt_tokens or 0),
@@ -124,14 +194,14 @@ class AgentTorchSentenceGenerator:
             finish_reason=final_result.finish_reason or "",
         )
         return RewriteResult(
-            text=normalize_generated_text(parsed.ai_text),
+            text=extracted_text,
             model_name=self.model_name,
             metrics=metrics,
         )
 
     async def _rewrite_record_async_fallback(self, *, prompt: str, thread_id: str, start_time: float) -> RewriteResult:
         run_result = await self._agent.run(prompt, thread_id=thread_id, stream=False)
-        parsed = await self._parser.parse(run_result.output_text)
+        extracted_text = extract_ai_text(run_result.output_text)
         total_latency_seconds = perf_counter() - start_time
         metrics = RewriteMetrics(
             prompt_tokens=int(run_result.usage.prompt_tokens or 0),
@@ -142,7 +212,7 @@ class AgentTorchSentenceGenerator:
             finish_reason=run_result.finish_reason or "",
         )
         return RewriteResult(
-            text=normalize_generated_text(parsed.ai_text),
+            text=extracted_text,
             model_name=self.model_name,
             metrics=metrics,
         )

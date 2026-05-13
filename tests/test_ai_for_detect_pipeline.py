@@ -11,7 +11,7 @@ pytest.importorskip("openpyxl")
 from projects.ai_for_detect.config import resolve_model_names
 from projects.ai_for_detect.dataset_export import DATASET_COLUMNS
 from projects.ai_for_detect.env_loader import load_project_env
-from projects.ai_for_detect.generator import MultiModelSentenceGenerator
+from projects.ai_for_detect.generator import MultiModelSentenceGenerator, extract_ai_text
 from projects.ai_for_detect.metrics import RewriteMetrics, RewriteResult
 from projects.ai_for_detect.pipeline import AIDetectBatchPipeline, PipelineConfig
 from projects.ai_for_detect.prompts import build_rewrite_prompt
@@ -91,6 +91,13 @@ def test_multi_model_sentence_generator_rotates_models() -> None:
     assert generator.select_model(row_index=1).model_name == "model-b"
     assert generator.select_model(row_index=2).model_name == "model-c"
     assert generator.select_model(row_index=3).model_name == "model-a"
+
+
+def test_extract_ai_text_accepts_plain_text_and_json_variants() -> None:
+    assert extract_ai_text("这是一条改写后的句子。") == "这是一条改写后的句子。"
+    assert extract_ai_text('{"ai_text":"这是一条 JSON 句子。"}') == "这是一条 JSON 句子。"
+    assert extract_ai_text('```json\n{"ai_text":"这是一条代码块句子。"}\n```') == "这是一条代码块句子。"
+    assert extract_ai_text('{""ai_text"": ""这是一条双引号异常句子。""}') == "这是一条双引号异常句子。"
 
 
 def test_pipeline_writes_output_and_resume_skips_existing_rows(tmp_path: Path) -> None:
