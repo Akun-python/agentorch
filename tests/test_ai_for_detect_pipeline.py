@@ -83,6 +83,13 @@ def test_resolve_model_names_prefers_multi_model_env(monkeypatch: pytest.MonkeyP
     assert resolve_model_names(None) == ["model-a", "model-b", "model-c"]
 
 
+def test_resolve_model_names_accepts_single_model_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_FOR_DETECT_MODELS", "model-a")
+    monkeypatch.delenv("AI_FOR_DETECT_MODEL", raising=False)
+
+    assert resolve_model_names(None) == ["model-a"]
+
+
 def test_multi_model_sentence_generator_rotates_models() -> None:
     generator = MultiModelSentenceGenerator.__new__(MultiModelSentenceGenerator)
     generator.model_names = ["model-a", "model-b", "model-c"]

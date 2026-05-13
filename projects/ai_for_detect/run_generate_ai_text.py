@@ -53,7 +53,7 @@ def main() -> None:
         )
     else:
         generator = AgentTorchSentenceGenerator(
-            model_name=args.model,
+            model_name=resolved_model_names[0],
             temperature=args.temperature,
             max_tokens=args.max_tokens,
             min_request_interval=args.min_request_interval,
