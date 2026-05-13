@@ -111,7 +111,7 @@ class AgentTorchSentenceGenerator:
                 if event.event_type == "final_result":
                     final_result = event.result
         except Exception:
-            return self._rewrite_record_sync_fallback(prompt=formatted_prompt, thread_id=thread_id, start_time=start_time)
+            return await self._rewrite_record_async_fallback(prompt=formatted_prompt, thread_id=thread_id, start_time=start_time)
 
         if final_result is None:
             raise RuntimeError("流式生成未返回 final_result，无法完成统计。")
@@ -132,9 +132,9 @@ class AgentTorchSentenceGenerator:
             metrics=metrics,
         )
 
-    def _rewrite_record_sync_fallback(self, *, prompt: str, thread_id: str, start_time: float) -> RewriteResult:
-        run_result = self._agent.run_sync(prompt, thread_id=thread_id)
-        parsed = self._parser.parse_sync(run_result.output_text)
+    async def _rewrite_record_async_fallback(self, *, prompt: str, thread_id: str, start_time: float) -> RewriteResult:
+        run_result = await self._agent.run(prompt, thread_id=thread_id, stream=False)
+        parsed = await self._parser.parse(run_result.output_text)
         total_latency_seconds = perf_counter() - start_time
         metrics = RewriteMetrics(
             prompt_tokens=int(run_result.usage.prompt_tokens or 0),

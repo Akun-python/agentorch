@@ -159,7 +159,10 @@ class AIDetectBatchPipeline:
         self._save_output(work_df, output_path)
         average_first_token_latency_seconds = first_token_latency_sum / generated_rows if generated_rows else 0.0
         average_total_latency_seconds = total_latency_sum / generated_rows if generated_rows else 0.0
-        dataset_df = self._build_dataset_frame(work_df=work_df, source_path=source_path)
+        dataset_df = self._build_dataset_frame(
+            work_df=work_df.iloc[:limit].copy(),
+            source_path=source_path,
+        )
         save_dataset_csv(dataset_df=dataset_df, output_path=csv_output_path)
         print(
             f"[{source_path.name}] 完成，目标 {limit} 条，新增 {generated_rows} 条，"

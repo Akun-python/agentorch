@@ -138,6 +138,7 @@ def test_pipeline_writes_output_and_resume_skips_existing_rows(tmp_path: Path) -
     dataset_path = output_dir / "银行_数据集.csv"
     dataset_df = pd.read_csv(dataset_path, encoding="utf-8-sig")
     assert dataset_df.columns.tolist() == DATASET_COLUMNS
+    assert len(dataset_df) == 2
     assert dataset_df["原始人类文本"].tolist() == ["一万不过一般都是的存", "手机银行一个手机号只能绑定一次"]
     assert dataset_df["AI文本"].tolist() == [
         "AI::银行::一万不过一般都是的存",
@@ -205,3 +206,35 @@ def test_pipeline_records_rotated_model_names(tmp_path: Path) -> None:
     dataset_df = pd.read_csv(output_dir / "金融_数据集.csv", encoding="utf-8-sig")
     assert dataset_df["AI生成模型"].tolist() == ["model-a", "model-b", "model-a"]
     assert dataset_df["原始人类文本"].tolist() == ["文本1", "文本2", "文本3"]
+
+
+def test_dataset_csv_honors_max_rows_limit(tmp_path: Path) -> None:
+    input_dir = tmp_path / "data_limit"
+    output_dir = tmp_path / "outputs_limit"
+    input_dir.mkdir()
+
+    source_path = input_dir / "电信.xlsx"
+    pd.DataFrame(
+        [
+            {"文本": "文本1", "领域标签": "电信"},
+            {"文本": "文本2", "领域标签": "电信"},
+            {"文本": "文本3", "领域标签": "电信"},
+        ]
+    ).to_excel(source_path, index=False)
+
+    generator = FakeSentenceGenerator()
+    pipeline = AIDetectBatchPipeline(
+        generator=generator,
+        config=PipelineConfig(
+            input_path=input_dir,
+            output_dir=output_dir,
+            flush_every=1,
+            max_rows=2,
+        ),
+    )
+
+    pipeline.run()
+
+    dataset_df = pd.read_csv(output_dir / "电信_数据集.csv", encoding="utf-8-sig")
+    assert len(dataset_df) == 2
+    assert dataset_df["原始人类文本"].tolist() == ["文本1", "文本2"]
