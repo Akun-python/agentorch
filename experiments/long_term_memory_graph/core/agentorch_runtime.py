@@ -144,30 +144,42 @@ class AgentTorchExperimentRunner:
         run_round: int,
     ) -> AgentAnswer:
         thread_id = f"ltmg-{case.case_id}-{retrieval.method}-{retrieval.variant}-r{run_round}"
-        payload = {
-            "case_id": case.case_id,
-            "question_type": case.question_type,
-            "query": case.query,
-            "standard_answer": case.standard_answer,
-            "method": retrieval.method,
-            "variant": retrieval.variant,
-            "target_capsule_ids": list(case.target_capsule_ids),
-            "target_relation_types": list(case.target_relation_types),
-            "stale_capsule_ids": list(case.stale_capsule_ids),
-            "conflict_loser_ids": list(case.conflict_loser_ids),
-            "returned_capsule_ids": retrieval.returned_capsule_ids,
-            "returned_relation_types": retrieval.returned_relation_types,
-            "suppressed_stale_nodes": retrieval.suppressed_stale_nodes,
-            "suppressed_conflict_nodes": retrieval.suppressed_conflict_nodes,
-        }
-        prompt = (
-            "你是长期记忆问答实验中的 AgentTorch 被试智能体。"
-            "只能依据给定的长期记忆召回结果回答；证据不足时必须说明不能可靠回答。\n"
-            f"查询：{case.query}\n"
-            f"召回摘要：{retrieval.prompt_summary}\n"
-            "EXPERIMENT_PAYLOAD_JSON="
-            f"{json.dumps(payload, ensure_ascii=False, sort_keys=True)}"
-        )
+        if self._live_model_config is None:
+            payload = {
+                "case_id": case.case_id,
+                "question_type": case.question_type,
+                "query": case.query,
+                "standard_answer": case.standard_answer,
+                "method": retrieval.method,
+                "variant": retrieval.variant,
+                "target_capsule_ids": list(case.target_capsule_ids),
+                "target_relation_types": list(case.target_relation_types),
+                "stale_capsule_ids": list(case.stale_capsule_ids),
+                "conflict_loser_ids": list(case.conflict_loser_ids),
+                "returned_capsule_ids": retrieval.returned_capsule_ids,
+                "returned_relation_types": retrieval.returned_relation_types,
+                "suppressed_stale_nodes": retrieval.suppressed_stale_nodes,
+                "suppressed_conflict_nodes": retrieval.suppressed_conflict_nodes,
+            }
+            prompt = (
+                "你是长期记忆问答实验中的 AgentTorch 被试智能体。"
+                "只能依据给定的长期记忆召回结果回答；证据不足时必须说明不能可靠回答。\n"
+                f"查询：{case.query}\n"
+                f"召回摘要：{retrieval.prompt_summary}\n"
+                "EXPERIMENT_PAYLOAD_JSON="
+                f"{json.dumps(payload, ensure_ascii=False, sort_keys=True)}"
+            )
+        else:
+            prompt = (
+                "你是长期记忆问答实验中的 AgentTorch 被试智能体。"
+                "只能依据给定的长期记忆召回结果回答，不允许使用任何实验标签、隐藏标准答案或额外假设。"
+                "如果召回证据不足，请明确回答无法可靠判断。\n"
+                f"问题类型：{case.question_type}\n"
+                f"查询：{case.query}\n"
+                "下面是系统召回出的长期记忆摘要，请仅基于这些内容作答：\n"
+                f"{retrieval.prompt_summary}\n"
+                "请直接给出简洁答案，并在必要时用一句话说明依据。"
+            )
         result = self._make_agent().run_sync(
             prompt,
             thread_id=thread_id,
