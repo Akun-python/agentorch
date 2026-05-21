@@ -115,6 +115,23 @@ python -m experiments.long_term_memory_graph compare --dataset-path path\to\case
 
 `cases.jsonl` 每行包含 `case_id`、`question_type`、`query`、`standard_answer`、`capsules`、`target_capsule_ids`，以及可选的 `target_relation_types`、`stale_capsule_ids`、`conflict_loser_ids`、`knowledge_scope`、`tags`、`entities`。
 
+### 可选 LLM 结构化抽取
+
+LongMemEval oracle 转换脚本默认只做确定性转换。若需要让 flash 模型把原始会话补成更完整的 `summary`、`entities` 和 `claims`，可显式开启 `--llm-extract`：
+
+```powershell
+python -m experiments.long_term_memory_graph.tools.convert_longmemeval_oracle `
+  --input experiments\benchmarks\LongMemEval\data\longmemeval_oracle.json `
+  --output artifacts\long_term_memory_graph\datasets\longmemeval_oracle_llm_structured.jsonl `
+  --llm-extract `
+  --model-backend openai_http `
+  --model deepseek-v4-flash `
+  --env-file .env `
+  --extract-log artifacts\long_term_memory_graph\datasets\longmemeval_oracle_llm_extract_log.jsonl
+```
+
+这一步只做候选结构化抽取，不让 LLM 直接决定记忆是否晋升。准入、构边和召回仍由 `promotion.py`、`rules.py` 和召回服务中的可解释机制控制。`--extract-log` 会记录每个 session 的 token、耗时、claim/entity 数量和解析错误，便于审计成本与字段质量。
+
 ## 真实 Benchmark 跑法
 
 真实 benchmark 建议至少使用 `--runs 3`，并显式传入 `--model` 与 `--judge-model`，避免不同环境变量别名造成歧义。

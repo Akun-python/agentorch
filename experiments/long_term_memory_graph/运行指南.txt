@@ -1,0 +1,94 @@
+LongMemEval Oracle 运行指南
+
+一、先检查环境
+
+1. 检查主模型配置
+python -m experiments.long_term_memory_graph check-env --model-backend openai_http --env-file .env
+
+2. 检查 judge 配置
+python -m experiments.long_term_memory_graph check-env --role judge --model-backend openai_http --env-file .env
+
+
+二、先把 LongMemEval oracle 转成实验数据
+
+python -m experiments.long_term_memory_graph.tools.convert_longmemeval_oracle `
+  --input C:\Users\24260\Desktop\研究生生涯\agentorch\experiments\benchmarks\LongMemEval\data\longmemeval_oracle.json `
+  --output C:\Users\24260\Desktop\研究生生涯\agentorch\artifacts\long_term_memory_graph\datasets\longmemeval_oracle.jsonl
+
+如果要用 flash 模型补全 summary/entities/claims，用这一版。LLM 只做结构化抽取，晋升和召回仍走图谱规则：
+
+python -m experiments.long_term_memory_graph.tools.convert_longmemeval_oracle `
+  --input C:\Users\24260\Desktop\研究生生涯\agentorch\experiments\benchmarks\LongMemEval\data\longmemeval_oracle.json `
+  --output C:\Users\24260\Desktop\研究生生涯\agentorch\artifacts\long_term_memory_graph\datasets\longmemeval_oracle_llm_structured.jsonl `
+  --llm-extract `
+  --model-backend openai_http `
+  --model deepseek-v4-flash `
+  --env-file .env `
+  --extract-log artifacts/long_term_memory_graph/datasets/longmemeval_oracle_llm_extract_log.jsonl
+
+先小样本确认费用和字段质量：
+
+python -m experiments.long_term_memory_graph.tools.convert_longmemeval_oracle `
+  --input C:\Users\24260\Desktop\研究生生涯\agentorch\experiments\benchmarks\LongMemEval\data\longmemeval_oracle.json `
+  --output C:\Users\24260\Desktop\研究生生涯\agentorch\artifacts\long_term_memory_graph\datasets\longmemeval_oracle_llm_structured_smoke.jsonl `
+  --llm-extract `
+  --model-backend openai_http `
+  --model deepseek-v4-flash `
+  --env-file .env `
+  --limit 3 `
+  --extract-log artifacts/long_term_memory_graph/datasets/longmemeval_oracle_llm_extract_smoke_log.jsonl
+
+
+三、默认小样本运行（主模型 + 真实 judge）
+
+python -m experiments.long_term_memory_graph main `
+  --dataset-path C:\Users\24260\Desktop\研究生生涯\agentorch\artifacts\long_term_memory_graph\datasets\longmemeval_oracle.jsonl `
+  --model-backend openai_http `
+  --model deepseek-v4-flash `
+  --embedding-model text-embedding-3-small `
+  --judge-backend model_judge `
+  --judge-model-backend openai_http `
+  --judge-model deepseek-v4-flash `
+  --env-file .env `
+  --case-limit 5 `
+  --runs 1 `
+  --output-dir artifacts/long_term_memory_graph/main_longmemeval_oracle_real_judge
+
+
+四、切换 judge 模型
+
+只改这一项：
+--judge-model 你的judge模型名
+
+例子：主模型 deepseek-v4-flash，judge 改成 qwen-plus
+python -m experiments.long_term_memory_graph main `
+  --dataset-path C:\Users\24260\Desktop\研究生生涯\agentorch\artifacts\long_term_memory_graph\datasets\longmemeval_oracle.jsonl `
+  --model-backend openai_http `
+  --model deepseek-v4-flash `
+  --embedding-model text-embedding-3-small `
+  --judge-backend model_judge `
+  --judge-model-backend openai_http `
+  --judge-model qwen-plus `
+  --env-file .env `
+  --case-limit 5 `
+  --runs 1 `
+  --output-dir artifacts/long_term_memory_graph/main_deepseek_judge_qwen
+
+
+五、结果看哪里
+
+输出目录里重点看这几个文件：
+1. runs.csv
+2. runs.jsonl
+3. summary.md
+4. manifest.json
+
+
+六、建议
+
+1. 先跑 case-limit 5
+2. 跑通后再放大到 50 或完整数据
+3. 如果 judge 不想用真实模型，就删掉：
+   --judge-backend model_judge
+   --judge-model-backend openai_http
+   --judge-model xxx
