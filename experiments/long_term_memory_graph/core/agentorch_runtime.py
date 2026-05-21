@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from time import perf_counter
 from typing import Any
 
 from agentorch import Agent, Runtime
@@ -13,6 +14,8 @@ from .schemas import AgentAnswer, ExperimentCase, RetrievalResult
 
 
 def estimate_tokens(text: str) -> int:
+    """轻量 token 估算，用于离线探针和报告字段。"""
+
     ascii_words = len([item for item in text.replace("\n", " ").split(" ") if item])
     cjk_chars = sum(1 for char in text if "\u4e00" <= char <= "\u9fff")
     return max(1, ascii_words + cjk_chars // 2)
@@ -22,6 +25,8 @@ class ExperimentAnswerModel(BaseModelAdapter):
     """AgentTorch 离线回答模型：只用于实验管线 smoke test，不充当正式论文结果。"""
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
+        """按隐藏 payload 生成可预测答案，便于验证评测管线。"""
+
         prompt = "\n".join(message.content for message in request.messages if message.content)
         payload = _extract_payload(prompt)
         answer = _build_probe_answer(payload)
@@ -41,6 +46,8 @@ class ExperimentAnswerModel(BaseModelAdapter):
 
 
 def _extract_payload(prompt: str) -> dict[str, Any]:
+    """从离线探针提示词中提取 JSON payload。"""
+
     marker = "EXPERIMENT_PAYLOAD_JSON="
     if marker not in prompt:
         return {}
@@ -76,6 +83,8 @@ def _extract_payload(prompt: str) -> dict[str, Any]:
 
 
 def _build_probe_answer(payload: dict[str, Any]) -> str:
+    """根据目标胶囊、关系和污染节点构造确定性答案。"""
+
     method = str(payload.get("method", ""))
     standard_answer = str(payload.get("standard_answer", ""))
     target_capsules = set(payload.get("target_capsule_ids", []))
@@ -101,6 +110,8 @@ def _build_probe_answer(payload: dict[str, Any]) -> str:
 
 
 class AgentTorchExperimentRunner:
+    """实验中的被试 Agent 运行器。"""
+
     def __init__(
         self,
         *,
@@ -143,6 +154,8 @@ class AgentTorchExperimentRunner:
         retrieval: RetrievalResult,
         run_round: int,
     ) -> AgentAnswer:
+        """用召回摘要驱动 AgentTorch 生成答案，并记录用量和耗时。"""
+
         thread_id = f"ltmg-{case.case_id}-{retrieval.method}-{retrieval.variant}-r{run_round}"
         if self._live_model_config is None:
             payload = {
@@ -180,11 +193,13 @@ class AgentTorchExperimentRunner:
                 f"{retrieval.prompt_summary}\n"
                 "请直接给出简洁答案，并在必要时用一句话说明依据。"
             )
+        start = perf_counter()
         result = self._make_agent().run_sync(
             prompt,
             thread_id=thread_id,
             metadata={"suite": "long_term_memory_graph", "case_id": case.case_id},
         )
+        duration_ms = (perf_counter() - start) * 1000
         return AgentAnswer(
             answer=result.output_text,
             input_tokens=result.usage.prompt_tokens,
@@ -192,4 +207,6 @@ class AgentTorchExperimentRunner:
             agentorch_run_id=result.run_id,
             thread_id=result.thread_id,
             finish_reason=result.finish_reason,
+            total_tokens=result.usage.total_tokens,
+            duration_ms=duration_ms,
         )

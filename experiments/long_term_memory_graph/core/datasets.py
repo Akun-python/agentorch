@@ -11,6 +11,8 @@ from .schemas import QUESTION_TYPES, ExperimentCase
 
 
 def _dt(value: str) -> datetime:
+    """把数据集时间统一为 UTC datetime。"""
+
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
@@ -32,6 +34,8 @@ def _capsule(
     confidence: float = 0.86,
     status: str = "validated",
 ) -> MemoryCapsuleCandidate:
+    """构造内置样本使用的记忆胶囊。"""
+
     return MemoryCapsuleCandidate(
         capsule_id=capsule_id,
         thread_id=thread_id,
@@ -361,6 +365,8 @@ def build_default_cases() -> list[ExperimentCase]:
 
 
 def _case_from_payload(payload: dict[str, Any]) -> ExperimentCase:
+    """从 JSONL 行恢复实验样本。"""
+
     required = ("case_id", "question_type", "query", "standard_answer", "capsules", "target_capsule_ids")
     missing = [field for field in required if field not in payload]
     if missing:
@@ -397,6 +403,8 @@ def load_cases(
     shard_id: int | None = None,
     num_shards: int | None = None,
 ) -> list[ExperimentCase]:
+    """加载内置或外部 JSONL 数据集，并支持分页和分片。"""
+
     if case_limit is not None and case_limit <= 0:
         raise ValueError("case_limit must be > 0 when provided.")
     if case_offset < 0:
@@ -433,6 +441,8 @@ def load_cases(
 
 
 def _validate_case(case: ExperimentCase) -> None:
+    """校验样本内部引用，避免目标胶囊 ID 写错后静默失败。"""
+
     if case.question_type not in QUESTION_TYPES:
         raise ValueError(f"Unsupported question_type for {case.case_id}: {case.question_type}.")
     if not case.capsules:

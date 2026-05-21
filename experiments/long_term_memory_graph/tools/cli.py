@@ -10,21 +10,30 @@ from typing import Any
 from pydantic import BaseModel
 
 from ..core.env_config import build_live_model_config, load_experiment_env
+from ..core.progress import SuiteProgressContext
 
 
 def _main_runner():
+    """延迟导入主模型 runner，降低 CLI 初始导入成本。"""
+
     return importlib.import_module("experiments.long_term_memory_graph.主模型.runner")
 
 
 def _comparison_runner():
+    """延迟导入对比实验 runner。"""
+
     return importlib.import_module("experiments.long_term_memory_graph.研究对比试验.runner")
 
 
 def _ablation_runner():
+    """延迟导入消融实验 runner。"""
+
     return importlib.import_module("experiments.long_term_memory_graph.消融实验.runner")
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """构造总 CLI parser，统一挂载 main/compare/ablate/full/check-env。"""
+
     parser = argparse.ArgumentParser(
         prog="python -m experiments.long_term_memory_graph",
         description="Clark's nutcracker inspired long-term memory graph experiment entrypoints.",
@@ -39,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _build_check_env_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """注册只检查环境变量链路的子命令。"""
+
     parser = subparsers.add_parser("check-env", help="只检查真实 API 后端的 env 加载链路，不发起模型请求，不输出密钥。")
     parser.add_argument("--model-backend", default="openai_http", choices=["openai", "openai_http", "agentorch_probe"])
     parser.add_argument("--model", default=None, help="真实 API 后端使用的模型名；也可由 OPENAI_MODEL/MODEL_NAME 提供。")
@@ -52,6 +63,8 @@ def _build_check_env_parser(subparsers: argparse._SubParsersAction[argparse.Argu
 
 
 def _check_env_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    """检查模型环境变量是否齐全，但不打印任何密钥值。"""
+
     load_env = not args.no_env_file
     if args.model_backend == "agentorch_probe":
         report = load_experiment_env(
@@ -107,6 +120,8 @@ def _check_env_from_args(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _build_full_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """注册 full 子命令，顺序运行三组实验。"""
+
     parser = subparsers.add_parser("full", help="依次运行 main、compare、ablate 三组实验，并在同一输出根目录下生成产物。")
     parser.add_argument("--output-dir", default="artifacts/long_term_memory_graph/full")
     parser.add_argument("--case-limit", type=int, default=None)
@@ -133,7 +148,22 @@ def _build_full_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
 
 
 def _run_full_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    """按 main -> comparison -> ablation 顺序运行完整实验包。"""
+
     root = Path(args.output_dir)
+    SuiteProgressContext.log_root_event(
+        root,
+        event="full_start",
+        payload={
+            "command": "full",
+            "runs": args.runs,
+            "dataset_path": args.dataset_path,
+            "model_backend": args.model_backend,
+            "model": args.model,
+            "judge_backend": args.judge_backend,
+            "judge_model": args.judge_model,
+        },
+    )
     common = {
         "case_limit": args.case_limit,
         "case_offset": args.case_offset,
@@ -154,17 +184,38 @@ def _run_full_from_args(args: argparse.Namespace) -> dict[str, Any]:
         "load_env": not args.no_env_file,
         "overwrite_env": args.overwrite_env,
     }
+    SuiteProgressContext.log_root_event(root, event="suite_dispatch", payload={"suite": "main"})
     main_manifest = _main_runner().run_main_experiment(output_dir=root / "main", **common)
+    SuiteProgressContext.log_root_event(
+        root,
+        event="suite_complete",
+        payload={"suite": "main", "record_count": main_manifest.get("record_count"), "output_dir": main_manifest.get("output_dir")},
+    )
+    SuiteProgressContext.log_root_event(root, event="suite_dispatch", payload={"suite": "comparison"})
     comparison_manifest = _comparison_runner().run_comparison_experiment(
         output_dir=root / "comparison",
         include_official_baselines=args.include_official_baselines,
         include_proxy_extension=args.include_proxy_extension,
         **common,
     )
+    SuiteProgressContext.log_root_event(
+        root,
+        event="suite_complete",
+        payload={"suite": "comparison", "record_count": comparison_manifest.get("record_count"), "output_dir": comparison_manifest.get("output_dir")},
+    )
+    SuiteProgressContext.log_root_event(root, event="suite_dispatch", payload={"suite": "ablation"})
     ablation_manifest = _ablation_runner().run_ablation_experiment(output_dir=root / "ablation", **common)
+    SuiteProgressContext.log_root_event(
+        root,
+        event="suite_complete",
+        payload={"suite": "ablation", "record_count": ablation_manifest.get("record_count"), "output_dir": ablation_manifest.get("output_dir")},
+    )
+    SuiteProgressContext.log_root_event(root, event="full_end", payload={"command": "full", "output_dir": str(root.resolve())})
     return {
         "command": "full",
         "output_dir": str(root.resolve()),
+        "progress_log_path": str((root / "full_run.log").resolve()),
+        "progress_jsonl_path": str((root / "full_progress.jsonl").resolve()),
         "main": main_manifest,
         "comparison": comparison_manifest,
         "ablation": ablation_manifest,
@@ -172,6 +223,8 @@ def _run_full_from_args(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _serialize(result: Any) -> str:
+    """把 Pydantic 或普通对象转成可读 JSON。"""
+
     if isinstance(result, BaseModel):
         payload: Any = result.model_dump()
     else:
@@ -180,6 +233,8 @@ def _serialize(result: Any) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """总 CLI 入口。"""
+
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
     result = args.handler(args)

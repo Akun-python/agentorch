@@ -11,6 +11,8 @@ from ..utils import ensure_utc_datetime
 
 
 class CapsuleIngestionService:
+    """记忆胶囊入库服务：写节点后按规则补边。"""
+
     def __init__(
         self,
         *,
@@ -23,6 +25,8 @@ class CapsuleIngestionService:
         self.embed_texts = embed_texts
 
     def store_capsules(self, candidates: list[MemoryCapsuleCandidate]) -> list[str]:
+        """按时间顺序写入胶囊，随后建立时序边和规则边。"""
+
         if not candidates:
             return []
         ordered = sorted(candidates, key=lambda item: ensure_utc_datetime(item.created_at))
@@ -59,6 +63,8 @@ class CapsuleIngestionService:
         return stored_ids
 
     def _embed_capsules(self, candidates: list[MemoryCapsuleCandidate]) -> list[list[float] | None]:
+        """为每条胶囊生成摘要向量；未配置 provider 时返回空向量。"""
+
         if self.config.embedding_provider is None:
             return [None] * len(candidates)
         texts = [candidate.summary or candidate.goal or candidate.outcome for candidate in candidates]

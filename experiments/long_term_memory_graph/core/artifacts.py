@@ -26,6 +26,8 @@ def write_artifacts(
     efficiency_payload: dict[str, Any] | None = None,
     scale_tier_payload: dict[str, Any] | None = None,
 ) -> dict[str, str]:
+    """一次性写出论文实验需要的全部产物。"""
+
     output_dir.mkdir(parents=True, exist_ok=True)
     paths = {
         "runs_csv": output_dir / "runs.csv",
@@ -41,6 +43,8 @@ def write_artifacts(
         "parameter_sweep_json": output_dir / "parameter_sweep.json",
         "efficiency_json": output_dir / "efficiency_report.json",
         "scale_tiers_json": output_dir / "scale_tiers.json",
+        "progress_log": output_dir / "run.log",
+        "progress_jsonl": output_dir / "progress.jsonl",
         "manifest": output_dir / "manifest.json",
     }
     _write_csv(paths["runs_csv"], records)
@@ -63,6 +67,8 @@ def write_artifacts(
 
 
 def _write_csv(path: Path, records: list[ExperimentRecord]) -> None:
+    """写主运行 CSV，字段顺序由 schemas 中的常量统一控制。"""
+
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(CSV_FIELDS), extrasaction="ignore")
         writer.writeheader()
@@ -71,14 +77,20 @@ def _write_csv(path: Path, records: list[ExperimentRecord]) -> None:
 
 
 def _write_json(path: Path, payload: Any) -> None:
+    """写带缩进的 UTF-8 JSON。"""
+
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    """写 JSONL，每行一条记录，便于增量审计。"""
+
     path.write_text("".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
 
 
 def _summary_md(*, suite: str, aggregates: list[dict[str, Any]], manifest: dict[str, Any]) -> str:
+    """生成 Markdown 摘要，直接服务论文结果核对。"""
+
     lines = [
         f"# Long-Term Memory Graph Experiment: {suite}",
         "",
@@ -141,6 +153,8 @@ def _summary_md(*, suite: str, aggregates: list[dict[str, Any]], manifest: dict[
 
 
 def _latex_tables(*, suite: str, aggregates: list[dict[str, Any]]) -> str:
+    """生成可粘贴到论文中的 LaTeX 结果表。"""
+
     caption = {
         "main": "E1 主模型实验结果表",
         "comparison": "E2 强基线对比实验结果表",
@@ -168,6 +182,8 @@ def _latex_tables(*, suite: str, aggregates: list[dict[str, Any]]) -> str:
 
 
 def _mechanism_metric_tables(*, aggregates: list[dict[str, Any]]) -> str:
+    """生成机制指标表，突出胶囊、关系、证据和冲突治理。"""
+
     lines = [
         "% Auto-generated mechanism metrics table.",
         "\\begin{table}[t]",
@@ -191,6 +207,8 @@ def _mechanism_metric_tables(*, aggregates: list[dict[str, Any]]) -> str:
 
 
 def _bootstrap_payload(aggregates: list[dict[str, Any]]) -> dict[str, Any]:
+    """抽出 bootstrap 置信区间，方便单独复核。"""
+
     return {
         "rows": [
             {
@@ -206,10 +224,14 @@ def _bootstrap_payload(aggregates: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _tex(value: Any) -> str:
+    """转义 LaTeX 表格中的少量特殊字符。"""
+
     return str(value).replace("_", "\\_").replace("%", "\\%")
 
 
 def _summary_design_section(*, suite: str, manifest: dict[str, Any]) -> list[str]:
+    """根据实验类型补充设计说明段。"""
+
     protocol = manifest.get("protocol") or {}
     lines: list[str] = []
     if suite == "comparison" and protocol:
@@ -259,10 +281,14 @@ def _summary_design_section(*, suite: str, manifest: dict[str, Any]) -> list[str
 
 
 def _overall_rows(aggregates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """只取 Overall 聚合行。"""
+
     return [row for row in aggregates if row["question_type"] == "Overall"]
 
 
 def _overall_result_line(row: dict[str, Any]) -> str:
+    """把 Overall 聚合行转成 Markdown 表格行。"""
+
     return (
         f"| `{row['method']}` | `{row['variant']}` | {row['question_type']} | {row['accuracy_pct']:.2f} | "
         f"[{row['accuracy_ci_low']:.2f}, {row['accuracy_ci_high']:.2f}] | {row['capsule_recall_at_k']:.2f} | "
@@ -271,6 +297,8 @@ def _overall_result_line(row: dict[str, Any]) -> str:
 
 
 def _design_tables_tex(*, suite: str, aggregates: list[dict[str, Any]]) -> str:
+    """生成补充设计表，目前主要用于 comparison 的代理扩展结果。"""
+
     if suite == "comparison":
         proxy_rows = [row for row in _overall_rows(aggregates) if row.get("source_boundary") == "proxy"]
         if not proxy_rows:

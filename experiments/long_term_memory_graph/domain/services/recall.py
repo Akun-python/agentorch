@@ -21,6 +21,11 @@ from ..utils import truncate_text
 
 
 class RecallService:
+    """长期记忆召回服务。
+
+    流程是语义召回、全文召回、候选重排、图扩展、安全过滤、摘要生成。
+    """
+
     def __init__(
         self,
         *,
@@ -35,6 +40,8 @@ class RecallService:
         self.summarizer = summarizer or TemplateSubgraphSummarizer()
 
     def recall(self, request: RecallRequest) -> RecallResponse:
+        """执行一次长期记忆图谱召回。"""
+
         if self.config.embedding_provider is None:
             raise RuntimeError("Long-term memory graph recall requires an embedding provider.")
         timeline: dict[str, float] = {}
@@ -185,6 +192,8 @@ class RecallService:
         semantic_results: list[SearchHit],
         lexical_results: list[SearchHit],
     ) -> dict[str, dict[str, float | MemoryCapsuleDetail]]:
+        """合并语义检索和全文检索结果。"""
+
         candidates: dict[str, dict[str, float | MemoryCapsuleDetail]] = {}
         for item in semantic_results:
             bucket = candidates.setdefault(item.node.capsule_id, {"node": item.node, "semantic_score": 0.0, "lexical_score": 0.0})
@@ -202,6 +211,8 @@ class RecallService:
         score_map: dict[str, float],
         why_map: dict[str, str],
     ) -> None:
+        """沿图边传播种子节点分数，补充一跳证据。"""
+
         for edge in expanded_edges:
             source_id = edge.source_capsule_id
             target_id = edge.target_capsule_id
@@ -226,6 +237,8 @@ class RecallService:
                         )
 
     def _edge_propagation_weight(self, relation_type: str) -> float:
+        """不同关系类型对应不同传播强度。"""
+
         relation_weights = {
             "TEMPORAL_NEXT": 0.95,
             "REVISES": 0.9,
@@ -237,6 +250,8 @@ class RecallService:
         return relation_weights.get(relation_type, 0.5)
 
     def _filter_stale(self, node_lookup: dict[str, MemoryCapsuleDetail]) -> tuple[dict[str, MemoryCapsuleDetail], list[str]]:
+        """过滤过期或被状态阻断的节点。"""
+
         if not self.config.enable_stale_filter:
             return dict(node_lookup), []
         suppressed_stale: list[str] = []
@@ -262,6 +277,8 @@ class RecallService:
         edges: list[SubgraphEdge],
         why_map: dict[str, str],
     ) -> tuple[dict[str, MemoryCapsuleDetail], list[str]]:
+        """冲突关系中保留更可信节点，压制失败节点。"""
+
         if not self.config.enable_conflict_filter:
             return active_nodes, []
         suppressed_conflicts: list[str] = []
@@ -291,6 +308,8 @@ class RecallService:
         final_ids: set[str],
         max_edges: int,
     ) -> list[SubgraphEdge]:
+        """只保留最终节点之间的高分边。"""
+
         indexed_edges_raw: list[SubgraphEdge] = []
         for edge in sorted(edges, key=lambda item: float(item.score), reverse=True):
             if edge.source_capsule_id not in final_ids or edge.target_capsule_id not in final_ids:

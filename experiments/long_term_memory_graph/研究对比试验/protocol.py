@@ -12,6 +12,7 @@ from ..core import (
 )
 
 
+# 该协议对齐 HyperMem/LoCoMo 风格的长期记忆对比实验形状。
 HYPERMEM_REFERENCE_PROTOCOL: dict[str, Any] = {
     "name": "hypermem_style_long_term_memory_comparison",
     "reference": "参考文献/长期记忆对比参考文献.pdf",
@@ -201,6 +202,8 @@ METHOD_REFERENCES: dict[str, list[str]] = {
 
 
 def build_comparison_protocol_metadata(methods: tuple[str, ...]) -> dict[str, Any]:
+    """把对比实验方法、文献引用和实现边界写入 manifest。"""
+
     grouped = {
         group_name: [method for method in group_methods if method in methods]
         for group_name, group_methods in BASELINE_GROUPS.items()

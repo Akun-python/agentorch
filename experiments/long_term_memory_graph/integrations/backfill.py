@@ -23,6 +23,8 @@ SUPPORTED_KINDS = {"episodic_capsule", "semantic_memory", "lesson_learned"}
 
 
 def _safe_json_loads(value: str | None) -> dict[str, Any]:
+    """安全解析旧库 metadata，格式异常时回空对象。"""
+
     if not value:
         return {}
     try:
@@ -33,6 +35,8 @@ def _safe_json_loads(value: str | None) -> dict[str, Any]:
 
 
 def _parse_claims(value: Any) -> list[ClaimSlot]:
+    """把旧库中的结构化 claims 转成 ClaimSlot。"""
+
     if not isinstance(value, list):
         return []
     claims: list[ClaimSlot] = []
@@ -46,6 +50,8 @@ def _parse_claims(value: Any) -> list[ClaimSlot]:
 
 
 def _normalize_scope(metadata: dict[str, Any]) -> list[str]:
+    """从旧 metadata 推导知识范围。"""
+
     scope_value = metadata.get("knowledge_scope")
     if scope_value:
         return normalize_string_list(scope_value)
@@ -55,6 +61,8 @@ def _normalize_scope(metadata: dict[str, Any]) -> list[str]:
 
 
 def _normalize_entities(metadata: dict[str, Any], thread_id: str) -> list[str]:
+    """从 agent/thread 信息推导实体列表。"""
+
     values: list[str] = []
     if metadata.get("agent_role"):
         values.append(str(metadata["agent_role"]))
@@ -77,6 +85,8 @@ def _candidate_from_row(
     metadata: dict[str, Any],
     ordinal: int,
 ) -> tuple[MemoryCapsuleCandidate, bool]:
+    """把旧 records 表的一行转换成长期记忆胶囊。"""
+
     base_time = datetime.fromtimestamp(source_path.stat().st_mtime, tz=timezone.utc)
     created_at = metadata.get("created_at") or metadata.get("last_validated_at") or synthetic_timestamp(base_time, ordinal)
     goal = metadata.get("goal") or content
@@ -108,6 +118,8 @@ def _candidate_from_row(
 
 
 def load_sqlite_backfill_candidates(records_db_path: str) -> tuple[list[MemoryCapsuleCandidate], BackfillReport]:
+    """读取旧 SQLite records.db，生成可入图的候选胶囊。"""
+
     path = Path(records_db_path)
     if not path.exists():
         raise FileNotFoundError(f"SQLite records database does not exist: {path}")
@@ -165,10 +177,14 @@ def load_sqlite_backfill_candidates(records_db_path: str) -> tuple[list[MemoryCa
 
 
 class SQLiteBackfillImporter:
+    """SQLite 回填执行器，只负责读取候选并调用写入函数。"""
+
     def __init__(self, store_capsules) -> None:
         self.store_capsules = store_capsules
 
     def import_from_sqlite(self, records_db_path: str) -> BackfillReport:
+        """执行回填并返回报告。"""
+
         candidates, report = load_sqlite_backfill_candidates(records_db_path)
         if candidates:
             self.store_capsules(candidates)

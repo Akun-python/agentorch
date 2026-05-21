@@ -8,6 +8,8 @@ from .utils import truncate_text
 
 
 class TemplateSubgraphSummarizer:
+    """把召回子图压缩成可喂给 Agent 的短摘要。"""
+
     def summarize(
         self,
         *,
@@ -18,6 +20,8 @@ class TemplateSubgraphSummarizer:
         suppressed_stale_nodes: list[str],
         suppressed_conflict_nodes: list[str],
     ) -> str:
+        """按节点、关系链和风险提示组织摘要。"""
+
         node_list = list(nodes)
         if not node_list:
             return "No long-term memory capsules were returned."
@@ -51,6 +55,8 @@ class TemplateSubgraphSummarizer:
         return "\n".join(lines)
 
     def _dominant_terms(self, nodes: list[MemoryCapsuleDetail]) -> str:
+        """从标签、实体和知识范围中提取主题词。"""
+
         counter: Counter[str] = Counter()
         for node in nodes[:6]:
             for value in node.tags + node.entities + node.knowledge_scope:

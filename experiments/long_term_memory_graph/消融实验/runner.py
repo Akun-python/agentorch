@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 if __package__ in {None, ""}:
+    # 兼容直接运行本文件的情况。
     project_root = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(project_root))
     from experiments.long_term_memory_graph.core import ABLATION_VARIANTS, ExperimentRunConfig, run_suite
@@ -40,6 +41,8 @@ def run_ablation_experiment(
     overwrite_env: bool = False,
     sweep_parameters: dict[str, list[float | int]] | None = None,
 ) -> dict[str, object]:
+    """运行 E4 消融与参数敏感性实验。"""
+
     resolved_sweeps = sweep_parameters or _default_parameter_sweeps()
     result = run_suite(
         ExperimentRunConfig(
@@ -72,6 +75,8 @@ def run_ablation_experiment(
 
 
 def build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """注册 ablate 子命令。"""
+
     parser = subparsers.add_parser(
         "ablate",
         help="运行 E4：场景索引、时间边、修正边、冲突/陈旧抑制和 top-k 参数消融。",
@@ -82,6 +87,8 @@ def build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
 
 
 def run_from_args(args: argparse.Namespace) -> dict[str, object]:
+    """把 argparse 参数转成消融实验函数调用。"""
+
     variants = tuple(item.strip() for item in args.variants.split(",") if item.strip())
     return run_ablation_experiment(
         output_dir=args.output_dir,
@@ -109,6 +116,8 @@ def run_from_args(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _add_common_args(parser: argparse.ArgumentParser, *, default_output: str) -> None:
+    """消融实验通用 CLI 参数和参数扫描入口。"""
+
     parser.add_argument("--output-dir", default=default_output)
     parser.add_argument("--case-limit", type=int, default=None)
     parser.add_argument("--case-offset", type=int, default=0)
@@ -138,6 +147,8 @@ def _add_common_args(parser: argparse.ArgumentParser, *, default_output: str) ->
 
 
 def _parse_csv_numbers(value: str) -> list[float | int]:
+    """解析命令行传入的逗号分隔数值。"""
+
     items = []
     for raw in value.split(","):
         raw = raw.strip()
@@ -148,6 +159,8 @@ def _parse_csv_numbers(value: str) -> list[float | int]:
 
 
 def _parse_sweeps(args: argparse.Namespace) -> dict[str, list[float | int]]:
+    """把多个 sweep 参数整理成统一字典。"""
+
     return {
         "top_candidates": _parse_csv_numbers(args.sweep_top_candidates),
         "top_seeds": _parse_csv_numbers(args.sweep_top_seeds),
@@ -160,6 +173,8 @@ def _parse_sweeps(args: argparse.Namespace) -> dict[str, list[float | int]]:
 
 
 def _default_parameter_sweeps() -> dict[str, list[float | int]]:
+    """默认参数扫描范围。"""
+
     return {
         "top_candidates": [4, 6, 10],
         "top_seeds": [2, 3, 5],
@@ -172,6 +187,8 @@ def _default_parameter_sweeps() -> dict[str, list[float | int]]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """支持 `python runner.py` 直接运行。"""
+
     parser = argparse.ArgumentParser(description="直接运行 E4 消融与参数敏感性实验。")
     parser.add_argument("--variants", default=",".join(ABLATION_VARIANTS))
     _add_common_args(parser, default_output="artifacts/long_term_memory_graph/ablation")

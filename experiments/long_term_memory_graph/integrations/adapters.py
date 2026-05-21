@@ -7,7 +7,7 @@ from ..api.models import MemoryCapsuleCandidate, RecallRequest, RecallResponse
 
 
 class LongTermMemoryAdapter(Protocol):
-    """Generic adapter contract for plugging the graph module into any agent."""
+    """长期记忆适配器协议，用于接入不同 Agent 运行时。"""
 
     def build_recall_request(self, agent_state: Mapping[str, Any]) -> RecallRequest:
         raise NotImplementedError

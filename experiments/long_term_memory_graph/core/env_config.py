@@ -6,6 +6,7 @@ from pathlib import Path
 
 from agentorch.config import ModelConfig, initialize_environment
 
+# 允许离线探针与真实 OpenAI-compatible 后端共用同一套 CLI 参数。
 PROBE_MODEL_BACKENDS = {"agentorch_probe", "deterministic_probe", "probe"}
 LIVE_MODEL_BACKENDS = {"openai", "openai_http"}
 API_KEY_ENV_NAMES = ("OPENAI_API_KEY", "API_KEY", "api_key", "OPENAI_KEY", "openai_api_key")
@@ -18,6 +19,8 @@ EMBEDDING_MODEL_ENV_NAMES = ("OPENAI_EMBEDDING_MODEL", "OPENAI_EMBEDDING_MODEL_N
 
 @dataclass(frozen=True)
 class EnvLoadReport:
+    """环境变量加载结果，只记录是否存在，不记录密钥内容。"""
+
     env_file: str | None
     env_file_exists: bool
     loaded: bool
@@ -31,6 +34,8 @@ class EnvLoadReport:
 
 
 def is_probe_backend(model_backend: str) -> bool:
+    """判断是否使用离线探针后端。"""
+
     return model_backend.strip().lower() in PROBE_MODEL_BACKENDS
 
 
@@ -42,6 +47,8 @@ def load_experiment_env(
     role_prefix: str | None = None,
     overwrite_env: bool = False,
 ) -> EnvLoadReport:
+    """加载实验环境并规范化常见变量别名。"""
+
     path = Path(env_file) if env_file is not None else None
     exists = bool(path and path.exists())
     loaded = False
@@ -72,6 +79,8 @@ def build_live_model_config(
     role_prefix: str | None = None,
     overwrite_env: bool = False,
 ) -> tuple[ModelConfig, EnvLoadReport]:
+    """根据 CLI 参数和环境变量构造真实模型配置。"""
+
     backend = model_backend.strip().lower()
     if backend not in LIVE_MODEL_BACKENDS:
         raise ValueError(f"Unsupported live model backend: {model_backend}. Use one of {sorted(LIVE_MODEL_BACKENDS)}.")
@@ -98,6 +107,8 @@ def build_live_model_config(
 
 
 def resolve_embedding_env(*, role_prefix: str | None = None) -> dict[str, str | None]:
+    """解析 embedding 相关环境变量。"""
+
     return {
         "embedding_api_key": _role_first_env(role_prefix, *EMBEDDING_API_KEY_ENV_NAMES),
         "embedding_base_url": _role_first_env(role_prefix, *EMBEDDING_BASE_URL_ENV_NAMES),
@@ -106,6 +117,8 @@ def resolve_embedding_env(*, role_prefix: str | None = None) -> dict[str, str | 
 
 
 def _apply_common_aliases(*, overwrite: bool, role_prefix: str | None = None) -> None:
+    """把 API_KEY/BASE_URL/MODEL_NAME 等别名补成 AgentTorch 默认名。"""
+
     _copy_first_env("OPENAI_API_KEY", API_KEY_ENV_NAMES[1:], overwrite=overwrite)
     _copy_first_env("OPENAI_BASE_URL", BASE_URL_ENV_NAMES[1:], overwrite=overwrite)
     _copy_first_env("OPENAI_MODEL", MODEL_ENV_NAMES[1:], overwrite=overwrite)
@@ -118,6 +131,8 @@ def _apply_common_aliases(*, overwrite: bool, role_prefix: str | None = None) ->
 
 
 def _copy_first_env(target: str, aliases: tuple[str, ...], *, overwrite: bool) -> None:
+    """把第一个可用别名复制到目标环境变量。"""
+
     if not overwrite and os.getenv(target):
         return
     value = _first_env(*aliases)
@@ -126,6 +141,8 @@ def _copy_first_env(target: str, aliases: tuple[str, ...], *, overwrite: bool) -
 
 
 def _first_env(*names: str) -> str | None:
+    """返回第一个非空环境变量值。"""
+
     for name in names:
         value = os.getenv(name)
         if value and value.strip():
@@ -134,6 +151,8 @@ def _first_env(*names: str) -> str | None:
 
 
 def _role_first_env(role_prefix: str | None, *names: str) -> str | None:
+    """优先读取带角色前缀的变量，例如 JUDGE_OPENAI_MODEL。"""
+
     if role_prefix:
         prefix = role_prefix.strip().upper()
         value = _first_env(*(f"{prefix}_{name}" for name in names))

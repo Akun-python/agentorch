@@ -5,6 +5,7 @@ from typing import Any
 from ..core import ABLATION_VARIANTS
 
 
+# 消融协议只描述实验设计，不执行任何模型调用。
 ABLATION_PROTOCOL: dict[str, Any] = {
     "name": "clarks_nutcracker_ablation_protocol",
     "reference": "Clark's Nutcracker long-term memory graph ablation design",
@@ -43,6 +44,8 @@ def build_ablation_protocol_metadata(
     variants: tuple[str, ...],
     sweep_parameters: dict[str, list[float | int]] | None,
 ) -> dict[str, Any]:
+    """把固定消融变体和参数扫描配置写入 manifest。"""
+
     return {
         **ABLATION_PROTOCOL,
         "all_variants": list(ABLATION_VARIANTS),

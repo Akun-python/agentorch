@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 if __package__ in {None, ""}:
+    # 允许直接执行本文件，也允许作为包模块导入。
     project_root = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(project_root))
     from experiments.long_term_memory_graph.core import MAIN_METHOD, ExperimentRunConfig, run_suite
@@ -36,6 +37,8 @@ def run_main_experiment(
     load_env: bool = True,
     overwrite_env: bool = False,
 ) -> dict[str, object]:
+    """运行 E1/E3/E5 主模型实验。"""
+
     result = run_suite(
         ExperimentRunConfig(
             suite="main",
@@ -65,6 +68,8 @@ def run_main_experiment(
 
 
 def build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """注册 main 子命令。"""
+
     parser = subparsers.add_parser(
         "main",
         help="运行 E1/E3/E5：完整克拉克星鸦长时记忆图谱主模型实验。",
@@ -74,6 +79,8 @@ def build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
 
 
 def run_from_args(args: argparse.Namespace) -> dict[str, object]:
+    """把 argparse 参数转成主实验函数调用。"""
+
     return run_main_experiment(
         output_dir=args.output_dir,
         case_limit=args.case_limit,
@@ -98,6 +105,8 @@ def run_from_args(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _add_common_args(parser: argparse.ArgumentParser, *, default_output: str) -> None:
+    """主模型实验的通用 CLI 参数。"""
+
     parser.add_argument("--output-dir", default=default_output)
     parser.add_argument("--case-limit", type=int, default=None)
     parser.add_argument("--case-offset", type=int, default=0)
@@ -120,6 +129,8 @@ def _add_common_args(parser: argparse.ArgumentParser, *, default_output: str) ->
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """支持 `python runner.py` 直接运行。"""
+
     parser = argparse.ArgumentParser(description="直接运行 E1/E3/E5 主模型实验。")
     _add_common_args(parser, default_output="artifacts/long_term_memory_graph/main")
     args = parser.parse_args(list(argv) if argv is not None else None)

@@ -11,6 +11,8 @@ from .utils import ensure_utc_datetime, normalize_text
 
 
 class MemoryCapsuleDetail(MemoryCapsuleCandidate):
+    """存储层返回的完整记忆胶囊。"""
+
     scene_hash: str | None = None
     reuse_count: int = 0
     last_validated_at: datetime | None = None
@@ -25,6 +27,8 @@ class MemoryCapsuleDetail(MemoryCapsuleCandidate):
 
 
 class GraphEdgeCandidate(BaseModel):
+    """准备写入图数据库的候选边。"""
+
     source_capsule_id: str
     relation_type: str
     target_capsule_id: str
@@ -46,12 +50,16 @@ class GraphEdgeCandidate(BaseModel):
 
 @dataclass(frozen=True)
 class SearchHit:
+    """搜索命中的节点及分数。"""
+
     node: MemoryCapsuleDetail
     score: float
 
 
 @dataclass(frozen=True)
 class SubgraphEdge:
+    """召回子图中的边视图。"""
+
     source_capsule_id: str
     target_capsule_id: str
     relation_type: str

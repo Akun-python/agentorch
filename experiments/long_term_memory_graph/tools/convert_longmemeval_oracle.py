@@ -19,6 +19,8 @@ QUESTION_TYPE_MAP = {
 
 
 def _parse_args() -> argparse.Namespace:
+    """解析 LongMemEval oracle 转换参数。"""
+
     parser = argparse.ArgumentParser(description="将 LongMemEval oracle 数据转换为 long_term_memory_graph 可读 JSONL。")
     parser.add_argument("--input", required=True, help="LongMemEval oracle json 文件路径。")
     parser.add_argument("--output", required=True, help="输出 jsonl 路径。")
@@ -28,17 +30,23 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _parse_longmemeval_dt(raw: str, *, fallback_index: int = 0) -> datetime:
+    """解析 LongMemEval 日期，并用秒偏移避免同会话时间完全相同。"""
+
     base = datetime.strptime(raw.strip(), "%Y/%m/%d (%a) %H:%M")
     return base.replace(tzinfo=timezone.utc) + timedelta(seconds=fallback_index)
 
 
 def _normalize_text(value: Any) -> str:
+    """清理空白文本。"""
+
     if value is None:
         return ""
     return " ".join(str(value).split())
 
 
 def _slug_tokens(text: str) -> list[str]:
+    """从问题类型中提取可放入 scope 的 token。"""
+
     tokens: list[str] = []
     current: list[str] = []
     for char in text.lower():
@@ -54,6 +62,8 @@ def _slug_tokens(text: str) -> list[str]:
 
 
 def _iter_turn_lines(session: list[dict[str, Any]]) -> Iterable[str]:
+    """把一个会话展开成 role: content 行。"""
+
     for turn in session:
         role = _normalize_text(turn.get("role", "unknown")) or "unknown"
         content = _normalize_text(turn.get("content", ""))
@@ -71,6 +81,8 @@ def _build_capsule(
     session: list[dict[str, Any]],
     position: int,
 ) -> dict[str, Any]:
+    """把 LongMemEval 的一个 haystack session 转成记忆胶囊。"""
+
     lines = list(_iter_turn_lines(session))
     session_text = "\n".join(lines)
     answer_lines = [_normalize_text(turn.get("content", "")) for turn in session if bool(turn.get("has_answer"))]
@@ -99,12 +111,16 @@ def _build_capsule(
 
 
 def _map_question_type(raw_type: str, question_id: str) -> str | None:
+    """把 LongMemEval 问题类型映射到本实验四类问题。"""
+
     if question_id.endswith("_abs"):
         return "Open Domain"
     return QUESTION_TYPE_MAP.get(raw_type)
 
 
 def _build_case(item: dict[str, Any], *, include_abstention: bool) -> dict[str, Any] | None:
+    """把 LongMemEval 单条样本转换成本实验 JSONL case。"""
+
     question_id = _normalize_text(item.get("question_id"))
     raw_question_type = _normalize_text(item.get("question_type"))
     mapped_type = _map_question_type(raw_question_type, question_id)
@@ -166,6 +182,8 @@ def _build_case(item: dict[str, Any], *, include_abstention: bool) -> dict[str, 
 
 
 def main() -> int:
+    """执行转换并输出转换摘要。"""
+
     args = _parse_args()
     input_path = Path(args.input)
     output_path = Path(args.output)

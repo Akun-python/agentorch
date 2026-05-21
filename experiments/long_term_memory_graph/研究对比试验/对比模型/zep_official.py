@@ -9,12 +9,16 @@ from .base import OfficialBaselineProbe, build_capsule_metadata, build_official_
 
 
 class ZepOfficialAdapter:
+    """Zep 官方 SDK baseline adapter。"""
+
     method = "zep_memory"
 
     def __init__(self, *, seed: int) -> None:
         self.seed = seed
 
     def probe(self) -> OfficialBaselineProbe:
+        """检查 ZEP_API_KEY 和 zep_cloud SDK 是否可用。"""
+
         api_key = (os.getenv("ZEP_API_KEY") or "").strip()
         if not api_key:
             return OfficialBaselineProbe(enabled=False, ready=False, reason="ZEP_API_KEY 未配置。")
@@ -25,6 +29,8 @@ class ZepOfficialAdapter:
         return OfficialBaselineProbe(enabled=True, ready=True)
 
     def run(self, case: ExperimentCase, *, variant: str, max_nodes: int) -> RetrievalResult:
+        """写入 Zep episodes 后调用 graph.search。"""
+
         zep_module, types_module = self._load_sdk()
         client = zep_module.Zep(
             api_key=(os.getenv("ZEP_API_KEY") or "").strip(),
@@ -61,12 +67,16 @@ class ZepOfficialAdapter:
         )
 
     def _load_sdk(self):
+        """延迟导入 Zep Cloud SDK。"""
+
         zep_module = importlib.import_module("zep_cloud")
         types_module = importlib.import_module("zep_cloud.types")
         return zep_module, types_module
 
 
 def _parse_zep_hits(response) -> list[dict[str, object]]:
+    """解析 Zep graph.search 返回的 episodes。"""
+
     rows: list[dict[str, object]] = []
     for episode in getattr(response, "episodes", None) or []:
         metadata = getattr(episode, "metadata", None) or {}

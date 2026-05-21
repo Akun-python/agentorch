@@ -8,10 +8,14 @@ from .utils import jaccard_similarity, now_utc
 
 
 def _canonical_pair(left_id: str, right_id: str) -> tuple[str, str]:
+    """无向语义关系使用稳定 ID 顺序，避免重复边。"""
+
     return (left_id, right_id) if left_id <= right_id else (right_id, left_id)
 
 
 def _claim_index(claims: Iterable[ClaimSlot]) -> dict[tuple[str, str], list[ClaimSlot]]:
+    """按 slot/scope 聚合主张，便于识别修订和冲突。"""
+
     index: dict[tuple[str, str], list[ClaimSlot]] = {}
     for claim in claims:
         key = (claim.slot, claim.scope)
@@ -20,6 +24,8 @@ def _claim_index(claims: Iterable[ClaimSlot]) -> dict[tuple[str, str], list[Clai
 
 
 def _share_task(left: MemoryCapsuleDetail, right: MemoryCapsuleDetail) -> tuple[bool, float]:
+    """判断两条记忆是否属于同一任务或任务族。"""
+
     if left.task_id and right.task_id and left.task_id == right.task_id:
         return True, 1.0
     if left.task_family and right.task_family and left.task_family == right.task_family:
@@ -28,6 +34,8 @@ def _share_task(left: MemoryCapsuleDetail, right: MemoryCapsuleDetail) -> tuple[
 
 
 def _share_evidence(left: MemoryCapsuleDetail, right: MemoryCapsuleDetail) -> tuple[bool, float, int]:
+    """判断两条记忆是否共享证据来源。"""
+
     overlap = set(left.evidence_refs).intersection(right.evidence_refs)
     overlap.update(set(left.source_memory_refs).intersection(right.source_memory_refs))
     if not overlap:
@@ -38,6 +46,8 @@ def _share_evidence(left: MemoryCapsuleDetail, right: MemoryCapsuleDetail) -> tu
 
 
 def _scope_overlap(left: MemoryCapsuleDetail, right: MemoryCapsuleDetail, *, threshold: float) -> tuple[bool, float]:
+    """用 scope/tag/entity 的 Jaccard 重叠判断场景接近度。"""
+
     overlap_score = jaccard_similarity(
         left.knowledge_scope + left.tags + left.entities,
         right.knowledge_scope + right.tags + right.entities,
@@ -46,6 +56,8 @@ def _scope_overlap(left: MemoryCapsuleDetail, right: MemoryCapsuleDetail, *, thr
 
 
 def _claim_revision_pairs(left: MemoryCapsuleDetail, right: MemoryCapsuleDetail) -> list[tuple[ClaimSlot, ClaimSlot]]:
+    """同任务同 slot 但 value 不同时，视作可能的版本修订。"""
+
     if not (left.claims and right.claims):
         return []
     shared_task, _ = _share_task(left, right)
@@ -64,6 +76,8 @@ def _claim_revision_pairs(left: MemoryCapsuleDetail, right: MemoryCapsuleDetail)
 
 
 def _claims_conflict(left: ClaimSlot, right: ClaimSlot) -> bool:
+    """判断两个主张是否构成直接冲突。"""
+
     if left.slot != right.slot or left.scope != right.scope:
         return False
     if left.polarity and right.polarity and left.polarity != right.polarity:
@@ -77,6 +91,8 @@ def build_temporal_edges(
     previous_capsule: MemoryCapsuleDetail | None,
     next_capsule: MemoryCapsuleDetail | None,
 ) -> list[GraphEdgeCandidate]:
+    """给同一线程族中的相邻记忆建立时间顺序边。"""
+
     edges: list[GraphEdgeCandidate] = []
     timestamp = now_utc()
     if previous_capsule is not None:
@@ -112,6 +128,8 @@ def build_pairwise_edges(
     *,
     scope_overlap_threshold: float,
 ) -> list[GraphEdgeCandidate]:
+    """根据任务、证据、范围和主张关系生成成对边。"""
+
     if current.capsule_id == other.capsule_id:
         return []
     edges: list[GraphEdgeCandidate] = []
@@ -203,6 +221,8 @@ def build_pairwise_edges(
 
 
 def deduplicate_edges(edges: Iterable[GraphEdgeCandidate]) -> list[GraphEdgeCandidate]:
+    """合并重复边，保留更高分并累计支持数。"""
+
     merged: dict[tuple[str, str, str], GraphEdgeCandidate] = {}
     for edge in edges:
         key = (edge.source_capsule_id, edge.relation_type, edge.target_capsule_id)

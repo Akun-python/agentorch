@@ -8,12 +8,16 @@ from .utils import ensure_utc_datetime, jaccard_similarity, now_utc, stable_hash
 
 
 def build_fulltext_query(request: RecallRequest) -> str:
+    """从查询与场景标签中构造全文检索文本。"""
+
     terms = [request.query, *request.tags, *request.entities, *request.knowledge_scope]
     text = " ".join(item for item in terms if item)
     return truncate_text(text, max_chars=240)
 
 
 def scene_match(request: RecallRequest, node: MemoryCapsuleDetail, *, weight: float) -> float:
+    """计算请求场景与记忆胶囊场景的匹配分。"""
+
     score = 0.0
     if request.thread_family and node.thread_family == request.thread_family:
         score += 0.5
@@ -35,6 +39,8 @@ def build_selection_reason(
     confidence: float,
     reuse_count: int,
 ) -> str:
+    """生成节点入选原因，方便后续人工审计。"""
+
     reasons: list[str] = []
     if semantic_score > 0:
         reasons.append("vector match")
@@ -55,6 +61,8 @@ def is_stale(
     stale_after_days: int,
     stale_low_confidence_threshold: float,
 ) -> bool:
+    """判断节点是否因为久未验证且低置信而过期。"""
+
     reference_time = ensure_utc_datetime(node.last_validated_at or node.created_at)
     age_days = (now_utc() - reference_time).days
     return age_days >= stale_after_days and float(node.confidence) < stale_low_confidence_threshold
@@ -68,6 +76,8 @@ def stale_penalty(
     stale_low_confidence_threshold: float,
     penalty_weight: float,
 ) -> float:
+    """计算过期或被阻断状态带来的惩罚分。"""
+
     if node.status in blocked_statuses:
         return 100.0
     if not is_stale(
@@ -86,6 +96,8 @@ def resolve_conflict(
     *,
     status_priority: dict[str, int],
 ) -> tuple[MemoryCapsuleDetail, MemoryCapsuleDetail]:
+    """冲突节点中选赢家：状态优先，其次更新时间、置信度和稳定哈希。"""
+
     left_status = status_priority.get(left.status, 1)
     right_status = status_priority.get(right.status, 1)
     if left_status != right_status:
@@ -102,4 +114,6 @@ def resolve_conflict(
 
 
 def reuse_component(reuse_count: int, *, weight: float) -> float:
+    """复用次数的对数增益，避免高频节点无限放大。"""
+
     return math.log1p(max(0, int(reuse_count))) * weight

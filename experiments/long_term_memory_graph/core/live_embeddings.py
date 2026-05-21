@@ -5,6 +5,8 @@ from agentorch.models import create_model_adapter
 
 
 class LiveOpenAIEmbeddingProvider(EmbeddingProvider):
+    """真实 OpenAI-compatible embedding provider。"""
+
     def __init__(
         self,
         *,
@@ -24,6 +26,8 @@ class LiveOpenAIEmbeddingProvider(EmbeddingProvider):
         self.provider = provider
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        """调用 AgentTorch 模型适配器的 embedding 能力。"""
+
         if not texts:
             return []
         adapter = create_model_adapter(

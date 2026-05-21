@@ -8,6 +8,8 @@ from .schemas import ExperimentCase, ExperimentRecord
 
 
 def build_efficiency_payload(records: list[ExperimentRecord]) -> dict[str, Any]:
+    """构造 token、返回规模和延迟分解报告。"""
+
     if not records:
         return {"token_accuracy_curve": [], "return_scale_distribution": [], "latency_breakdown_summary": {}}
     token_accuracy_curve = [
@@ -51,6 +53,8 @@ def build_efficiency_payload(records: list[ExperimentRecord]) -> dict[str, Any]:
 
 
 def build_scale_tier_payload(cases: list[ExperimentCase]) -> dict[str, Any]:
+    """给论文扩展性讨论提供小/中/大规模估算口径。"""
+
     if not cases:
         return {"tiers": []}
     capsule_count = sum(len(case.capsules) for case in cases)
@@ -63,6 +67,8 @@ def build_scale_tier_payload(cases: list[ExperimentCase]) -> dict[str, Any]:
 
 
 def _load_json(value: str) -> dict[str, Any]:
+    """解析 latency_breakdown_json，异常时回空字典。"""
+
     import json
 
     try:
@@ -72,6 +78,8 @@ def _load_json(value: str) -> dict[str, Any]:
 
 
 def _percentile(values: list[float], pct: int) -> float:
+    """小样本百分位计算，保持无外部依赖。"""
+
     if not values:
         return 0.0
     ordered = sorted(values)

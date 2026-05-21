@@ -12,18 +12,24 @@ OFFICIAL_SDK_BOUNDARY = "official_sdk"
 
 @dataclass(frozen=True)
 class OfficialBaselineProbe:
+    """官方 baseline 的可用性探测结果。"""
+
     enabled: bool
     ready: bool
     reason: str = ""
 
 
 def build_scope_id(*, case: ExperimentCase, method: str, seed: int, prefix: str) -> str:
+    """为第三方 SDK 构造隔离命名空间，避免不同 case 污染。"""
+
     payload = f"{prefix}:{method}:{case.case_id}:{seed}"
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
     return f"{prefix}-{digest}"
 
 
 def format_capsule_text(capsule: MemoryCapsuleCandidate) -> str:
+    """把记忆胶囊格式化成第三方 SDK 可写入的文本。"""
+
     lines = [
         f"capsule_id: {capsule.capsule_id}",
         f"goal: {capsule.goal}",
@@ -48,6 +54,8 @@ def format_capsule_text(capsule: MemoryCapsuleCandidate) -> str:
 
 
 def build_capsule_metadata(capsule: MemoryCapsuleCandidate) -> dict[str, object]:
+    """把胶囊关键字段保存在第三方 SDK metadata 中。"""
+
     return {
         "capsule_id": capsule.capsule_id,
         "summary": capsule.summary,
@@ -74,6 +82,8 @@ def build_official_result(
     hits: list[dict[str, object]],
     latency_ms: float,
 ) -> RetrievalResult:
+    """把官方 SDK 检索结果转换成统一 RetrievalResult。"""
+
     lines = [summary_prefix]
     returned_capsule_ids: list[str] = []
     for hit in hits[:6]:

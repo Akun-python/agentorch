@@ -6,6 +6,8 @@ from ..domain.entities import GraphEdgeCandidate, MemoryCapsuleDetail, SearchHit
 
 
 class GraphStore(Protocol):
+    """图存储协议，Neo4j 和内存实现都遵守这组方法。"""
+
     def ensure_schema(self) -> None: ...
 
     def close(self) -> None: ...

@@ -8,6 +8,8 @@ from .zep_official import ZepOfficialAdapter
 
 
 class OfficialBaselineRegistry:
+    """管理已接入的官方 baseline adapter。"""
+
     def __init__(self, *, seed: int) -> None:
         self.seed = seed
         self._adapters = {
@@ -17,6 +19,8 @@ class OfficialBaselineRegistry:
         }
 
     def probe(self, method: str) -> OfficialBaselineProbe:
+        """检查某个官方 adapter 是否可用。"""
+
         adapter = self._adapters.get(method)
         if adapter is None:
             return OfficialBaselineProbe(enabled=False, ready=False, reason="该方法没有官方 adapter。")
@@ -30,6 +34,8 @@ class OfficialBaselineRegistry:
         variant: str,
         max_nodes: int,
     ) -> RetrievalResult | None:
+        """如果官方 adapter 可用则运行，否则回退给本地代理路径。"""
+
         adapter = self._adapters.get(method)
         if adapter is None:
             return None

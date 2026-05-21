@@ -9,12 +9,16 @@ from .base import OfficialBaselineProbe, build_capsule_metadata, build_official_
 
 
 class LangMemOfficialAdapter:
+    """LangMem 官方 memory store baseline adapter。"""
+
     method = "langmem_memory"
 
     def __init__(self, *, seed: int) -> None:
         self.seed = seed
 
     def probe(self) -> OfficialBaselineProbe:
+        """检查 OpenAI key 和 langmem/langgraph 依赖。"""
+
         api_key = _first_env("OPENAI_API_KEY", "API_KEY", "api_key")
         if not api_key:
             return OfficialBaselineProbe(enabled=False, ready=False, reason="LangMem 需要 OPENAI_API_KEY 或兼容别名。")
@@ -25,6 +29,8 @@ class LangMemOfficialAdapter:
         return OfficialBaselineProbe(enabled=True, ready=True)
 
     def run(self, case: ExperimentCase, *, variant: str, max_nodes: int) -> RetrievalResult:
+        """写入 InMemoryStore 后通过 LangMem search tool 检索。"""
+
         langmem_module, memory_module = self._load_sdk()
         namespace = ("memories", build_scope_id(case=case, method=self.method, seed=self.seed, prefix="ltmg-langmem"))
         store = memory_module.InMemoryStore(
@@ -59,18 +65,24 @@ class LangMemOfficialAdapter:
         )
 
     def _load_sdk(self):
+        """延迟导入 LangMem 和 LangGraph store。"""
+
         langmem_module = importlib.import_module("langmem")
         memory_module = importlib.import_module("langgraph.store.memory")
         return langmem_module, memory_module
 
 
 def _build_langmem_value(capsule) -> dict[str, object]:
+    """构造 LangMem store 的 value。"""
+
     payload = build_capsule_metadata(capsule)
     payload["content"] = format_capsule_text(capsule)
     return payload
 
 
 def _parse_langmem_hits(response) -> list[dict[str, object]]:
+    """解析 LangMem search tool 返回的 artifacts。"""
+
     artifacts = response[1] if isinstance(response, tuple) and len(response) > 1 else []
     rows: list[dict[str, object]] = []
     for item in artifacts or []:
@@ -89,6 +101,8 @@ def _parse_langmem_hits(response) -> list[dict[str, object]]:
 
 
 def _embedding_spec() -> str:
+    """解析 LangMem embedding 配置。"""
+
     embed_spec = (os.getenv("LANGMEM_EMBED_SPEC") or "").strip()
     if embed_spec:
         return embed_spec
@@ -97,6 +111,8 @@ def _embedding_spec() -> str:
 
 
 def _embedding_dimensions() -> int:
+    """解析 LangMem embedding 维度。"""
+
     raw = (os.getenv("LANGMEM_EMBEDDING_DIMENSIONS") or os.getenv("OPENAI_EMBEDDING_DIMENSIONS") or "1536").strip()
     try:
         return int(raw)
@@ -105,6 +121,8 @@ def _embedding_dimensions() -> int:
 
 
 def _first_env(*names: str) -> str:
+    """读取第一个非空环境变量。"""
+
     for name in names:
         value = (os.getenv(name) or "").strip()
         if value:

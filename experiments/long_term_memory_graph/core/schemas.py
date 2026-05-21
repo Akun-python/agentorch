@@ -6,8 +6,10 @@ from typing import Any
 
 from ..api.models import MemoryCapsuleCandidate
 
+# 问题类型对齐 LoCoMo / LongMemEval 风格的长期记忆问答切片。
 QUESTION_TYPES: tuple[str, ...] = ("Single-hop", "Multi-hop", "Temporal", "Open Domain")
 
+# 主方法代表本文机制，其他方法用于对比或消融。
 MAIN_METHOD = "clarks_nutcracker_graph"
 
 OFFICIAL_BASELINE_METHODS: tuple[str, ...] = (
@@ -136,11 +138,26 @@ EXTRA_CSV_FIELDS: tuple[str, ...] = (
     "detail_lookup_hit_count",
     "detail_lookup_missing_count",
     "relative_tokens",
+    "answer_total_tokens",
+    "answer_duration_ms",
+    "answer_finish_reason",
+    "judge_prompt_tokens",
+    "judge_completion_tokens",
+    "judge_total_tokens",
+    "judge_duration_ms",
+    "embedding_request_count",
+    "embedding_text_count",
+    "embedding_latency_ms",
 )
 
 
 @dataclass(frozen=True)
 class ExperimentCase:
+    """单条长期记忆实验样本。
+
+    capsues 是该样本的局部记忆图，target_* 字段用于自动计算命中率。
+    """
+
     case_id: str
     question_type: str
     query: str
@@ -162,6 +179,8 @@ class ExperimentCase:
 
 @dataclass(frozen=True)
 class ExperimentRunConfig:
+    """一轮实验套件的完整运行配置。"""
+
     suite: str
     methods: tuple[str, ...]
     output_dir: Path
@@ -196,6 +215,8 @@ class ExperimentRunConfig:
 
 @dataclass
 class RetrievalResult:
+    """某个记忆方法对单个 case 的召回结果。"""
+
     method: str
     variant: str
     prompt_summary: str
@@ -210,30 +231,45 @@ class RetrievalResult:
     detail_lookup_latency_ms: float = 0.0
     latency_breakdown: dict[str, float] = field(default_factory=dict)
     latency_ms: float = 0.0
+    embedding_request_count: int = 0
+    embedding_text_count: int = 0
+    embedding_latency_ms: float = 0.0
     source_boundary: str | None = None
     is_proxy: bool | None = None
 
 
 @dataclass
 class AgentAnswer:
+    """AgentTorch 生成答案后的可审计记录。"""
+
     answer: str
     input_tokens: int
     output_tokens: int
     agentorch_run_id: str
     thread_id: str
     finish_reason: str | None = None
+    total_tokens: int = 0
+    duration_ms: float = 0.0
 
 
 @dataclass
 class JudgeResult:
+    """裁判模型或确定性裁判给出的评分结果。"""
+
     score: float
     raw_output: dict[str, Any]
     model_backend: str | None = None
     model_name: str | None = None
+    duration_ms: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
 
 
 @dataclass
 class ExperimentRecord:
+    """写入 CSV/JSONL 的最小实验记录。"""
+
     suite: str
     case_id: str
     question_type: str
@@ -274,10 +310,22 @@ class ExperimentRecord:
     detail_lookup_hit_count: int
     detail_lookup_missing_count: int
     relative_tokens: float = 0.0
+    answer_total_tokens: int = 0
+    answer_duration_ms: float = 0.0
+    answer_finish_reason: str = ""
+    judge_prompt_tokens: int = 0
+    judge_completion_tokens: int = 0
+    judge_total_tokens: int = 0
+    judge_duration_ms: float = 0.0
+    embedding_request_count: int = 0
+    embedding_text_count: int = 0
+    embedding_latency_ms: float = 0.0
 
 
 @dataclass
 class ExperimentSuiteResult:
+    """实验套件返回给上层 runner 的内存结果。"""
+
     manifest: dict[str, Any]
     records: list[ExperimentRecord]
     aggregates: list[dict[str, Any]]

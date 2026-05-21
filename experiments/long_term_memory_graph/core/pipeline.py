@@ -11,6 +11,7 @@ from .datasets import load_cases
 from .efficiency import build_efficiency_payload, build_scale_tier_payload
 from .judge import ExperimentJudgeRunner, judge_answer, serialize_judge_raw
 from .methods import ExperimentMethodRunner
+from .progress import SuiteProgressContext
 from .resume import build_completed_key_set, load_existing_records
 from .schemas import (
     ABLATION_VARIANTS,
@@ -28,6 +29,8 @@ from .statistics import aggregate_records, attach_relative_tokens
 
 
 def run_suite(config: ExperimentRunConfig) -> ExperimentSuiteResult:
+    """运行主实验、对比实验或消融实验的统一管线。"""
+
     _validate_run_config(config)
     cases = load_cases(
         config.dataset_path,
@@ -77,13 +80,32 @@ def run_suite(config: ExperimentRunConfig) -> ExperimentSuiteResult:
     completed_keys = build_completed_key_set(existing_records)
     planned_record_count = len(cases) * len(config.methods) * config.runs
     records: list[ExperimentRecord] = list(existing_records)
+    # 进度日志和断点恢复共用同一组 record key，避免重复跑已完成样本。
+    progress = SuiteProgressContext(
+        suite=config.suite,
+        output_dir=config.output_dir,
+        total_steps=planned_record_count,
+        initial_done=len(existing_records),
+    )
     for run_round in range(1, config.runs + 1):
         for case in cases:
             for method in config.methods:
                 retrieval_method, variant = _resolve_method_and_variant(config.suite, method)
                 record_key = (case.case_id, retrieval_method, variant, run_round)
                 if record_key in completed_keys:
+                    progress.log_skip(
+                        run_round=run_round,
+                        case_id=case.case_id,
+                        method=retrieval_method,
+                        variant=variant,
+                    )
                     continue
+                progress.log_case_start(
+                    run_round=run_round,
+                    case_id=case.case_id,
+                    method=retrieval_method,
+                    variant=variant,
+                )
                 retrieval = method_runner.run(case, method=retrieval_method, variant=variant)
                 answer = agent_runner.answer(case=case, retrieval=retrieval, run_round=run_round)
                 judge = judge_answer(
@@ -105,6 +127,24 @@ def run_suite(config: ExperimentRunConfig) -> ExperimentSuiteResult:
                 )
                 records.append(record)
                 completed_keys.add(record_key)
+                progress.log_case_end(
+                    run_round=run_round,
+                    case_id=case.case_id,
+                    method=retrieval_method,
+                    variant=variant,
+                    judge_score=judge.score,
+                    latency_ms=retrieval.latency_ms,
+                    input_tokens=answer.input_tokens,
+                    output_tokens=answer.output_tokens,
+                    answer_total_tokens=answer.total_tokens,
+                    answer_duration_ms=answer.duration_ms,
+                    judge_total_tokens=judge.total_tokens,
+                    judge_duration_ms=judge.duration_ms,
+                    embedding_request_count=retrieval.embedding_request_count,
+                    embedding_text_count=retrieval.embedding_text_count,
+                    embedding_latency_ms=retrieval.embedding_latency_ms,
+                    latency_breakdown=retrieval.latency_breakdown,
+                )
 
     token_reference_method = _select_token_reference_method(config.suite, records)
     attach_relative_tokens(records, reference_method=token_reference_method)
@@ -182,6 +222,8 @@ def run_suite(config: ExperimentRunConfig) -> ExperimentSuiteResult:
             "latency_ms",
             "run_round",
         ],
+        "progress_log_path": str((config.output_dir / "run.log").resolve()),
+        "progress_jsonl_path": str((config.output_dir / "progress.jsonl").resolve()),
     }
     if config.protocol_metadata:
         manifest["protocol"] = config.protocol_metadata
@@ -205,10 +247,13 @@ def run_suite(config: ExperimentRunConfig) -> ExperimentSuiteResult:
         scale_tier_payload=scale_tier_payload,
     )
     manifest["artifact_paths"] = artifact_paths
+    progress.log_suite_end(record_count=len(records), aggregate_count=len(aggregates))
     return ExperimentSuiteResult(manifest=manifest, records=records, aggregates=aggregates)
 
 
 def _validate_run_config(config: ExperimentRunConfig) -> None:
+    """提前拒绝非法运行参数，保证后续产物语义一致。"""
+
     if config.runs <= 0:
         raise ValueError("runs must be > 0.")
     if config.case_limit is not None and config.case_limit <= 0:
@@ -237,6 +282,8 @@ def _validate_run_config(config: ExperimentRunConfig) -> None:
 
 
 def _select_token_reference_method(suite: str, records: list[ExperimentRecord]) -> str:
+    """选择相对 token 指标的基准方法。"""
+
     methods = {record.method for record in records}
     if suite == "comparison":
         if all(record.source_boundary == "proxy" for record in records):
@@ -252,12 +299,16 @@ def _select_token_reference_method(suite: str, records: list[ExperimentRecord]) 
 
 
 def _resolve_method_and_variant(suite: str, method: str) -> tuple[str, str]:
+    """消融实验把入参解释为 variant，其它实验直接解释为 method。"""
+
     if suite == "ablation":
         return "clarks_nutcracker_graph", method
     return method, "full"
 
 
 def _source_boundary_for_method(method: str) -> tuple[str, bool]:
+    """标记方法来源：本仓库真实实现、代理实现或仅文献定位。"""
+
     if method in CORE_LOCAL_BASELINE_METHODS or method == MAIN_METHOD:
         return ("core_local", False)
     if method in PROXY_EXTENSION_METHODS:
@@ -266,6 +317,8 @@ def _source_boundary_for_method(method: str) -> tuple[str, bool]:
 
 
 def _source_boundary_for_retrieval(retrieval) -> tuple[str, bool]:
+    """优先使用官方适配器返回的边界标记，否则按方法名推导。"""
+
     if retrieval.source_boundary:
         return (retrieval.source_boundary, bool(retrieval.is_proxy))
     return _source_boundary_for_method(retrieval.method)
@@ -282,12 +335,19 @@ def _build_record(
     judge_backend: str,
     run_round: int,
 ) -> ExperimentRecord:
+    """把召回、生成、裁判三段结果压平成一行实验记录。"""
+
+    try:
+        judge_raw_output_obj = json.loads(judge_raw_output)
+    except json.JSONDecodeError:
+        judge_raw_output_obj = {}
     returned_capsules = set(retrieval.returned_capsule_ids)
     target_capsules = set(case.target_capsule_ids)
     target_relations = set(case.target_relation_types)
     returned_relations = set(retrieval.returned_relation_types)
     stale_returned = returned_capsules.intersection(case.stale_capsule_ids)
     conflict_returned = returned_capsules.intersection(case.conflict_loser_ids)
+    # 这些派生指标服务论文表格，不参与运行控制逻辑。
     target_capsule_hit = bool(target_capsules) and target_capsules.issubset(returned_capsules)
     target_relation_hit = not target_relations or bool(target_relations.intersection(returned_relations))
     evidence_completeness = len(target_capsules.intersection(returned_capsules)) / max(1, len(target_capsules))
@@ -346,10 +406,22 @@ def _build_record(
         detail_lookup_latency_ms=round(retrieval.detail_lookup_latency_ms, 4),
         detail_lookup_hit_count=retrieval.detail_lookup_hit_count,
         detail_lookup_missing_count=retrieval.detail_lookup_missing_count,
+        answer_total_tokens=answer.total_tokens,
+        answer_duration_ms=round(answer.duration_ms, 4),
+        answer_finish_reason=answer.finish_reason or "",
+        judge_prompt_tokens=judge_raw_output_obj.get("judge_prompt_tokens", 0) if isinstance(judge_raw_output_obj, dict) else 0,
+        judge_completion_tokens=judge_raw_output_obj.get("judge_completion_tokens", 0) if isinstance(judge_raw_output_obj, dict) else 0,
+        judge_total_tokens=judge_raw_output_obj.get("judge_total_tokens", 0) if isinstance(judge_raw_output_obj, dict) else 0,
+        judge_duration_ms=round(judge_raw_output_obj.get("judge_duration_ms", 0.0), 4) if isinstance(judge_raw_output_obj, dict) else 0.0,
+        embedding_request_count=retrieval.embedding_request_count,
+        embedding_text_count=retrieval.embedding_text_count,
+        embedding_latency_ms=round(retrieval.embedding_latency_ms, 4),
     )
 
 
 def _build_manual_review_rows(records: list[ExperimentRecord], *, limit: int) -> list[dict[str, Any]]:
+    """抽取人工复核样本，方便检查裁判是否误判。"""
+
     rows = []
     for record in records[: max(0, limit)]:
         rows.append(
@@ -367,6 +439,8 @@ def _build_manual_review_rows(records: list[ExperimentRecord], *, limit: int) ->
 
 
 def _build_second_judge_rows(records: list[ExperimentRecord], *, limit: int) -> list[dict[str, Any]]:
+    """抽取二次裁判输入，避免把全部记录重复提交给大模型。"""
+
     rows = []
     for record in records[: max(0, limit)]:
         rows.append(
@@ -385,6 +459,8 @@ def _build_second_judge_rows(records: list[ExperimentRecord], *, limit: int) -> 
 
 
 def _build_parameter_sweep_rows(config: ExperimentRunConfig) -> list[dict[str, Any]]:
+    """把消融参数扫描配置展开成表格行。"""
+
     rows: list[dict[str, Any]] = []
     for name, values in (config.sweep_parameters or {}).items():
         for value in values:

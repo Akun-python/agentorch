@@ -22,6 +22,8 @@ class CapsulePromotionService:
         self.score_builder = score_builder or self._default_score_builder
 
     def promote_candidates(self, candidates: list[ExperienceCandidate]) -> PromotionReport:
+        """筛选并写入达到阈值的候选经验。"""
+
         if not candidates:
             return PromotionReport()
 
@@ -57,6 +59,8 @@ class CapsulePromotionService:
         )
 
     def _compose_total_score(self, scores: PromotionComponentScores) -> float:
+        """按配置权重合成晋升总分。"""
+
         return (
             self.config.promotion_val_weight * scores.val_score
             + self.config.promotion_reuse_weight * scores.reuse_score
@@ -66,6 +70,8 @@ class CapsulePromotionService:
         )
 
     def _default_score_builder(self, candidate: ExperienceCandidate) -> PromotionComponentScores:
+        """默认晋升评分由价值、复用、结果、泛化和噪声构成。"""
+
         return PromotionComponentScores(
             val_score=self._value_score(candidate),
             reuse_score=self._reuse_score(candidate),
@@ -75,6 +81,8 @@ class CapsulePromotionService:
         )
 
     def _value_score(self, candidate: ExperienceCandidate) -> float:
+        """评价经验是否有验证、证据和结构化主张支撑。"""
+
         status_boost = {
             "validated": 1.0,
             "active": 0.9,
@@ -86,23 +94,31 @@ class CapsulePromotionService:
         return round(min(1.0, 0.45 * status_boost + 0.35 * evidence_bonus + 0.20 * claim_bonus), 4)
 
     def _reuse_score(self, candidate: ExperienceCandidate) -> float:
+        """复用次数越多，越可能值得晋升。"""
+
         if candidate.reuse_count <= 0:
             return 0.0
         return round(min(1.0, candidate.reuse_count / 3.0), 4)
 
     def _outcome_score(self, candidate: ExperienceCandidate) -> float:
+        """判断 outcome 是否具备可执行结果。"""
+
         outcome_text = " ".join([candidate.summary, candidate.outcome]).lower()
         keyword_hits = sum(1 for item in self.config.promotion_result_keywords if item in outcome_text)
         has_outcome = 1.0 if candidate.outcome.strip() else 0.0
         return round(min(1.0, 0.6 * has_outcome + 0.15 * keyword_hits), 4)
 
     def _generalization_score(self, candidate: ExperienceCandidate) -> float:
+        """估计经验跨任务复用的可能性。"""
+
         scope_span = min(1.0, len(set(candidate.knowledge_scope)) / 3.0)
         tag_span = min(1.0, len(set(candidate.tags)) / 4.0)
         family_bonus = 0.5 if candidate.task_family else 0.0
         return round(min(1.0, 0.4 * scope_span + 0.3 * tag_span + 0.3 * family_bonus), 4)
 
     def _noise_score(self, candidate: ExperienceCandidate) -> float:
+        """低置信、空摘要、缺证据都会增加噪声惩罚。"""
+
         empty_summary_penalty = 0.5 if not candidate.summary.strip() else 0.0
         low_confidence_penalty = max(0.0, 1.0 - float(candidate.confidence))
         missing_evidence_penalty = 0.35 if not candidate.evidence_refs else 0.0
@@ -115,6 +131,8 @@ class CapsulePromotionService:
         scores: PromotionComponentScores,
         promoted: bool,
     ) -> list[str]:
+        """生成中文晋升/跳过原因，便于用户直接阅读。"""
+
         reasons: list[str] = []
         if scores.val_score >= 0.7:
             reasons.append("证据与验证信号较强")

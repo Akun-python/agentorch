@@ -6,7 +6,7 @@ from ..api.models import CapsuleDetailResponse, RecallResponse
 
 
 class AgentOrchBridge:
-    """Convert graph recall results into AgentOrch evidence objects."""
+    """把图谱召回结果转换为 AgentTorch 证据对象。"""
 
     def to_retrieved_evidence(
         self,
@@ -14,6 +14,8 @@ class AgentOrchBridge:
         *,
         details: CapsuleDetailResponse | None = None,
     ) -> list[RetrievedEvidence]:
+        """转换成 RetrievedEvidence 列表，供 AgentTorch 证据链使用。"""
+
         detail_map = {item.capsule_id: item for item in (details.details if details is not None else [])}
         evidence: list[RetrievedEvidence] = []
         for entry in response.node_index:
@@ -67,6 +69,8 @@ class AgentOrchBridge:
         *,
         details: CapsuleDetailResponse | None = None,
     ) -> list[Citation]:
+        """只取 citation，供需要轻量引用的调用方使用。"""
+
         return [item.citation for item in self.to_retrieved_evidence(response, details=details)]
 
     def to_retrieval_report(
@@ -75,6 +79,8 @@ class AgentOrchBridge:
         *,
         details: CapsuleDetailResponse | None = None,
     ) -> RetrievalReport:
+        """转换成完整 RetrievalReport，保留边、风险和访问来源。"""
+
         evidence = self.to_retrieved_evidence(response, details=details)
         return RetrievalReport(
             summary=response.prompt_summary,

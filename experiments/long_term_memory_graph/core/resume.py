@@ -16,6 +16,8 @@ def load_existing_records(
     allowed_case_ids: set[str],
     max_run_round: int,
 ) -> list[ExperimentRecord]:
+    """读取已有 runs.jsonl，用于断点恢复。"""
+
     manifest_path = output_dir / "manifest.json"
     if manifest_path.exists():
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -50,8 +52,12 @@ def load_existing_records(
 
 
 def build_completed_record_key(record: ExperimentRecord) -> CompletedRecordKey:
+    """生成去重键：case、method、variant、run_round。"""
+
     return (record.case_id, record.method, record.variant, record.run_round)
 
 
 def build_completed_key_set(records: list[ExperimentRecord]) -> set[CompletedRecordKey]:
+    """把历史记录转成快速查询集合。"""
+
     return {build_completed_record_key(record) for record in records}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from time import perf_counter
 from typing import Any
 
 from agentorch import Agent, Runtime
@@ -27,6 +28,8 @@ JUDGE_PROMPT = """\
 
 
 class ExperimentJudgeRunner:
+    """实验裁判运行器，支持确定性裁判和真实模型裁判。"""
+
     def __init__(
         self,
         *,
@@ -59,6 +62,8 @@ class ExperimentJudgeRunner:
         self.model_name = model_config.model
 
     def _make_agent(self) -> Agent:
+        """构造裁判模型使用的 AgentTorch Agent。"""
+
         if self._model_config is None:
             raise ValueError("model_judge requires a resolved judge model config.")
         runtime = Runtime.create(model=create_model_adapter(self._model_config), skills=[])
@@ -71,6 +76,8 @@ class ExperimentJudgeRunner:
         retrieval: RetrievalResult,
         answer: AgentAnswer,
     ) -> JudgeResult:
+        """按配置选择模型裁判或确定性裁判。"""
+
         if self.judge_backend == "model_judge":
             return self._evaluate_with_model(case=case, retrieval=retrieval, answer=answer)
         return _deterministic_judge(case=case, retrieval=retrieval, answer=answer, judge_backend=self.judge_backend)
@@ -82,6 +89,8 @@ class ExperimentJudgeRunner:
         retrieval: RetrievalResult,
         answer: AgentAnswer,
     ) -> JudgeResult:
+        """调用真实裁判模型，并把 token/耗时写入原始输出。"""
+
         payload = {
             "query": case.query,
             "question_type": case.question_type,
@@ -97,11 +106,13 @@ class ExperimentJudgeRunner:
             "suppressed_conflict_nodes": retrieval.suppressed_conflict_nodes,
         }
         prompt = JUDGE_PROMPT + "\n\nJUDGE_PAYLOAD_JSON=" + json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        start = perf_counter()
         result = self._make_agent().run_sync(
             prompt,
             thread_id=f"judge-{case.case_id}-{retrieval.method}",
             metadata={"suite": "long_term_memory_graph", "role": "judge", "case_id": case.case_id},
         )
+        duration_ms = (perf_counter() - start) * 1000
         raw = _parse_judge_json(result.output_text)
         score = 1.0 if float(raw.get("score", 0.0)) >= 0.5 else 0.0
         raw["judge_backend"] = self.judge_backend
@@ -109,11 +120,19 @@ class ExperimentJudgeRunner:
         raw["judge_model_name"] = self.model_name
         raw["judge_output_text"] = result.output_text
         raw["judge_token_estimate"] = estimate_tokens(result.output_text)
+        raw["judge_prompt_tokens"] = result.usage.prompt_tokens
+        raw["judge_completion_tokens"] = result.usage.completion_tokens
+        raw["judge_total_tokens"] = result.usage.total_tokens
+        raw["judge_duration_ms"] = duration_ms
         return JudgeResult(
             score=score,
             raw_output=raw,
             model_backend=self.model_backend,
             model_name=self.model_name,
+            duration_ms=duration_ms,
+            prompt_tokens=result.usage.prompt_tokens,
+            completion_tokens=result.usage.completion_tokens,
+            total_tokens=result.usage.total_tokens,
         )
 
 
@@ -125,6 +144,8 @@ def judge_answer(
     judge_backend: str,
     judge_runner: ExperimentJudgeRunner | None = None,
 ) -> JudgeResult:
+    """统一裁判入口，供 pipeline 调用。"""
+
     if judge_backend == "model_judge":
         if judge_runner is None:
             raise ValueError("model_judge requires a configured judge_runner.")
@@ -139,6 +160,8 @@ def _deterministic_judge(
     answer: AgentAnswer,
     judge_backend: str,
 ) -> JudgeResult:
+    """确定性评分器：用于 smoke test 和字段验证，不替代正式人工/模型评测。"""
+
     returned_capsules = set(retrieval.returned_capsule_ids)
     returned_relations = set(retrieval.returned_relation_types)
     target_capsules = set(case.target_capsule_ids)
@@ -165,6 +188,8 @@ def _deterministic_judge(
 
 
 def _parse_judge_json(text: str) -> dict[str, Any]:
+    """从裁判输出中尽量解析 JSON，失败时返回零分结构。"""
+
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -185,4 +210,6 @@ def _parse_judge_json(text: str) -> dict[str, Any]:
 
 
 def serialize_judge_raw(result: JudgeResult) -> str:
+    """把裁判原始信息稳定序列化进 CSV/JSONL。"""
+
     return json.dumps(result.raw_output, ensure_ascii=False, sort_keys=True)

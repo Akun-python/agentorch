@@ -1,4 +1,8 @@
-"""Stable public entrypoint for the long-term memory graph experiment module."""
+"""长期记忆图谱实验包的稳定公开入口。
+
+本文件只汇总外部可直接引用的配置、数据模型、插件与实验常量，
+不要在这里堆业务逻辑，避免入口层越来越重。
+"""
 
 from .api import (
     BackfillReport,

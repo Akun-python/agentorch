@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 if __package__ in {None, ""}:
+    # 兼容直接运行本文件的情况。
     project_root = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(project_root))
     from experiments.long_term_memory_graph.core import (
@@ -53,6 +54,8 @@ def run_comparison_experiment(
     load_env: bool = True,
     overwrite_env: bool = False,
 ) -> dict[str, object]:
+    """运行 E2 强基线对比实验。"""
+
     selected_methods = _resolve_methods(
         methods,
         include_official_baselines=include_official_baselines,
@@ -88,6 +91,8 @@ def run_comparison_experiment(
 
 
 def build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """注册 compare 子命令。"""
+
     parser = subparsers.add_parser(
         "compare",
         help="运行 E2：默认跑本地核心基线；可按需加入官方 baseline 或 proxy 扩展。",
@@ -100,6 +105,8 @@ def build_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
 
 
 def run_from_args(args: argparse.Namespace) -> dict[str, object]:
+    """把 argparse 参数转成对比实验函数调用。"""
+
     methods = tuple(item.strip() for item in args.methods.split(",") if item.strip())
     return run_comparison_experiment(
         output_dir=args.output_dir,
@@ -128,6 +135,8 @@ def run_from_args(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _add_common_args(parser: argparse.ArgumentParser, *, default_output: str) -> None:
+    """对比实验通用 CLI 参数。"""
+
     parser.add_argument("--output-dir", default=default_output)
     parser.add_argument("--case-limit", type=int, default=None)
     parser.add_argument("--case-offset", type=int, default=0)
@@ -155,6 +164,8 @@ def _resolve_methods(
     include_official_baselines: bool,
     include_proxy_extension: bool,
 ) -> tuple[str, ...]:
+    """根据开关扩展用户选择的方法列表并去重保序。"""
+
     selected = list(methods)
     if include_official_baselines:
         selected.extend(OFFICIAL_BASELINE_METHODS)
@@ -164,6 +175,8 @@ def _resolve_methods(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """支持 `python runner.py` 直接运行。"""
+
     parser = argparse.ArgumentParser(description="直接运行 E2 强基线对比实验。")
     parser.add_argument("--methods", default=",".join(CORE_LOCAL_BASELINE_METHODS))
     parser.add_argument("--include-official-baselines", action="store_true")

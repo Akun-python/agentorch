@@ -10,12 +10,16 @@ from ..domain.utils import now_utc, to_iso8601
 
 
 def _load_graph_database() -> Any:
+    """延迟导入 Neo4j 驱动，避免无依赖环境无法导入包。"""
+
     from neo4j import GraphDatabase
 
     return GraphDatabase
 
 
 class Neo4jGraphStore:
+    """Neo4j 图存储实现。"""
+
     NODE_LABEL = "MemoryCapsule"
 
     def __init__(self, config: GraphMemoryConfig) -> None:
@@ -30,9 +34,13 @@ class Neo4jGraphStore:
         self._session_kwargs = self._build_session_kwargs()
 
     def close(self) -> None:
+        """关闭 Neo4j driver。"""
+
         self._driver.close()
 
     def _build_session_kwargs(self) -> dict[str, Any]:
+        """兼容 Neo4j 3.x/4.x+ 的 database 参数差异。"""
+
         database = (self.config.neo4j_database or "").strip()
         if not database:
             return {}
@@ -46,10 +54,14 @@ class Neo4jGraphStore:
 
     @contextmanager
     def _session(self) -> Any:
+        """统一创建 Neo4j session。"""
+
         with self._driver.session(**self._session_kwargs) as session:
             yield session
 
     def ensure_schema(self) -> None:
+        """创建唯一约束、全文索引、向量索引和常用字段索引。"""
+
         statements = [
             f"CREATE CONSTRAINT memory_capsule_id_unique IF NOT EXISTS FOR (n:{self.NODE_LABEL}) REQUIRE n.capsule_id IS UNIQUE",
             (
@@ -78,6 +90,8 @@ class Neo4jGraphStore:
         summary_embedding: list[float] | None,
         scene_hash: str,
     ) -> MemoryCapsuleDetail:
+        """用 capsule_id 做幂等写入，保留已有 reuse_count。"""
+
         props: dict[str, Any] = {
             "agent_id": capsule.agent_id,
             "run_id": capsule.run_id,
@@ -115,6 +129,8 @@ class Neo4jGraphStore:
         return self._hydrate_node(record["node"])
 
     def fetch_temporal_neighbors(self, capsule: MemoryCapsuleDetail) -> tuple[MemoryCapsuleDetail | None, MemoryCapsuleDetail | None]:
+        """查同一线程族内相邻时间节点。"""
+
         if not capsule.thread_family:
             return None, None
         previous_query = (
@@ -141,6 +157,8 @@ class Neo4jGraphStore:
         )
 
     def fetch_rule_neighbors(self, capsule: MemoryCapsuleDetail, *, limit: int) -> list[MemoryCapsuleDetail]:
+        """查能触发规则建边的候选邻居。"""
+
         query = (
             f"MATCH (n:{self.NODE_LABEL}) "
             "WHERE n.capsule_id <> $capsule_id AND ("
@@ -170,6 +188,8 @@ class Neo4jGraphStore:
         return [self._hydrate_node(item["node"]) for item in rows]
 
     def upsert_edges(self, edges: list[GraphEdgeCandidate]) -> None:
+        """按关系类型分批写边，避免动态关系类型被参数化失败。"""
+
         relation_types = {item.relation_type for item in edges}
         invalid = relation_types.difference(self.config.relation_types)
         if invalid:
@@ -203,6 +223,8 @@ class Neo4jGraphStore:
                 session.run(query, rows=batch).consume()
 
     def query_vector(self, embedding: list[float], *, limit: int) -> list[SearchHit]:
+        """通过 Neo4j 向量索引做语义召回。"""
+
         query = (
             "CALL db.index.vector.queryNodes($index_name, $limit, $embedding) "
             "YIELD node, score "
@@ -218,6 +240,8 @@ class Neo4jGraphStore:
         return [SearchHit(node=self._hydrate_node(item["node"]), score=float(item["score"])) for item in rows]
 
     def query_fulltext(self, query_text: str, *, limit: int) -> list[SearchHit]:
+        """通过 Neo4j 全文索引做词法召回。"""
+
         query = (
             "CALL db.index.fulltext.queryNodes($index_name, $query_text, {limit: $limit}) "
             "YIELD node, score "
@@ -233,6 +257,8 @@ class Neo4jGraphStore:
         return [SearchHit(node=self._hydrate_node(item["node"]), score=float(item["score"])) for item in rows]
 
     def fetch_conflict_counts(self, capsule_ids: list[str]) -> dict[str, int]:
+        """统计候选节点的冲突关系数量。"""
+
         if not capsule_ids:
             return {}
         query = (
@@ -246,6 +272,8 @@ class Neo4jGraphStore:
         return {item["capsule_id"]: int(item["conflict_count"]) for item in rows}
 
     def fetch_capsules(self, capsule_ids: list[str]) -> list[MemoryCapsuleDetail]:
+        """按输入 ID 顺序返回已存在节点。"""
+
         if not capsule_ids:
             return []
         query = (
@@ -259,6 +287,8 @@ class Neo4jGraphStore:
         return [by_id[capsule_id] for capsule_id in capsule_ids if capsule_id in by_id]
 
     def fetch_one_hop_subgraph(self, seed_ids: list[str], *, edge_limit: int) -> tuple[list[MemoryCapsuleDetail], list[SubgraphEdge]]:
+        """围绕种子节点取一跳邻居和边。"""
+
         if not seed_ids:
             return [], []
         seed_nodes = {item.capsule_id: item for item in self.fetch_capsules(seed_ids)}
@@ -306,6 +336,8 @@ class Neo4jGraphStore:
         return list(nodes.values()), edges
 
     def mark_recalled(self, capsule_ids: list[str]) -> None:
+        """记录召回次数，用于后续复用加权。"""
+
         if not capsule_ids:
             return
         query = (
@@ -318,6 +350,8 @@ class Neo4jGraphStore:
             session.run(query, capsule_ids=capsule_ids, timestamp=to_iso8601(now_utc())).consume()
 
     def _hydrate_node(self, props: dict[str, Any]) -> MemoryCapsuleDetail:
+        """把 Neo4j properties 转回领域模型。"""
+
         claims = props.get("claims")
         if isinstance(claims, str):
             try:

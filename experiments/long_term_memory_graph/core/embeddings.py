@@ -14,9 +14,13 @@ class DeterministicEmbeddingProvider(EmbeddingProvider):
         self.salt = salt
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        """批量返回确定性向量。"""
+
         return [self.embed_one(text) for text in texts]
 
     def embed_one(self, text: str) -> list[float]:
+        """用哈希桶构造归一化词袋向量。"""
+
         vector = [0.0] * self.dimensions
         tokens = [token for token in text.lower().replace("_", " ").split() if token]
         if not tokens:

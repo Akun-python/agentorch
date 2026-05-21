@@ -10,12 +10,16 @@ from .base import OfficialBaselineProbe, build_capsule_metadata, build_official_
 
 
 class Mem0OfficialAdapter:
+    """Mem0 官方 SDK baseline adapter。"""
+
     method = "mem0_memory"
 
     def __init__(self, *, seed: int) -> None:
         self.seed = seed
 
     def probe(self) -> OfficialBaselineProbe:
+        """检查 MEM0_API_KEY 和 mem0ai SDK 是否可用。"""
+
         api_key = (os.getenv("MEM0_API_KEY") or "").strip()
         if not api_key:
             return OfficialBaselineProbe(enabled=False, ready=False, reason="MEM0_API_KEY 未配置。")
@@ -26,6 +30,8 @@ class Mem0OfficialAdapter:
         return OfficialBaselineProbe(enabled=True, ready=True)
 
     def run(self, case: ExperimentCase, *, variant: str, max_nodes: int) -> RetrievalResult:
+        """写入 case 胶囊后调用 Mem0 search。"""
+
         mem0_module, types_module = self._load_sdk()
         client = mem0_module.MemoryClient(
             api_key=(os.getenv("MEM0_API_KEY") or "").strip(),
@@ -71,12 +77,16 @@ class Mem0OfficialAdapter:
         )
 
     def _load_sdk(self):
+        """延迟导入 mem0 SDK。"""
+
         mem0_module = importlib.import_module("mem0")
         types_module = importlib.import_module("mem0.client.types")
         return mem0_module, types_module
 
 
 def _parse_mem0_hits(response: dict[str, Any]) -> list[dict[str, object]]:
+    """解析 Mem0 search 返回的命中列表。"""
+
     rows: list[dict[str, object]] = []
     for item in response.get("results", []) or []:
         metadata = item.get("metadata") or {}

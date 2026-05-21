@@ -1,4 +1,4 @@
-"""CLI utilities for the long-term memory graph paper experiments."""
+"""长期记忆图谱论文实验的 CLI 工具入口。"""
 
 from .cli import main
 

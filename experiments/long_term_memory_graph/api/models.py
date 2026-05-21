@@ -18,6 +18,8 @@ from ..domain.utils import (
 
 
 class ClaimSlot(BaseModel):
+    """记忆中的一个结构化主张槽位。"""
+
     slot: str
     value: str
     polarity: str = "positive"
@@ -36,6 +38,11 @@ class ClaimSlot(BaseModel):
 
 
 class ExperienceCandidate(BaseModel):
+    """待晋升的短期经验。
+
+    该模型贴近运行日志或短期记忆输入，后续可转换成 MemoryCapsuleCandidate。
+    """
+
     experience_id: str
     agent_id: str | None = None
     run_id: str | None = None
@@ -95,6 +102,8 @@ class ExperienceCandidate(BaseModel):
 
     @model_validator(mode="after")
     def _fill_derived_fields(self) -> "ExperienceCandidate":
+        """补齐可由线程或任务推导出的归属字段。"""
+
         self.agent_id = infer_agent_id(self.thread_id, self.agent_id)
         self.thread_family = self.thread_family or derive_thread_family(self.thread_id)
         self.task_family = self.task_family or derive_task_family(self.task_id)
@@ -105,6 +114,8 @@ class ExperienceCandidate(BaseModel):
         return self.goal or self.summary or self.experience_id
 
     def to_memory_capsule(self, *, capsule_id: str | None = None) -> "MemoryCapsuleCandidate":
+        """将短期经验转换为可入图的长期记忆胶囊。"""
+
         return MemoryCapsuleCandidate(
             capsule_id=capsule_id or self.experience_id,
             agent_id=self.agent_id,
@@ -130,6 +141,8 @@ class ExperienceCandidate(BaseModel):
 
 
 class MemoryCapsuleCandidate(BaseModel):
+    """可写入长期记忆图谱的记忆胶囊。"""
+
     capsule_id: str
     agent_id: str | None = None
     run_id: str | None = None
@@ -198,6 +211,8 @@ class MemoryCapsuleCandidate(BaseModel):
         return self.goal or self.summary or self.capsule_id
 
     def scene_payload(self) -> dict[str, Any]:
+        """提取用于场景哈希和场景匹配的稳定字段。"""
+
         return {
             "goal": self.goal.lower(),
             "knowledge_scope": self.knowledge_scope,
@@ -212,6 +227,8 @@ class MemoryCapsuleCandidate(BaseModel):
 
 
 class PromotionComponentScores(BaseModel):
+    """经验晋升评分的分项结果。"""
+
     val_score: float = 0.0
     reuse_score: float = 0.0
     out_score: float = 0.0
@@ -220,6 +237,8 @@ class PromotionComponentScores(BaseModel):
 
 
 class PromotionDecision(BaseModel):
+    """单条经验是否晋升为长期记忆的决策记录。"""
+
     experience_id: str
     promoted: bool
     total_score: float
@@ -230,6 +249,8 @@ class PromotionDecision(BaseModel):
 
 
 class PromotionReport(BaseModel):
+    """一批经验晋升后的统计报告。"""
+
     total_candidates: int = 0
     promoted_count: int = 0
     skipped_count: int = 0
@@ -238,6 +259,8 @@ class PromotionReport(BaseModel):
 
 
 class RecallRequest(BaseModel):
+    """长期记忆召回请求。"""
+
     query: str
     agent_id: str | None = None
     thread_id: str | None = None
@@ -272,6 +295,8 @@ class RecallRequest(BaseModel):
         return self
 
     def scene_payload(self) -> dict[str, Any]:
+        """召回请求侧的场景描述，用于和记忆胶囊做匹配。"""
+
         return {
             "thread_family": self.thread_family,
             "task_family": self.task_family,
@@ -282,6 +307,8 @@ class RecallRequest(BaseModel):
 
 
 class NodeIndexEntry(BaseModel):
+    """给生成提示词使用的节点索引项。"""
+
     index: str
     capsule_id: str
     title: str
@@ -290,6 +317,8 @@ class NodeIndexEntry(BaseModel):
 
 
 class GraphEdgeView(BaseModel):
+    """给生成提示词使用的图关系视图。"""
+
     source_index: str
     relation_type: str
     target_index: str
@@ -297,6 +326,8 @@ class GraphEdgeView(BaseModel):
 
 
 class RecallRetrievalReport(BaseModel):
+    """召回过程的可审计信息。"""
+
     candidate_count: int = 0
     expansion_hops: int = 1
     suppressed_stale_nodes: list[str] = Field(default_factory=list)
@@ -308,6 +339,8 @@ class RecallRetrievalReport(BaseModel):
 
 
 class RecallResponse(BaseModel):
+    """召回服务返回给 Agent 的提示词摘要和图证据。"""
+
     prompt_summary: str
     node_index: list[NodeIndexEntry] = Field(default_factory=list)
     edges: list[GraphEdgeView] = Field(default_factory=list)
@@ -315,11 +348,15 @@ class RecallResponse(BaseModel):
 
 
 class CapsuleDetailResponse(BaseModel):
+    """按胶囊 ID 查询详情的返回结果。"""
+
     details: list["MemoryCapsuleDetail"] = Field(default_factory=list)
     missing_capsule_ids: list[str] = Field(default_factory=list)
 
 
 class BackfillReport(BaseModel):
+    """从历史 SQLite 记忆库回填后的导入报告。"""
+
     source_path: str
     total_records: int = 0
     imported_capsules: int = 0

@@ -9,6 +9,8 @@ from .schemas import ExperimentRecord, QUESTION_TYPES
 
 
 def attach_relative_tokens(records: list[ExperimentRecord], *, reference_method: str = "no_long_term_memory") -> None:
+    """给每条记录补相对 token 消耗。"""
+
     by_method: dict[str, list[int]] = defaultdict(list)
     for record in records:
         by_method[record.method].append(record.input_tokens)
@@ -29,6 +31,8 @@ def aggregate_records(
     bootstrap_samples: int = 300,
     full_variant_reference: str = "full",
 ) -> list[dict[str, Any]]:
+    """按方法、variant、问题类型聚合实验指标。"""
+
     groups: dict[tuple[str, str, str], list[ExperimentRecord]] = defaultdict(list)
     for record in records:
         groups[(record.method, record.variant, record.question_type)].append(record)
@@ -93,6 +97,8 @@ def aggregate_records(
 
 
 def _bootstrap_ci(values: list[float], *, samples: int, multiplier: float = 1.0) -> tuple[float, float]:
+    """固定随机种子的 bootstrap 置信区间。"""
+
     if not values:
         return (0.0, 0.0)
     if len(values) == 1:
@@ -110,6 +116,8 @@ def _bootstrap_ci(values: list[float], *, samples: int, multiplier: float = 1.0)
 
 
 def _percentile(values: list[float], pct: int) -> float:
+    """百分位工具函数。"""
+
     if not values:
         return 0.0
     ordered = sorted(values)

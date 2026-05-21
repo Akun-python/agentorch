@@ -1,4 +1,4 @@
-"""Shared experiment utilities for the long-term memory graph paper protocol."""
+"""长期记忆图谱论文实验的共享工具入口。"""
 
 from .datasets import build_default_cases, load_cases
 from .pipeline import run_suite
