@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from tqdm.auto import tqdm
+
 from ..core.llm_extraction import LLMStructuredMemoryExtractor, StructuredMemoryExtraction
 
 
@@ -265,6 +267,27 @@ def _build_case(
     }
 
 
+def _estimate_total_cases(data: list[dict[str, Any]], *, include_abstention: bool, limit: int | None) -> int:
+    """预估将要写出的 case 数，用于 tqdm 总量。"""
+
+    total = 0
+    for item in data:
+        question_id = _normalize_text(item.get("question_id"))
+        raw_question_type = _normalize_text(item.get("question_type"))
+        mapped_type = _map_question_type(raw_question_type, question_id)
+        if mapped_type is None:
+            continue
+        if question_id.endswith("_abs") and not include_abstention:
+            continue
+        answer_session_ids = [str(value) for value in item.get("answer_session_ids", [])]
+        if not answer_session_ids and not include_abstention:
+            continue
+        total += 1
+        if limit is not None and total >= limit:
+            break
+    return total
+
+
 def main() -> int:
     """执行转换并输出转换摘要。"""
 
@@ -288,25 +311,31 @@ def main() -> int:
     skipped_abstention = 0
     skipped_unsupported = 0
     extract_events: list[dict[str, Any]] = []
-
-    for item in data:
-        row = _build_case(
-            item,
-            include_abstention=args.include_abstention,
-            extractor=extractor,
-            extract_events=extract_events,
-        )
-        if row is None:
+    total_cases = _estimate_total_cases(data, include_abstention=args.include_abstention, limit=args.limit)
+    progress = tqdm(total=total_cases, desc="convert_longmemeval_oracle", unit="case", dynamic_ncols=True)
+    try:
+        for item in data:
             question_id = _normalize_text(item.get("question_id"))
-            raw_question_type = _normalize_text(item.get("question_type"))
-            if question_id.endswith("_abs") and not args.include_abstention:
-                skipped_abstention += 1
-            else:
-                skipped_unsupported += 1
-            continue
-        rows.append(row)
-        if args.limit is not None and len(rows) >= args.limit:
-            break
+            progress.set_postfix_str(question_id or "unknown")
+            row = _build_case(
+                item,
+                include_abstention=args.include_abstention,
+                extractor=extractor,
+                extract_events=extract_events,
+            )
+            if row is None:
+                raw_question_type = _normalize_text(item.get("question_type"))
+                if question_id.endswith("_abs") and not args.include_abstention:
+                    skipped_abstention += 1
+                else:
+                    skipped_unsupported += 1
+                continue
+            rows.append(row)
+            progress.update(1)
+            if args.limit is not None and len(rows) >= args.limit:
+                break
+    finally:
+        progress.close()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8", newline="\n") as handle:
