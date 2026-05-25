@@ -121,10 +121,7 @@ class LLMStructuredMemoryExtractor:
         )
         start = perf_counter()
         adapter = create_model_adapter(self._model_config)
-        try:
-            response = _run_model(adapter, request)
-        finally:
-            _close_model_adapter(adapter)
+        response = _run_model(adapter, request)
         duration_ms = (perf_counter() - start) * 1000
         metrics = StructuredExtractionMetrics(
             prompt_tokens=response.usage.prompt_tokens,
@@ -171,21 +168,25 @@ class LLMStructuredMemoryExtractor:
 
 
 def _run_model(adapter, request: ModelRequest):
-    """同步运行异步模型接口，保持转换脚本调用简单。"""
+    """在同一个事件循环里完成生成与关闭，避免跨 loop 清理客户端。"""
 
     from ..domain.utils import run_async
 
-    return run_async(adapter.generate(request))
+    async def _generate_and_close():
+        try:
+            return await adapter.generate(request)
+        finally:
+            await _aclose_model_adapter(adapter)
+
+    return run_async(_generate_and_close())
 
 
-def _close_model_adapter(adapter) -> None:
+async def _aclose_model_adapter(adapter) -> None:
     """优先关闭真实后端的异步 HTTP 客户端。"""
-
-    from ..domain.utils import run_async
 
     async_close = getattr(adapter, "aclose", None)
     if callable(async_close):
-        run_async(async_close())
+        await async_close()
         return
     close_fn = getattr(adapter, "close", None)
     if callable(close_fn):
