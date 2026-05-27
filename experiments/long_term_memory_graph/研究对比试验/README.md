@@ -30,6 +30,14 @@
 
 当前未接入官方实现的方法以 AgentTorch 受控 proxy adapter 表示，目的是先跑通同构实验协议和产物格式。正式投稿结果必须替换为官方实现、复现实验脚本，或在论文中明确标注为 proxy。
 
+论文模式请显式开启 `--paper-mode --strict-official-baselines --token-reference-method mem0_memory`。该模式会把主结论方法集固定为 `langmem_memory, mem0_memory, zep_memory, clarks_nutcracker_graph`，并要求：
+
+- 主模型与 judge 都走真实 API 后端
+- `runs >= 3`
+- 官方 baseline 不允许回退到 proxy
+- 数据必须覆盖 `Single-hop / Multi-hop / Temporal / Open Domain`
+- token 基线必须与命令行显式指定一致
+
 只加入官方 baseline 的示例：
 
 ```powershell

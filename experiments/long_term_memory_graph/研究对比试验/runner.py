@@ -14,6 +14,7 @@ if __package__ in {None, ""}:
         CORE_LOCAL_BASELINE_METHODS,
         NON_OFFICIAL_PROXY_EXTENSION_METHODS,
         OFFICIAL_BASELINE_METHODS,
+        PAPER_COMPARISON_METHODS,
         ExperimentRunConfig,
         run_suite,
     )
@@ -23,6 +24,7 @@ else:
         CORE_LOCAL_BASELINE_METHODS,
         NON_OFFICIAL_PROXY_EXTENSION_METHODS,
         OFFICIAL_BASELINE_METHODS,
+        PAPER_COMPARISON_METHODS,
         ExperimentRunConfig,
         run_suite,
     )
@@ -53,6 +55,9 @@ def run_comparison_experiment(
     env_file: str | Path | None = ".env",
     load_env: bool = True,
     overwrite_env: bool = False,
+    paper_mode: bool = False,
+    strict_official_baselines: bool = False,
+    required_token_reference_method: str | None = None,
 ) -> dict[str, object]:
     """运行 E2 强基线对比实验。"""
 
@@ -60,6 +65,7 @@ def run_comparison_experiment(
         methods,
         include_official_baselines=include_official_baselines,
         include_proxy_extension=include_proxy_extension,
+        paper_mode=paper_mode,
     )
     result = run_suite(
         ExperimentRunConfig(
@@ -85,6 +91,9 @@ def run_comparison_experiment(
             load_env=load_env,
             overwrite_env=overwrite_env,
             protocol_metadata=build_comparison_protocol_metadata(selected_methods),
+            paper_mode=paper_mode,
+            strict_official_baselines=strict_official_baselines,
+            required_token_reference_method=required_token_reference_method,
         )
     )
     return result.manifest
@@ -131,6 +140,9 @@ def run_from_args(args: argparse.Namespace) -> dict[str, object]:
         env_file=args.env_file,
         load_env=not args.no_env_file,
         overwrite_env=args.overwrite_env,
+        paper_mode=args.paper_mode,
+        strict_official_baselines=args.strict_official_baselines,
+        required_token_reference_method=args.token_reference_method,
     )
 
 
@@ -138,6 +150,9 @@ def _add_common_args(parser: argparse.ArgumentParser, *, default_output: str) ->
     """对比实验通用 CLI 参数。"""
 
     parser.add_argument("--output-dir", default=default_output)
+    parser.add_argument("--paper-mode", action="store_true", help="启用论文模式：固定官方强基线集合，并收紧运行约束。")
+    parser.add_argument("--strict-official-baselines", action="store_true", help="官方 baseline 不可用时直接失败，禁止回退到 proxy。")
+    parser.add_argument("--token-reference-method", default=None, help="显式指定相对 token 基线；论文模式下建议传 mem0_memory。")
     parser.add_argument("--case-limit", type=int, default=None)
     parser.add_argument("--case-offset", type=int, default=0)
     parser.add_argument("--shard-id", type=int, default=None)
@@ -163,9 +178,12 @@ def _resolve_methods(
     *,
     include_official_baselines: bool,
     include_proxy_extension: bool,
+    paper_mode: bool,
 ) -> tuple[str, ...]:
     """根据开关扩展用户选择的方法列表并去重保序。"""
 
+    if paper_mode:
+        return PAPER_COMPARISON_METHODS
     selected = list(methods)
     if include_official_baselines:
         selected.extend(OFFICIAL_BASELINE_METHODS)

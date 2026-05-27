@@ -33,6 +33,7 @@ class OfficialBaselineRegistry:
         method: str,
         variant: str,
         max_nodes: int,
+        strict: bool = False,
     ) -> RetrievalResult | None:
         """如果官方 adapter 可用则运行，否则回退给本地代理路径。"""
 
@@ -42,6 +43,8 @@ class OfficialBaselineRegistry:
         probe = adapter.probe()
         if probe.enabled and not probe.ready:
             raise RuntimeError(f"{method} 官方 baseline 处于启用态但不可用：{probe.reason}")
+        if strict and not probe.ready:
+            raise RuntimeError(f"{method} 官方 baseline 在严格模式下不可用：{probe.reason}")
         if not probe.ready:
             return None
         return adapter.run(case, variant=variant, max_nodes=max_nodes)

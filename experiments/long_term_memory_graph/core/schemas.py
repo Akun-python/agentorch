@@ -18,6 +18,13 @@ OFFICIAL_BASELINE_METHODS: tuple[str, ...] = (
     "zep_memory",
 )
 
+PAPER_COMPARISON_METHODS: tuple[str, ...] = (
+    "langmem_memory",
+    "mem0_memory",
+    "zep_memory",
+    MAIN_METHOD,
+)
+
 CORE_LOCAL_BASELINE_METHODS: tuple[str, ...] = (
     "no_long_term_memory",
     "vector_memory",
@@ -211,6 +218,9 @@ class ExperimentRunConfig:
     judge_model_name: str | None = None
     sweep_parameters: dict[str, list[float | int]] | None = None
     protocol_metadata: dict[str, Any] | None = None
+    paper_mode: bool = False
+    strict_official_baselines: bool = False
+    required_token_reference_method: str | None = None
 
 
 @dataclass

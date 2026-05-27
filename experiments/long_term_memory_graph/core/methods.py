@@ -64,12 +64,30 @@ class ExperimentMethodRunner:
     def run(self, case: ExperimentCase, *, method: str, variant: str = "full") -> RetrievalResult:
         """按方法名分发到官方基线、代理基线或本文图谱机制。"""
 
+        return self.run_with_policy(case, method=method, variant=variant, strict_official_baselines=False)
+
+    def run_with_policy(
+        self,
+        case: ExperimentCase,
+        *,
+        method: str,
+        variant: str = "full",
+        strict_official_baselines: bool = False,
+    ) -> RetrievalResult:
+        """按策略运行方法；严格模式下禁止官方 baseline 回退到 proxy。"""
+
         self._last_embedding_request_count = 0
         self._last_embedding_text_count = 0
         self._last_embedding_latency_ms = 0.0
         if method == "no_long_term_memory":
             return RetrievalResult(method=method, variant=variant, prompt_summary="No long-term memory was provided.")
-        official_result = self.official_registry.maybe_run(case, method=method, variant=variant, max_nodes=self.max_nodes)
+        official_result = self.official_registry.maybe_run(
+            case,
+            method=method,
+            variant=variant,
+            max_nodes=self.max_nodes,
+            strict=strict_official_baselines,
+        )
         if official_result is not None:
             return official_result
         plugin, store, provider = self._build_graph(case, variant=variant)

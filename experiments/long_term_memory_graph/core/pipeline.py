@@ -19,7 +19,9 @@ from .schemas import (
     MAIN_METHOD,
     NON_OFFICIAL_PROXY_EXTENSION_METHODS,
     OFFICIAL_BASELINE_METHODS,
+    PAPER_COMPARISON_METHODS,
     PROXY_EXTENSION_METHODS,
+    QUESTION_TYPES,
     SUPPORTED_BASELINE_METHODS,
     ExperimentRecord,
     ExperimentRunConfig,
@@ -106,7 +108,12 @@ def run_suite(config: ExperimentRunConfig) -> ExperimentSuiteResult:
                     method=retrieval_method,
                     variant=variant,
                 )
-                retrieval = method_runner.run(case, method=retrieval_method, variant=variant)
+                retrieval = method_runner.run_with_policy(
+                    case,
+                    method=retrieval_method,
+                    variant=variant,
+                    strict_official_baselines=config.strict_official_baselines,
+                )
                 answer = agent_runner.answer(case=case, retrieval=retrieval, run_round=run_round)
                 judge = judge_answer(
                     case=case,
@@ -151,6 +158,7 @@ def run_suite(config: ExperimentRunConfig) -> ExperimentSuiteResult:
     aggregates = aggregate_records(records, bootstrap_samples=config.bootstrap_samples)
     if not any(record.method == token_reference_method for record in records):
         token_reference_method = "suite_mean"
+    _validate_post_run_constraints(config, cases, records, token_reference_method)
 
     manual_review_rows = _build_manual_review_rows(records, limit=config.manual_review_sample_size)
     second_judge_rows = _build_second_judge_rows(records, limit=config.second_judge_sample_size)
@@ -203,6 +211,9 @@ def run_suite(config: ExperimentRunConfig) -> ExperimentSuiteResult:
         "parameter_sweep_count": len(parameter_sweep_rows),
         "efficiency_report_enabled": config.suite == "main",
         "output_dir": str(config.output_dir.resolve()),
+        "paper_mode": config.paper_mode,
+        "strict_official_baselines": config.strict_official_baselines,
+        "required_token_reference_method": config.required_token_reference_method,
         "required_csv_fields": [
             "case_id",
             "question_type",
@@ -279,6 +290,10 @@ def _validate_run_config(config: ExperimentRunConfig) -> None:
     unknown = sorted(set(config.methods) - allowed_by_suite[config.suite])
     if unknown:
         raise ValueError(f"Unsupported {config.suite} method or variant: {', '.join(unknown)}.")
+    if config.strict_official_baselines and not config.paper_mode:
+        raise ValueError("strict_official_baselines 只能在 paper_mode 下启用。")
+    if config.paper_mode:
+        _validate_paper_mode_config(config)
 
 
 def _select_token_reference_method(suite: str, records: list[ExperimentRecord]) -> str:
@@ -296,6 +311,63 @@ def _select_token_reference_method(suite: str, records: list[ExperimentRecord]) 
     if "no_long_term_memory" in methods:
         return "no_long_term_memory"
     return "suite_mean"
+
+
+def _validate_paper_mode_config(config: ExperimentRunConfig) -> None:
+    """论文模式只允许经过约束的正式评测配置。"""
+
+    if config.suite != "comparison":
+        raise ValueError("paper_mode 当前只支持 comparison 套件。")
+    if config.model_backend not in {"openai", "openai_http"}:
+        raise ValueError("paper_mode 要求主模型使用真实 API 后端。")
+    if config.judge_backend != "model_judge":
+        raise ValueError("paper_mode 要求使用真实模型 judge。")
+    if config.judge_model_backend not in {"openai", "openai_http"}:
+        raise ValueError("paper_mode 要求 judge 使用真实 API 后端。")
+    if not config.model_name:
+        raise ValueError("paper_mode 要求显式传入 --model。")
+    if not config.judge_model_name:
+        raise ValueError("paper_mode 要求显式传入 --judge-model。")
+    if config.runs < 3:
+        raise ValueError("paper_mode 要求 runs >= 3。")
+    if set(config.methods) != set(PAPER_COMPARISON_METHODS):
+        expected = ", ".join(PAPER_COMPARISON_METHODS)
+        raise ValueError(f"paper_mode 的 comparison 方法集必须严格等于: {expected}。")
+    if not config.strict_official_baselines:
+        raise ValueError("paper_mode 要求 strict_official_baselines=True，禁止官方 baseline 回退到 proxy。")
+    if config.required_token_reference_method not in OFFICIAL_BASELINE_METHODS:
+        raise ValueError("paper_mode 要求 required_token_reference_method 为官方 baseline，例如 mem0_memory。")
+
+
+def _validate_post_run_constraints(
+    config: ExperimentRunConfig,
+    cases,
+    records: list[ExperimentRecord],
+    token_reference_method: str,
+) -> None:
+    """运行后再校验题型覆盖和官方 baseline 边界。"""
+
+    if not config.paper_mode:
+        return
+
+    question_types = {case.question_type for case in cases}
+    missing_question_types = [question_type for question_type in QUESTION_TYPES if question_type not in question_types]
+    if missing_question_types:
+        raise ValueError(f"paper_mode 要求覆盖全部题型，缺失: {', '.join(missing_question_types)}。")
+
+    if token_reference_method != config.required_token_reference_method:
+        raise ValueError(
+            f"paper_mode 要求 token_reference_method={config.required_token_reference_method}，当前为 {token_reference_method}。"
+        )
+
+    official_records = [record for record in records if record.method in OFFICIAL_BASELINE_METHODS]
+    if len(official_records) == 0:
+        raise ValueError("paper_mode 要求产物中包含官方 baseline 记录。")
+
+    downgraded = [record for record in official_records if record.source_boundary != "official_sdk" or record.is_proxy]
+    if downgraded:
+        bad_methods = sorted({record.method for record in downgraded})
+        raise ValueError(f"paper_mode 检测到官方 baseline 未走 official_sdk：{', '.join(bad_methods)}。")
 
 
 def _resolve_method_and_variant(suite: str, method: str) -> tuple[str, str]:

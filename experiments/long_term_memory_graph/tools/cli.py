@@ -133,6 +133,9 @@ def _build_full_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     parser.add_argument("--dataset-path", default=None)
     parser.add_argument("--resume", action="store_true", help="从现有输出根目录续跑各子实验。")
     parser.add_argument("--judge-backend", default="deterministic_probe")
+    parser.add_argument("--paper-mode", action="store_true", help="只对 comparison 子实验启用论文模式强约束。")
+    parser.add_argument("--strict-official-baselines", action="store_true", help="论文模式下官方 baseline 不可用时直接失败。")
+    parser.add_argument("--token-reference-method", default=None, help="comparison 子实验显式指定相对 token 基线。")
     parser.add_argument("--include-official-baselines", action="store_true", help="compare/full 时把已接入的官方 baseline adapter 加入本地运行。")
     parser.add_argument("--include-proxy-extension", action="store_true", help="compare/full 时把 proxy 扩展方法加入本地运行。")
     parser.add_argument("--judge-model-backend", default=None, choices=["openai", "openai_http"])
@@ -196,6 +199,9 @@ def _run_full_from_args(args: argparse.Namespace) -> dict[str, Any]:
         output_dir=root / "comparison",
         include_official_baselines=args.include_official_baselines,
         include_proxy_extension=args.include_proxy_extension,
+        paper_mode=args.paper_mode,
+        strict_official_baselines=args.strict_official_baselines,
+        required_token_reference_method=args.token_reference_method,
         **common,
     )
     SuiteProgressContext.log_root_event(

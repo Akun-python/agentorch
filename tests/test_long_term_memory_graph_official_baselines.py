@@ -4,8 +4,12 @@ import sys
 import types
 from dataclasses import dataclass
 
+import pytest
+
 from experiments.long_term_memory_graph.core.datasets import build_default_cases
 from experiments.long_term_memory_graph.core.methods import ExperimentMethodRunner
+from experiments.long_term_memory_graph.core.pipeline import run_suite
+from experiments.long_term_memory_graph.core.schemas import ExperimentRunConfig
 from experiments.long_term_memory_graph.研究对比试验.protocol import build_comparison_protocol_metadata
 
 
@@ -190,6 +194,23 @@ def test_mem0_falls_back_to_proxy_when_official_env_is_missing(monkeypatch):
     assert "Mem0-style proxy" in result.prompt_summary
 
 
+def test_mem0_strict_mode_rejects_proxy_fallback_when_official_env_is_missing(monkeypatch):
+    monkeypatch.delenv("MEM0_API_KEY", raising=False)
+    monkeypatch.delitem(sys.modules, "mem0", raising=False)
+    monkeypatch.delitem(sys.modules, "mem0.client.types", raising=False)
+    case = build_default_cases()[0]
+    runner = ExperimentMethodRunner(
+        top_candidates=6,
+        top_seeds=3,
+        max_nodes=12,
+        max_edges=24,
+        seed=11,
+    )
+
+    with pytest.raises(RuntimeError, match="严格模式"):
+        runner.run_with_policy(case, method="mem0_memory", strict_official_baselines=True)
+
+
 def test_langmem_official_adapter_is_used_when_sdk_and_env_exist(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     _install_fake_langmem_modules(monkeypatch)
@@ -239,3 +260,43 @@ def test_protocol_catalog_marks_mem0_as_having_official_adapter():
     assert metadata["available_method_catalog"]["mem0_memory"]["has_official_adapter"] is True
     assert metadata["available_method_catalog"]["langmem_memory"]["has_official_adapter"] is True
     assert metadata["available_method_catalog"]["zep_memory"]["has_official_adapter"] is True
+
+
+def test_paper_mode_requires_official_method_matrix(tmp_path):
+    with pytest.raises(ValueError, match="方法集必须严格等于"):
+        run_suite(
+            ExperimentRunConfig(
+                suite="comparison",
+                methods=("no_long_term_memory", "clarks_nutcracker_graph"),
+                output_dir=tmp_path / "comparison",
+                runs=3,
+                paper_mode=True,
+                strict_official_baselines=True,
+                required_token_reference_method="mem0_memory",
+                model_backend="openai_http",
+                model_name="deepseek-v4-flash",
+                judge_backend="model_judge",
+                judge_model_backend="openai_http",
+                judge_model_name="qwen-plus",
+            )
+        )
+
+
+def test_paper_mode_requires_real_judge_and_model(tmp_path):
+    with pytest.raises(ValueError, match="真实 API 后端|真实模型 judge"):
+        run_suite(
+            ExperimentRunConfig(
+                suite="comparison",
+                methods=("langmem_memory", "mem0_memory", "zep_memory", "clarks_nutcracker_graph"),
+                output_dir=tmp_path / "comparison",
+                runs=3,
+                paper_mode=True,
+                strict_official_baselines=True,
+                required_token_reference_method="mem0_memory",
+                model_backend="agentorch_probe",
+                model_name=None,
+                judge_backend="deterministic_probe",
+                judge_model_backend=None,
+                judge_model_name=None,
+            )
+        )
