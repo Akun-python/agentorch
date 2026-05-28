@@ -36,6 +36,10 @@ def run_ablation_experiment(
     model_name: str | None = None,
     embedding_model: str | None = None,
     embedding_dimensions: int | None = None,
+    summary_backend: str = "template",
+    summary_model_backend: str | None = None,
+    summary_model: str | None = None,
+    summary_max_tokens: int = 768,
     env_file: str | Path | None = ".env",
     load_env: bool = True,
     overwrite_env: bool = False,
@@ -64,6 +68,10 @@ def run_ablation_experiment(
             model_name=model_name,
             embedding_model=embedding_model,
             embedding_dimensions=embedding_dimensions,
+            summary_backend=summary_backend,
+            summary_model_backend=summary_model_backend,
+            summary_model=summary_model,
+            summary_max_tokens=summary_max_tokens,
             env_file=Path(env_file) if env_file else None,
             load_env=load_env,
             overwrite_env=overwrite_env,
@@ -108,6 +116,10 @@ def run_from_args(args: argparse.Namespace) -> dict[str, object]:
         model_name=args.model,
         embedding_model=args.embedding_model,
         embedding_dimensions=args.embedding_dimensions,
+        summary_backend=args.summary_backend,
+        summary_model_backend=args.summary_model_backend,
+        summary_model=args.summary_model,
+        summary_max_tokens=args.summary_max_tokens,
         env_file=args.env_file,
         load_env=not args.no_env_file,
         overwrite_env=args.overwrite_env,
@@ -134,6 +146,10 @@ def _add_common_args(parser: argparse.ArgumentParser, *, default_output: str) ->
     parser.add_argument("--model", default=None, help="真实 API 后端使用的模型名；也可由 OPENAI_MODEL/MODEL_NAME 提供。")
     parser.add_argument("--embedding-model", default=None, help="真实 embedding 使用的模型名；也可由 OPENAI_EMBEDDING_MODEL 提供。")
     parser.add_argument("--embedding-dimensions", type=int, default=None, help="embedding 维度。")
+    parser.add_argument("--summary-backend", default="template", choices=["template", "llm"], help="召回摘要器类型。")
+    parser.add_argument("--summary-model-backend", default=None, choices=["openai", "openai_http"], help="LLM 摘要器的模型后端。")
+    parser.add_argument("--summary-model", default=None, help="LLM 摘要器的模型名，建议使用 flash 模型。")
+    parser.add_argument("--summary-max-tokens", type=int, default=768, help="LLM 摘要器输出上限。")
     parser.add_argument("--env-file", default=".env", help="真实 API 后端加载的 env 文件路径；默认使用当前目录 .env。")
     parser.add_argument("--no-env-file", action="store_true", help="禁用 env 文件加载，仅使用当前进程环境变量。")
     parser.add_argument("--overwrite-env", action="store_true", help="允许 env 文件覆盖当前进程已有环境变量。")

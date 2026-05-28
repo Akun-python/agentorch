@@ -47,6 +47,13 @@ class ExperimentMethodRunner:
         embedding_backend: str = "deterministic",
         embedding_model: str | None = None,
         embedding_dimensions: int | None = None,
+        summary_backend: str = "template",
+        summary_model_backend: str | None = None,
+        summary_model: str | None = None,
+        summary_max_tokens: int = 768,
+        env_file: str | None = None,
+        load_env: bool = True,
+        overwrite_env: bool = False,
     ) -> None:
         self.top_candidates = top_candidates
         self.top_seeds = top_seeds
@@ -56,6 +63,13 @@ class ExperimentMethodRunner:
         self.embedding_backend = embedding_backend
         self.embedding_model = embedding_model
         self.embedding_dimensions = embedding_dimensions
+        self.summary_backend = summary_backend
+        self.summary_model_backend = summary_model_backend
+        self.summary_model = summary_model
+        self.summary_max_tokens = summary_max_tokens
+        self.env_file = env_file
+        self.load_env = load_env
+        self.overwrite_env = overwrite_env
         self.official_registry = OfficialBaselineRegistry(seed=seed)
         self._last_embedding_request_count = 0
         self._last_embedding_text_count = 0
@@ -127,6 +141,12 @@ class ExperimentMethodRunner:
             "max_edges": self.max_edges,
             "auto_create_schema": False,
             "stale_after_days": 3650,
+            "summary_backend": self.summary_backend,
+            "summary_model_backend": self.summary_model_backend,
+            "summary_model": self.summary_model,
+            "summary_max_tokens": self.summary_max_tokens,
+            "summary_load_env": self.load_env,
+            "summary_overwrite_env": self.overwrite_env,
         }
         if variant == "wo_scene_match":
             kwargs["scene_match_weight"] = 0.0
@@ -168,7 +188,7 @@ class ExperimentMethodRunner:
         provider = self._build_embedding_provider()
         store = InMemoryGraphStore()
         config = self._config_for_variant(variant, provider)
-        plugin = LongTermMemoryGraphPlugin(config=config, store=store)
+        plugin = LongTermMemoryGraphPlugin(config=config, store=store, env_file=self.env_file)
         plugin.store_capsules(list(case.capsules))
         if variant == "wo_temporal_edges":
             _remove_edges(store, {"TEMPORAL_NEXT"})

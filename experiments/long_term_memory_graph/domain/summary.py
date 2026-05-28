@@ -4,10 +4,11 @@ from collections import Counter
 from collections.abc import Iterable
 
 from .entities import MemoryCapsuleDetail, SubgraphEdge
+from .summary_llm import SubgraphSummarizer
 from .utils import truncate_text
 
 
-class TemplateSubgraphSummarizer:
+class TemplateSubgraphSummarizer(SubgraphSummarizer):
     """把召回子图压缩成可喂给 Agent 的短摘要。"""
 
     def summarize(

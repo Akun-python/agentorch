@@ -204,6 +204,10 @@ class ExperimentRunConfig:
     model_name: str | None = None
     embedding_model: str | None = None
     embedding_dimensions: int | None = None
+    summary_backend: str = "template"
+    summary_model_backend: str | None = None
+    summary_model: str | None = None
+    summary_max_tokens: int = 768
     env_file: Path | None = Path(".env")
     load_env: bool = True
     overwrite_env: bool = False

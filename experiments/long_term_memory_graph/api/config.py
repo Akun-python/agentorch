@@ -27,6 +27,14 @@ class GraphMemoryConfig(BaseModel):
     embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = 1536
 
+    # 召回摘要配置：默认模板摘要；正式实验可切到 flash 模型做结构化压缩。
+    summary_backend: str = "template"
+    summary_model_backend: str | None = None
+    summary_model: str | None = None
+    summary_max_tokens: int = 768
+    summary_load_env: bool = True
+    summary_overwrite_env: bool = False
+
     # 经验晋升为长期记忆时使用的评分权重。
     promotion_threshold: float = 0.6
     promotion_val_weight: float = 0.3
@@ -93,6 +101,15 @@ class GraphMemoryConfig(BaseModel):
 
         if self.embedding_dimensions <= 0:
             raise ValueError("embedding_dimensions must be > 0")
+        if self.summary_backend not in {"template", "llm"}:
+            raise ValueError("summary_backend must be 'template' or 'llm'")
+        if self.summary_backend == "llm":
+            if self.summary_model_backend not in {"openai", "openai_http"}:
+                raise ValueError("summary_model_backend must be openai or openai_http when summary_backend=llm")
+            if not self.summary_model:
+                raise ValueError("summary_model is required when summary_backend=llm")
+            if self.summary_max_tokens <= 0:
+                raise ValueError("summary_max_tokens must be > 0 when summary_backend=llm")
         if self.top_candidates <= 0:
             raise ValueError("top_candidates must be > 0")
         if self.top_seeds <= 0:

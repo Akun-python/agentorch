@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ..domain.services import CapsuleIngestionService, CapsulePromotionService, DetailQueryService, RecallService
 from ..domain.summary import TemplateSubgraphSummarizer
+from ..domain.summary_llm import LLMSubgraphSummarizer
 from ..domain.utils import run_async
 from ..integrations.backfill import SQLiteBackfillImporter
 from ..storage.base import GraphStore
@@ -21,8 +22,10 @@ class LongTermMemoryGraphPlugin:
         config: GraphMemoryConfig | None = None,
         *,
         store: GraphStore | None = None,
+        env_file: str | None = None,
     ) -> None:
         self.config = config or GraphMemoryConfig()
+        self.env_file = env_file
         self._store_error: Exception | None = None
         if store is not None:
             self.store: GraphStore | None = store
@@ -43,7 +46,7 @@ class LongTermMemoryGraphPlugin:
             self._backfill_importer = None
             return
 
-        summarizer = TemplateSubgraphSummarizer()
+        summarizer = self._build_summarizer()
         self._ingestion_service = CapsuleIngestionService(
             config=self.config,
             store=self.store,
@@ -61,6 +64,13 @@ class LongTermMemoryGraphPlugin:
         )
         self._detail_service = DetailQueryService(store=self.store)
         self._backfill_importer = SQLiteBackfillImporter(self._ingestion_service.store_capsules)
+
+    def _build_summarizer(self):
+        """按配置选择模板摘要器或 LLM 摘要器。"""
+
+        if self.config.summary_backend == "llm":
+            return LLMSubgraphSummarizer(config=self.config, env_file=self.env_file)
+        return TemplateSubgraphSummarizer()
 
     def close(self) -> None:
         """关闭底层图数据库连接。"""

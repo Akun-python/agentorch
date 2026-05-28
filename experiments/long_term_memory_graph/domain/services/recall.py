@@ -17,6 +17,7 @@ from ..scoring import (
     stale_penalty,
 )
 from ..summary import TemplateSubgraphSummarizer
+from ..summary_llm import SubgraphSummarizer
 from ..utils import truncate_text
 
 
@@ -32,7 +33,7 @@ class RecallService:
         config: GraphMemoryConfig,
         store: GraphStore,
         embed_texts: Callable[[list[str]], list[list[float]]],
-        summarizer: TemplateSubgraphSummarizer | None = None,
+        summarizer: SubgraphSummarizer | None = None,
     ) -> None:
         self.config = config
         self.store = store
