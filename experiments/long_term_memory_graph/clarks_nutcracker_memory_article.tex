@@ -295,6 +295,71 @@ MemOS & 原始论文 & Memory OS 架构 & 未见该文在本文口径数据集�
 
 基于上述边界，正式论文中的主比较表应区分两类数字：第一类是\textbf{本文独立运行结果}，必须在统一模型、统一 judge、统一 token 预算和统一数据文件下生成；第二类是\textbf{文献公开结果}，只能作为背景参考或公开上界/下界对照，不能与本文独立运行结果混写为同口径主结论。若后续你完成 `compare --paper-mode` 的全量正式实验，则推荐另起一张“本文统一协议下强基线对比表”，与表 \ref{tab:public-benchmark-metrics-cn} 分开呈现。
 
+如果正式汇报还需要一张更像“SOTA 类模型公开成绩单”的表，则建议继续拆成两层：第一层使用\textbf{统一复评口径}，即同一论文中在统一基础模型与统一评测流程下重跑多个系统的对比结果；第二层使用\textbf{官方最新公开自报口径}，即仓库 README、官方 benchmark 仓库或产品方公开页面中的最新数字。前者可作为论文正文里的公开强基线背景，后者更适合写成“截至某日的公开成绩观察”，不能直接与本文主实验结果混写。
+
+\begin{table*}[t]
+\centering
+\caption{LoCoMo 上的公开统一复评指标（中文整理）}
+\label{tab:locomo-public-sota-cn}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccc}
+\toprule
+方法 & Tokens & Single-hop & Multi-hop & Temporal & Open-domain & Overall & Overall F1 \\
+\midrule
+MIRIX & -- & 68.22 & 54.26 & 68.54 & 46.88 & 64.33 & 28.10 \\
+Mem0 & 1172 & 73.33 & 58.75 & 52.34 & 45.83 & 64.57 & 43.46 \\
+Zep & 2701 & 66.23 & 52.12 & 54.82 & 33.33 & 59.22 & 41.23 \\
+Memobase & 2102 & 73.12 & 64.65 & 81.20 & 53.12 & 72.01 & 50.18 \\
+MemU & 617 & 66.34 & 63.12 & 27.10 & 50.01 & 56.55 & 35.15 \\
+Supermemory & 500 & 67.30 & 51.12 & 31.77 & 42.67 & 55.34 & 34.87 \\
+MemOS-1031 & 1589 & 81.09 & 67.49 & 75.18 & 55.90 & 75.80 & 45.27 \\
+\bottomrule
+\end{tabular}}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+\caption{LongMemEval 上的公开统一复评指标（中文整理）}
+\label{tab:longmemeval-public-sota-cn}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+方法 & Tokens & 单轮偏好 & 单轮助手 & 时间推理 & 多轮会话 & 知识更新 & 单轮用户 & Overall \\
+\midrule
+MIRIX & -- & 53.3 & 63.6 & 25.6 & 30.1 & 52.6 & 72.9 & 43.49 \\
+Zep & 1.6k & 53.3 & 75.0 & 54.1 & 47.4 & 74.4 & 92.9 & 63.8 \\
+Mem0 & 1.1k & 90.0 & 26.8 & 72.2 & 63.2 & 66.7 & 82.9 & 66.4 \\
+Memobase & 1.5k & 80.1 & 23.2 & 75.9 & 66.9 & 89.7 & 92.9 & 72.4 \\
+Supermemory & 0.4k & 89.9 & 58.9 & 44.4 & 52.6 & 55.1 & 85.7 & 58.4 \\
+MemU & 0.5k & 76.7 & 19.6 & 17.3 & 42.1 & 41.0 & 67.1 & 38.4 \\
+MemOS-1031 & 1.4k & 96.7 & 67.9 & 77.4 & 70.7 & 74.3 & 95.7 & 77.8 \\
+\bottomrule
+\end{tabular}}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+\caption{截至 2026 年 5 月 29 日可核验的官方最新公开自报成绩}
+\label{tab:latest-public-claims-cn}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{P{0.14\linewidth}P{0.24\linewidth}P{0.12\linewidth}P{0.12\linewidth}P{0.28\linewidth}}
+\toprule
+系统 & 公开来源 & LoCoMo & LongMemEval & 备注 \\
+\midrule
+Memobase & 官方 LoCoMo benchmark README & 75.78 & 未披露 & README 同时给出 Single-hop 70.92、Multi-hop 46.88、Temporal 85.05、Open-domain 77.17，以及 Overall F1 0.5145。 \\
+MemU & 官方 README & 92.09 & 未披露 & README 明示为 LoCoMo average accuracy。 \\
+Zep & 原始论文公开表格 & 未披露 & 63.8（gpt-4o-mini）/ 71.2（gpt-4o） & 原文同时报告 full-context 对照 55.4 / 60.2，且平均上下文长度约 1.6k。 \\
+MemOS-1031 & 原始论文公开表格 & 75.80 & 77.8 & 同一论文中给出 LoCoMo 与 LongMemEval 统一复评结果。 \\
+MIRIX & 原始论文摘要 & 85.38 & 未披露 & 摘要明确写明在 LoCoMo 上达到 85.38\% overall accuracy；正文另给同模型统一复评表。 \\
+\bottomrule
+\end{tabular}}
+\end{table*}
+
+因此，如果你现在就要在论文或答辩里展示“公开 SOTA 类结果”，最稳妥的做法是：正文优先引用表 \ref{tab:locomo-public-sota-cn} 与表 \ref{tab:longmemeval-public-sota-cn} 这类\textbf{统一复评表}；表 \ref{tab:latest-public-claims-cn} 则作为“截至 2026 年 5 月 29 日的官方公开成绩观察”。二者服务的论证目的不同，不能直接合并成一张主结论表。
+
 \begin{table}[t]
 \centering
 \small
