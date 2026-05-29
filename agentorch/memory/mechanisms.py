@@ -35,6 +35,7 @@ class SessionMemoryMechanism(MemoryMechanism):
                     ["conversation", message.role],
                     metadata={
                         "role": message.role,
+                        "reasoning_content": message.reasoning_content,
                         "name": message.name,
                         "tool_call_id": message.tool_call_id,
                         "tool_calls": [item.model_dump() for item in message.tool_calls],

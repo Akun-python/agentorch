@@ -220,10 +220,11 @@ class MemoryManager:
         return Message(
             role=metadata.get("role", "assistant"),
             content=record.get("content", ""),
+            reasoning_content=metadata.get("reasoning_content", ""),
             name=metadata.get("name"),
             tool_call_id=metadata.get("tool_call_id"),
             tool_calls=tool_calls,
-            metadata={key: value for key, value in metadata.items() if key not in {"role", "name", "tool_call_id", "tool_calls"}},
+            metadata={key: value for key, value in metadata.items() if key not in {"role", "reasoning_content", "name", "tool_call_id", "tool_calls"}},
         )
 
     async def load_persisted_thread_messages(self, thread_id: str, *, limit: int | None = None) -> list[Message]:

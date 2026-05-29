@@ -22,6 +22,7 @@ class ToolCall(BaseModel):
 class Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
     content: str
+    reasoning_content: str = ""
     name: str | None = None
     tool_call_id: str | None = None
     tool_calls: list[ToolCall] = Field(default_factory=list)
@@ -42,6 +43,7 @@ class ModelRequest(BaseModel):
 class ModelResponse(BaseModel):
     message: Message | None = None
     content: str = ""
+    reasoning_content: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
     finish_reason: str | None = None
     usage: UsageInfo = Field(default_factory=UsageInfo)
@@ -50,6 +52,7 @@ class ModelResponse(BaseModel):
 
 class StreamChunk(BaseModel):
     delta_text: str = ""
+    reasoning_delta_text: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
     finish_reason: str | None = None
     raw: Any | None = None

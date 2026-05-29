@@ -94,6 +94,7 @@ class OpenAIModel(
         video_base_url: str | None = None,
         video_model: str | None = None,
         video_disable_env_proxy: bool | None = None,
+        provider_options: dict[str, Any] | None = None,
         max_tokens: int | None = 2048,
         timeout: float = 60.0,
         max_retries: int = 2,
@@ -116,6 +117,7 @@ class OpenAIModel(
             "retry_jitter": retry_jitter,
             "min_request_interval": min_request_interval,
             "temperature": temperature,
+            "provider_options": dict(provider_options or {}),
         }
         _set_if_not_none(
             config_data,
@@ -193,6 +195,7 @@ class OpenAIModel(
             video_base_url=resolved.video_base_url,
             video_model=resolved.video_model,
             video_disable_env_proxy=resolved.video_disable_env_proxy,
+            provider_options=resolved.provider_options,
             max_tokens=resolved.max_tokens,
             timeout=resolved.timeout,
             max_retries=resolved.max_retries,
@@ -516,6 +519,7 @@ class OpenAIModel(
         partial_tool_calls: dict[str, dict[str, Any]] = {}
         async for chunk in stream:  # pragma: no cover
             delta_text = ""
+            reasoning_delta_text = ""
             tool_calls: list[ToolCall] = []
             finish_reason = None
             if chunk.choices:
@@ -523,7 +527,9 @@ class OpenAIModel(
                 finish_reason = choice.finish_reason
                 if choice.delta and choice.delta.content:
                     delta_text = choice.delta.content
-                if choice.delta and choice.delta.tool_calls:
+                if choice.delta and getattr(choice.delta, "reasoning_content", None):
+                    reasoning_delta_text = choice.delta.reasoning_content
+                if choice.delta and getattr(choice.delta, "tool_calls", None):
                     for position, tool_call in enumerate(choice.delta.tool_calls):
                         keys = self._stream_tool_call_keys(tool_call, position=position)
                         state = None
@@ -559,7 +565,13 @@ class OpenAIModel(
                                 arguments=arguments,
                             )
                         )
-            yield StreamChunk(delta_text=delta_text, tool_calls=tool_calls, finish_reason=finish_reason, raw=chunk)
+            yield StreamChunk(
+                delta_text=delta_text,
+                reasoning_delta_text=reasoning_delta_text,
+                tool_calls=tool_calls,
+                finish_reason=finish_reason,
+                raw=chunk,
+            )
 
     def _build_payload(self, request: ModelRequest, stream: bool) -> dict[str, Any]:
         selected_model = self._resolve_chat_model(self._request_model_override(request))
@@ -576,6 +588,13 @@ class OpenAIModel(
             payload["tool_choice"] = request.tool_choice
         if request.response_format is not None:
             payload["response_format"] = request.response_format
+        provider_options = self._provider_options(request)
+        reasoning_effort = provider_options.get("reasoning_effort")
+        if reasoning_effort is not None:
+            payload["reasoning_effort"] = reasoning_effort
+        extra_body = provider_options.get("extra_body")
+        if isinstance(extra_body, dict):
+            payload.update(extra_body)
         return {key: value for key, value in payload.items() if value is not None}
 
     def _message_to_openai(self, message: Message) -> dict[str, Any]:
@@ -584,6 +603,8 @@ class OpenAIModel(
         if message.role == "assistant" and message.tool_calls and not content:
             content = None
         data: dict[str, Any] = {"role": message.role, "content": content}
+        if message.reasoning_content:
+            data["reasoning_content"] = message.reasoning_content
         if message.name:
             data["name"] = message.name
         if message.tool_call_id:
@@ -613,8 +634,9 @@ class OpenAIModel(
     def _normalize_response(self, raw: Any) -> ModelResponse:
         choice = raw.choices[0]
         content = choice.message.content or ""
+        reasoning_content = getattr(choice.message, "reasoning_content", "") or ""
         tool_calls: list[ToolCall] = []
-        for tool_call in choice.message.tool_calls or []:
+        for tool_call in getattr(choice.message, "tool_calls", None) or []:
             arguments = {}
             if tool_call.function and tool_call.function.arguments:
                 try:
@@ -631,10 +653,50 @@ class OpenAIModel(
         message = Message(
             role="assistant",
             content=content,
+            reasoning_content=reasoning_content,
             tool_calls=tool_calls,
-            metadata={"tool_calls": [call.model_dump() for call in tool_calls]},
+            metadata={
+                "tool_calls": [call.model_dump() for call in tool_calls],
+                "reasoning_content": reasoning_content,
+            },
         )
-        return ModelResponse(message=message, content=content, tool_calls=tool_calls, finish_reason=choice.finish_reason, usage=usage, raw=raw)
+        return ModelResponse(
+            message=message,
+            content=content,
+            reasoning_content=reasoning_content,
+            tool_calls=tool_calls,
+            finish_reason=choice.finish_reason,
+            usage=usage,
+            raw=raw,
+        )
+
+    def _provider_options(self, request: ModelRequest) -> dict[str, Any]:
+        merged: dict[str, Any] = {}
+        base = self.config.provider_options if isinstance(self.config.provider_options, dict) else {}
+        merged.update(base)
+        request_options = request.metadata.get("provider_options")
+        if isinstance(request_options, dict):
+            merged.update(request_options)
+        if self._is_deepseek_model():
+            thinking = merged.get("thinking")
+            if thinking is None:
+                merged["thinking"] = {"type": "enabled"}
+            if merged.get("reasoning_effort") is None:
+                merged["reasoning_effort"] = "high"
+            extra_body = merged.get("extra_body")
+            if isinstance(extra_body, dict):
+                extra_body = dict(extra_body)
+            else:
+                extra_body = {}
+            extra_body.setdefault("thinking", merged["thinking"])
+            merged["extra_body"] = extra_body
+        return merged
+
+    def _is_deepseek_model(self) -> bool:
+        model_name = (self.config.model or "").lower()
+        base_url = (self.config.base_url or "").lower()
+        provider = (self.config.provider or "").lower()
+        return "deepseek" in model_name or "deepseek" in base_url or provider == "deepseek"
 
     def _stream_tool_call_keys(self, tool_call: Any, *, position: int) -> list[str]:
         keys: list[str] = []

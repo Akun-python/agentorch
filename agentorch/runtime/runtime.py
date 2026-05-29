@@ -1625,11 +1625,13 @@ class Runtime:
         )
         if context.stream_enabled:
             accumulated_text = ""
+            accumulated_reasoning_text = ""
             accumulated_tool_calls: list[Any] = []
             tool_call_by_id: dict[str, Any] = {}
             finish_reason = None
             async for chunk in self.model.stream(request):
                 accumulated_text += chunk.delta_text or ""
+                accumulated_reasoning_text += chunk.reasoning_delta_text or ""
                 finish_reason = chunk.finish_reason or finish_reason
                 for tool_call in chunk.tool_calls:
                     key = tool_call.id or f"{tool_call.name}:{len(accumulated_tool_calls)}"
@@ -1649,6 +1651,7 @@ class Runtime:
                         **context.envelope.model_dump(),
                         "step": step_index,
                         "delta_text": chunk.delta_text or "",
+                        "reasoning_delta_text": chunk.reasoning_delta_text or "",
                         "tool_calls": [call.model_dump() for call in chunk.tool_calls],
                         "finish_reason": chunk.finish_reason,
                     },
@@ -1658,10 +1661,15 @@ class Runtime:
                 message=Message(
                     role="assistant",
                     content=accumulated_text,
+                    reasoning_content=accumulated_reasoning_text,
                     tool_calls=[call.model_copy(deep=True) for call in accumulated_tool_calls],
-                    metadata={"tool_calls": [call.model_dump() for call in accumulated_tool_calls]},
+                    metadata={
+                        "tool_calls": [call.model_dump() for call in accumulated_tool_calls],
+                        "reasoning_content": accumulated_reasoning_text,
+                    },
                 ),
                 content=accumulated_text,
+                reasoning_content=accumulated_reasoning_text,
                 tool_calls=[call.model_copy(deep=True) for call in accumulated_tool_calls],
                 finish_reason=finish_reason,
             )
