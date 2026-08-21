@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="180" viewBox="0 0 720 180" role="img" aria-labelledby="title desc">
+  <title id="title">agentorch logo</title>
+  <desc id="desc">A warm torch mark for the agentorch orchestration framework.</desc>
+  <defs>
+    <linearGradient id="flame" x1="38" y1="30" x2="130" y2="145" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8C15A"/><stop offset=".52" stop-color="#F9735B"/><stop offset="1" stop-color="#E64A7A"/>
+    </linearGradient>
+    <linearGradient id="word" x1="196" y1="40" x2="545" y2="146" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F9735B"/><stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(18 18)">
+    <rect width="144" height="144" rx="42" fill="#111827"/>
+    <path d="M72 21c8 17 31 27 31 57 0 25-14 43-36 43-24 0-40-16-40-39 0-21 12-33 27-48 6-6 12-14 18-24Z" fill="url(#flame)"/>
+    <path d="M72 68c8 9 17 17 17 29 0 11-7 20-19 20-12 0-20-8-20-19 0-10 7-17 13-23 4-4 7-8 9-13Z" fill="#FFF7ED" opacity=".92"/>
+    <path d="M72 96c5 5 8 9 8 14 0 5-4 9-9 9-6 0-9-4-9-9 0-5 4-9 10-14Z" fill="#F59E0B"/>
+    <circle cx="17" cy="67" r="7" fill="#F8C15A"/><circle cx="127" cy="47" r="6" fill="#A78BFA"/><circle cx="124" cy="108" r="7" fill="#60A5FA"/>
+    <path d="M24 67h20M105 52 95 61M104 105l-12-7" stroke="#E5E7EB" stroke-width="3" stroke-linecap="round" opacity=".7"/>
+  </g>
+  <text x="190" y="112" fill="url(#word)" font-family="Inter,Segoe UI,sans-serif" font-size="78" font-weight="760" letter-spacing="-4">agentorch</text>
+</svg>

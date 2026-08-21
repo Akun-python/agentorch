@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">agentorch mark</title>
+  <defs><linearGradient id="f" x1="63" y1="30" x2="184" y2="220" gradientUnits="userSpaceOnUse"><stop stop-color="#F8C15A"/><stop offset=".5" stop-color="#F9735B"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs>
+  <rect x="8" y="8" width="240" height="240" rx="72" fill="#111827"/>
+  <path d="M128 31c14 30 52 48 52 98 0 42-24 72-60 72-41 0-69-28-69-67 0-36 20-56 46-82 12-12 21-26 31-45Z" fill="url(#f)"/>
+  <path d="M128 111c14 15 29 29 29 50 0 19-12 34-33 34-20 0-34-14-34-32 0-17 11-29 22-40 7-7 12-13 16-22Z" fill="#FFF7ED"/>
+  <path d="M128 159c8 8 13 15 13 23 0 9-7 15-16 15-10 0-16-7-16-15 0-9 7-16 19-23Z" fill="#F59E0B"/>
+</svg>

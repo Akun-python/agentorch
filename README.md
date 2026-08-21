@@ -22,6 +22,10 @@ License: `MIT`
 
 `agentorch` is a code-first, async-first framework for programmable multi-agent orchestration in Python.
 
+<p align="center">
+  <img src="resource/brand/agentorch-logo.svg" alt="agentorch logo" width="420">
+</p>
+
 It is built for teams that need explicit runtime control, not hidden prompt pipelines.
 
 If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
@@ -29,6 +33,10 @@ If your system needs tools, retrieval, memory, workflow, and delegation to work 
 ### Architecture Overview
 
 ![agentorch Architecture Overview](https://raw.githubusercontent.com/Akun-python/agentorch/main/resource/architecture_overview.svg)
+
+Reusable architecture, technology-stack, and project icons live in [`resource/brand`](resource/brand).
+
+> Datasets, databases, model files, and generated experiment artifacts are ignored by default. See [`data/README.md`](data/README.md) for the sharing contract.
 
 ### Runtime Flow
 

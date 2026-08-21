@@ -1,0 +1,70 @@
+# 环境与密钥
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+
+# Python 缓存与构建产物
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+htmlcov/
+.coverage*
+
+# 本地数据、数据库与模型文件：只保留结构说明，不提交原始内容
+data/
+datasets/
+**/data/
+**/datasets/
+*.db
+*.sqlite
+*.sqlite3
+*.parquet
+*.feather
+*.pkl
+*.pickle
+*.npy
+*.npz
+*.xlsx
+*.xls
+*.zip
+*.7z
+*.rar
+
+# 实验运行结果与临时文件
+artifacts/**
+!artifacts/**/
+!artifacts/**/README.md
+!artifacts/**/.gitkeep
+tmp/
+generated/
+outputs/
+**/outputs/
+
+# 前端依赖与构建产物
+node_modules/
+**/node_modules/
+**/.vite/
+**/dist/
+
+# 本地编辑器文件
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# 大型媒体与本地导出
+*.mp4
+*.mov
+*.avi
+*.wav
+*.mp3
