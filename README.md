@@ -1,7 +1,7 @@
 <h1 align="center">masarch / agentorch</h1>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Akun-python/agentorch/main/resource/agentorch-icon.svg" alt="agentorch icon" width="110">
+  <img src="resource/agentorch-icon.svg" alt="agentorch icon" width="110">
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@ If your system needs tools, retrieval, memory, workflow, and delegation to work 
 
 ### Architecture Overview
 
-![agentorch Architecture Overview](https://raw.githubusercontent.com/Akun-python/agentorch/main/resource/architecture_overview.svg)
+![agentorch Architecture Overview](resource/architecture_overview.svg)
 
 Reusable architecture, technology-stack, and project icons live in [`resource/brand`](resource/brand).
 
@@ -40,7 +40,7 @@ Reusable architecture, technology-stack, and project icons live in [`resource/br
 
 ### Runtime Flow
 
-![agentorch Runtime Flow](https://raw.githubusercontent.com/Akun-python/agentorch/main/resource/runtime_flow.svg)
+![agentorch Runtime Flow](resource/runtime_flow.svg)
 
 Source repository: <https://github.com/Akun-python/agentorch>
 
