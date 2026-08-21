@@ -56,11 +56,24 @@ node_modules/
 
 # 本地编辑器文件
 .idea/
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
+.vscode/
 *.swp
 *.swo
+
+# 本地导出文档、参考资料与实验图
+*.pdf
+*.docx
+*.pptx
+*.aux
+*.abs
+*.log
+*.out
+*.synctex.gz
+**/figures/
+**/downloads/
+**/download/
+**/outputs_*/
+**/outputs*/
 
 # 大型媒体与本地导出
 *.mp4
