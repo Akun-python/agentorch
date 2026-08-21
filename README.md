@@ -1,7 +1,11 @@
-<h1 align="center">masarch / agentorch</h1>
+<h1 align="center">agentorch</h1>
 
 <p align="center">
-  <img src="resource/agentorch-icon.svg" alt="agentorch icon" width="110">
+  <strong>Code-first · Async-first Python framework for multi-agent orchestration</strong>
+</p>
+
+<p align="center">
+  <img src="resource/brand/agentorch-logo.svg" alt="agentorch logo" width="440">
 </p>
 
 <p align="center">
@@ -14,33 +18,80 @@
   <a href="https://github.com/Akun-python/agentorch/blob/main/README.es.md">Español</a>
 </p>
 
-PyPI distribution: `masarch`  
-Python import package: `agentorch`  
-Version: `0.1.1`  
-Python: `3.10+`  
-License: `MIT`
-
-`agentorch` is a code-first, async-first framework for programmable multi-agent orchestration in Python.
-
 <p align="center">
-  <img src="resource/brand/agentorch-logo.svg" alt="agentorch logo" width="420">
+  <img alt="version" src="https://img.shields.io/badge/version-v0.1.1-2563eb?style=flat-square">
+  <img alt="python" src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="pypi" src="https://img.shields.io/pypi/v/masarch?style=flat-square&logo=pypi&logoColor=white">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square">
+  <img alt="github stars" src="https://img.shields.io/github/stars/Akun-python/agentorch?style=flat-square&logo=github">
 </p>
 
-It is built for teams that need explicit runtime control, not hidden prompt pipelines.
+> An explicit runtime for real-world agent systems: compose models, tools, retrieval, memory, workflows, and delegation into observable software.
 
-If your system needs tools, retrieval, memory, workflow, and delegation to work together as software components, `agentorch` gives you that runtime model.
+The PyPI distribution is `masarch`; install it with `pip install masarch` and import it as `agentorch`.
+
+## Project Overview
+
+`agentorch` is for teams and researchers who need controllable agent systems rather than hidden prompt pipelines. It provides explicit runtime objects, policy boundaries, and structured state so a system can grow from one agent into coordinated multi-agent execution.
+
+### Typical Scenarios
+
+- **Coding assistants** with bounded filesystem, shell, Git, and review access.
+- **Knowledge assistants** with retrieval evidence, RAG, citations, and explainable output.
+- **Workflow automation** with DAG execution, retries, audit trails, and persistence.
+- **Long-running tasks** with threads, workspaces, cross-turn memory, and resumability.
+
+### Repository Layout
+
+| Directory | Contents |
+| --- | --- |
+| `agentorch/` | Core runtime, models, tools, memory, and workflow components |
+| `projects/` | Application projects such as AI text detection and AI short drama |
+| `experiments/` | Long-term memory, context, and baseline experiments |
+| `resource/` | Architecture diagrams, runtime flows, and brand assets |
+| `tests/` | Cross-module integration and project tests |
+| `data/` | Local data contract; raw data is ignored by default |
+
+## Technology Stack
+
+| Layer | Technology | Purpose |
+| --- | --- | --- |
+| Core language | Python 3.10+, `asyncio` | Async-first runtime and task scheduling |
+| Types and validation | Pydantic | Validate requests, responses, tools, and configuration |
+| Model adapters | OpenAI API and compatible endpoints | Chat, embeddings, vision, and speech models |
+| Orchestration | Runtime and Workflow DAG | Routing, delegation, handoffs, retries, and state |
+| Tooling | filesystem, execution, git, web, media | Policy-controlled tool execution |
+| Knowledge and memory | RAG, Memory, optional Neo4j | Evidence retrieval, long-term memory, and graphs |
+| Engineering | pytest, Jinja2, HTTPX | Testing, generation templates, and HTTP adapters |
+
+## Core Capabilities
+
+<p>
+  <img alt="multi-agent" src="https://img.shields.io/badge/Multi--Agent-orchestration-7657e8?style=flat-square">
+  <img alt="rag" src="https://img.shields.io/badge/RAG-evidence-0f766e?style=flat-square">
+  <img alt="memory" src="https://img.shields.io/badge/Memory-governance-1d4ed8?style=flat-square">
+  <img alt="workflow" src="https://img.shields.io/badge/Workflow-DAG-f97316?style=flat-square">
+  <img alt="async" src="https://img.shields.io/badge/Async--First-runtime-0891b2?style=flat-square">
+</p>
+
+- Model adapters, structured output, and streaming responses
+- Tool registries, allowlists, sandboxes, and permission policies
+- Reasoning strategies such as `react` and `plan_execute`
+- Multi-agent delegation, task packets, and explicit handoff records
+- RAG retrieval, evidence mounting, memory retention, and promotion
+- Workflow execution, runtime tracing, and observability events
 
 ### Architecture Overview
 
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
-Reusable architecture, technology-stack, and project icons live in [`resource/brand`](resource/brand).
-
-> Datasets, databases, model files, and generated experiment artifacts are ignored by default. See [`data/README.md`](data/README.md) for the sharing contract.
-
 ### Runtime Flow
 
 ![agentorch Runtime Flow](resource/runtime_flow.svg)
+
+Architecture diagrams, technology icons, and project logos live in [`resource/brand`](resource/brand).
+
+> Datasets, databases, model files, and generated experiment artifacts are ignored by default. See [`data/README.md`](data/README.md) for the sharing contract.
 
 Source repository: <https://github.com/Akun-python/agentorch>
 

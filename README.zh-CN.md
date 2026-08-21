@@ -1,7 +1,11 @@
 <h1 align="center">agentorch</h1>
 
 <p align="center">
-  <img src="resource/agentorch-icon.svg" alt="agentorch icon" width="110">
+  <strong>代码优先 · 异步优先的 Python 多智能体编排框架</strong>
+</p>
+
+<p align="center">
+  <img src="resource/brand/agentorch-logo.svg" alt="agentorch logo" width="440">
 </p>
 
 <p align="center">
@@ -15,29 +19,79 @@
 </p>
 
 <p align="center">
-  <img alt="version v0.1.0" src="https://img.shields.io/badge/version-v0.1.0-2563eb?style=flat-square">
-  <img alt="python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white">
-  <img alt="downloads" src="https://img.shields.io/github/downloads/Akun-python/agentorch/total?style=flat-square">
-  <img alt="license MIT" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square">
+  <img alt="version" src="https://img.shields.io/badge/version-v0.1.1-2563eb?style=flat-square">
+  <img alt="python" src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="pypi" src="https://img.shields.io/pypi/v/masarch?style=flat-square&logo=pypi&logoColor=white">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square">
+  <img alt="github stars" src="https://img.shields.io/github/stars/Akun-python/agentorch?style=flat-square&logo=github">
 </p>
 
-`agentorch` 是一个代码优先、异步优先的 Python 多智能体编排框架。
+> 面向真实工程边界的智能体运行时：把模型、工具、检索、记忆、工作流和多角色协作，组织成清晰、可观测、可演进的软件结构。
 
-<p align="center">
-  <img src="resource/brand/agentorch-logo.svg" alt="agentorch logo" width="420">
+`agentorch` 的 PyPI 发行名是 `masarch`，安装使用 `pip install masarch`，代码中使用 `import agentorch`。
+
+## 项目介绍
+
+本项目适用于需要“可控智能体系统”的团队和研究者，而不是只依赖提示词拼接的黑盒流程。它提供明确的运行时对象、策略边界和结构化状态，让复杂任务从单智能体自然扩展到多智能体协作。
+
+### 适用场景
+
+- **代码助手**：文件、命令、Git、审查和权限控制协同。
+- **知识助手**：检索证据、RAG、引用链和可解释输出。
+- **自动化流程**：工作流 DAG、节点级重试、审计和持久化。
+- **长程任务**：线程、工作区、跨轮记忆和可恢复执行。
+
+### 仓库结构
+
+| 目录 | 内容 |
+| --- | --- |
+| `agentorch/` | 框架核心、运行时、模型、工具、记忆和工作流 |
+| `projects/` | AI 文本检测、AI 短剧等应用项目 |
+| `experiments/` | 长期记忆、上下文和基线实验代码 |
+| `resource/` | 架构图、运行流程图和品牌图标 |
+| `tests/` | 跨模块集成测试与项目测试 |
+| `data/` | 本地数据约定；原始数据默认不上传 |
+
+## 技术栈
+
+| 层级 | 技术 | 用途 |
+| --- | --- | --- |
+| 核心语言 | Python 3.10+、`asyncio` | 异步优先的运行时与任务调度 |
+| 类型与校验 | Pydantic | 请求、响应、工具输入和配置校验 |
+| 模型适配 | OpenAI API、兼容接口 | 对接聊天、Embedding、视觉和语音模型 |
+| 编排运行时 | Runtime、Workflow DAG | 路由、委派、交接、重试和状态管理 |
+| 工具系统 | filesystem、execution、git、web、media | 受策略控制的工具调用能力 |
+| 知识与记忆 | RAG、Memory、Neo4j 扩展 | 检索证据、长期记忆和图结构存储 |
+| 工程质量 | pytest、Jinja2、HTTPX | 测试、代码生成、模板和网络适配 |
+
+## 核心能力
+
+<p>
+  <img alt="multi-agent" src="https://img.shields.io/badge/Multi--Agent-协作-7657e8?style=flat-square">
+  <img alt="rag" src="https://img.shields.io/badge/RAG-证据链-0f766e?style=flat-square">
+  <img alt="memory" src="https://img.shields.io/badge/Memory-记忆治理-1d4ed8?style=flat-square">
+  <img alt="workflow" src="https://img.shields.io/badge/Workflow-DAG-f97316?style=flat-square">
+  <img alt="async" src="https://img.shields.io/badge/Async--First-运行时-0891b2?style=flat-square">
 </p>
 
-它面向“需要真实工程边界”的系统，而不是只靠提示词拼接的黑盒流程。
+- 模型适配、结构化输出和流式响应
+- 工具注册、白名单、沙箱与权限策略
+- `react`、`plan_execute` 等推理策略
+- 多智能体委派、任务包和显式交接记录
+- RAG 检索、证据挂载、记忆保留与晋升
+- 工作流编排、运行追踪和可观测性事件
 
-当你的场景需要工具调用、检索证据、记忆治理、工作流和多角色协作同时存在时，`agentorch` 提供了明确可控的运行时模型。
-
-PyPI 发行名是 `masarch`，Python 导入包名仍然是 `agentorch`。用户安装时使用 `pip install masarch`，代码里继续使用 `import agentorch`。
+### 架构总览
 
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
 
-架构能力与技术栈图标位于 [`resource/brand`](resource/brand)，可直接复用到文档、演示和前端项目中。
+### 运行流程
 
-> 数据集、数据库、模型文件和实验运行产物默认不上传 GitHub。请先阅读 [`data/README.md`](data/README.md)，只提交字段说明、下载脚本、版本号和脱敏样例。
+![agentorch Runtime Flow](resource/runtime_flow.svg)
+
+架构图、技术栈图标和项目 Logo 位于 [`resource/brand`](resource/brand)，可直接复用到文档、演示和前端项目中。
+
+> 数据集、数据库、模型文件和实验运行产物默认不上传 GitHub。请阅读 [`data/README.md`](data/README.md)，只提交字段说明、下载脚本、版本号和脱敏样例。
 
 ## WHY
 
