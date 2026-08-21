@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+from typing import Protocol
+
+from ..domain.entities import GraphEdgeCandidate, MemoryCapsuleDetail, SearchHit, SubgraphEdge
+
+
+class GraphStore(Protocol):
+    """图存储协议，Neo4j 和内存实现都遵守这组方法。"""
+
+    def ensure_schema(self) -> None: ...
+
+    def close(self) -> None: ...
+
+    def upsert_capsule(
+        self,
+        capsule: MemoryCapsuleDetail,
+        *,
+        summary_embedding: list[float] | None,
+        scene_hash: str,
+    ) -> MemoryCapsuleDetail: ...
+
+    def fetch_temporal_neighbors(self, capsule: MemoryCapsuleDetail) -> tuple[MemoryCapsuleDetail | None, MemoryCapsuleDetail | None]: ...
+
+    def fetch_rule_neighbors(self, capsule: MemoryCapsuleDetail, *, limit: int) -> list[MemoryCapsuleDetail]: ...
+
+    def upsert_edges(self, edges: list[GraphEdgeCandidate]) -> None: ...
+
+    def query_vector(self, embedding: list[float], *, limit: int) -> list[SearchHit]: ...
+
+    def query_fulltext(self, query_text: str, *, limit: int) -> list[SearchHit]: ...
+
+    def fetch_conflict_counts(self, capsule_ids: list[str]) -> dict[str, int]: ...
+
+    def fetch_capsules(self, capsule_ids: list[str]) -> list[MemoryCapsuleDetail]: ...
+
+    def fetch_one_hop_subgraph(self, seed_ids: list[str], *, edge_limit: int) -> tuple[list[MemoryCapsuleDetail], list[SubgraphEdge]]: ...
+
+    def mark_recalled(self, capsule_ids: list[str]) -> None: ...

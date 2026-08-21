@@ -18,6 +18,7 @@ class BaseModelAdapter(ABC):
             reasoning_delta_text=response.reasoning_content,
             tool_calls=response.tool_calls,
             finish_reason=response.finish_reason,
+            usage=response.usage,
         )
 
     async def aclose(self) -> None:

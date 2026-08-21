@@ -1,0 +1,608 @@
+\documentclass[a4paper,fleqn]{cas-sc}
+\ifdefined\pdfminorversion\pdfminorversion=7\fi
+\usepackage[utf8]{inputenc}
+\usepackage{CJKutf8}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{hyperref}
+\setlength{\emergencystretch}{3em}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\Urlmuskip=0mu plus 1mu
+
+\begin{document}
+\begin{CJK*}{UTF8}{gbsn}
+\sloppy
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+\shorttitle{Nutcracker Memory Graph}
+\shortauthors{Author}
+\ExplSyntaxOn
+\RenewDocumentCommand \printorcid { } { }
+\ExplSyntaxOff
+
+\title{面向长时程智能体的克拉克星鸦启发长时记忆图谱与可解释召回机制}
+\date{}
+
+\maketitle
+
+\begin{abstract}
+本研究面向长时程大语言模型智能体的跨会话经验管理问题，提出一种克拉克星鸦启发的长时记忆图谱机制。本文研究智能体在跨会话、跨线程和跨任务运行中的长期经验管理，将高价值执行经验沉淀为可复用、可更新、可抑制且可解释的长期记忆。现有长上下文、检索增强生成和平面摘要方法能够缓解历史信息不可见的问题，但难以同时表达经验之间的时间、任务、证据、修正和冲突关系，也难以阻止陈旧或低置信记忆在未来任务中污染当前推理。为此，本文从克拉克星鸦的分散缓存、空间线索定位和回收行为中抽象出工程化长期记忆原则，构建面向智能体执行经验的 Memory Capsule Graph 表示、revision/conflict/stale-aware retrieval 和 explainable subgraph return 三项核心设计。具体而言，本文将执行经验封装为包含目标、摘要、结果、知识范围、标签、实体、结构化 claims、证据、状态和时间戳的记忆胶囊，并通过时间相邻、同任务、证据支持、范围重叠、修正替代和显式冲突六类关系组织为长期记忆图谱。该机制采用胶囊节点和成对关系边，重点处理执行经验的状态治理、修正与冲突裁决、陈旧抑制和可解释证据链返回。实验部分给出面向该机制的可复现实证评估框架，并区分本文独立运行结果与公开结果。
+\end{abstract}
+
+\noindent\textbf{关键词：} 长时记忆图谱；大语言模型智能体；克拉克星鸦；记忆胶囊；场景线索；冲突治理；陈旧记忆抑制；图结构检索。
+
+\section{引言}
+
+长时程大语言模型智能体已逐渐从单轮问答系统扩展为可持续执行复杂任务的交互式系统。真实任务通常包含持续对话、工具调用、文件读写、子任务委派、阶段性反馈和跨会话复用。随着执行轨迹不断增长，系统需要区分三类信息：第一类是只服务当前轮推理的临时上下文，第二类是在当前运行中需要被多角色共享的中期经验，第三类是未来任务仍可能复用的长期记忆。本文研究第三类信息的长期管理，包括经验保存、关系组织、后续召回以及错误旧记忆的抑制。
+
+这一定位将本文与运行内上下文治理研究置于不同时间尺度。运行内上下文治理用于决定当前任务中的上下文可见性、压缩与传播；克拉克星鸦长时记忆图谱用于长期经验的提升、组织与跨运行召回。前者面向工作记忆与协作显著性，后者面向长期记忆与可解释召回。
+
+现有研究已经证明外部记忆对于长时程智能体的重要性。检索增强生成可以从外部语料中补充知识证据 \citep{lewis2020rag}，生成式智能体将自然语言记忆、反思和检索用于行为规划 \citep{park2023generative}，MemoryBank 和 MemGPT 则分别从长期交互与层级记忆调度角度说明了外部记忆的重要性 \citep{zhong2024memorybank,packer2023memgpt}。对于长期智能体而言，记忆对象是执行经验而非静态文档片段。一次经验往往同时包含目标、结果、工具证据、失败原因、适用范围、复用价值和后来的修正。若只按文本相似度或摘要片段检索，系统很难显式判断哪些记忆已经过时、哪些记忆彼此冲突、哪些记忆只在特定任务族中有效。
+
+本研究采用克拉克星鸦作为长期记忆机制的生物学启发。克拉克星鸦会把食物分散缓存到多个地点，并在较长时间后依靠空间线索和地标关系找回缓存 \citep{kamil1997nutcracker,cornellClarksNutcracker,nps2018clarksnutcracker}。本文采用行为层启发，并据此抽象出三条可工程化的设计原则：分散缓存、线索定位和安全回收。对应到智能体系统中，分散缓存对应高价值经验的胶囊化存储，线索定位对应由任务目标、知识范围、标签、实体、线程族和任务族构成的场景索引，安全回收对应相关局部子图的返回以及对陈旧、废弃、低置信和冲突记忆的抑制。
+
+本文的主要贡献包括三点。第一，提出面向 LLM agent 执行经验的 Memory Capsule Graph 表示，将任务目标、执行结果、结构化 claims、证据、状态和时间戳组织为长期记忆字段。第二，设计 revision/conflict/stale-aware retrieval，将修正边、冲突边、陈旧抑制和场景线索纳入召回排序。第三，给出 explainable subgraph return 与配套评估框架，用于返回胶囊、关系边和证据链，并支持长期记忆问答、强基线、结构化指标、消融、参数敏感性和 token-efficiency 分析。
+
+\section{相关研究}
+
+\subsection{长上下文、检索增强与外部记忆}
+
+长期记忆研究首先要区分长上下文、外部知识检索和执行经验记忆。长上下文模型缓解了可见历史长度不足的问题，但上下文长度增长并不等价于稳定利用远距离证据；系统仍需要选择、压缩、定位和冲突处理机制。检索增强生成（RAG）通过从外部知识库检索相关文档片段缓解参数化记忆不足，并已经成为知识密集型任务的重要范式 \citep{lewis2020rag}。相关综述进一步将 RAG 拆解为索引、检索、重排、生成和评估等环节，表明外部记忆系统的关键在于检索粒度、证据融合和错误控制，而不只是外部存储规模 \citep{gao2023ragsurvey}。
+
+对智能体而言，外部记忆的对象不再只是静态文档，而是系统自身在交互、工具调用、规划和错误修正中产生的经验。生成式智能体把观察写入自然语言记忆流，并通过相关性、近因性和重要性检索，再用反思生成更高层抽象 \citep{park2023generative}。Reflexion 将失败反馈转化为 verbal memory，用于迭代试错改进 \citep{shinn2023reflexion}；Voyager 在开放式环境中维护技能库和探索经验，说明可复用经验可以成为智能体持续学习的重要载体 \citep{wang2023voyager}。这些系统共同表明，长期记忆应与智能体生命周期绑定，而不宜仅被看作普通知识库。
+
+\subsection{智能体长期记忆系统}
+
+近年的长期记忆系统开始显式讨论会话持久化、个性化偏好、事实演化和记忆生命周期，相关综述也将记忆内容、记忆操作、记忆结构和评测任务总结为 LLM agent 记忆机制的核心维度 \citep{zhang2024memorysurvey}。MemoryBank 强调长期交互中的用户画像和事件记忆，MemGPT 将有限上下文窗口类比为操作系统中的主存和外存调度，提出在主上下文与外部记忆之间进行主动换入换出 \citep{zhong2024memorybank,packer2023memgpt}。A-MEM 进一步强调 memory note 的自组织链接和 agentic update，Mem0 则从生产系统角度讨论多层记忆、抽取、更新和可扩展存储 \citep{xu2025amem,chhikara2025mem0}。Zep 将会话记忆组织为 temporal knowledge graph，用时间有效性和实体关系描述事实变化，表明长期记忆需要处理事实的时间演化 \citep{rasmussen2025zep}。
+
+这些工作为本文提供了三点启发。第一，长期记忆需要具备独立于当前提示窗口的持久层；第二，记忆写入需要区分短期噪声、可复用经验和需要废弃的旧信息；第三，记忆检索需要同时返回证据、时间和状态。与此同时，既有研究仍留下一个关键问题：执行经验既要被召回，也要以正确的关系结构被召回。例如，旧经验可能被新经验修正，两个经验可能在 claims 层冲突，多个片段可能共同支持同一结论，某条记忆也可能只在特定任务族中有效。这些现象要求长期记忆系统具备关系化表示和安全返回机制。
+
+\subsection{图结构、层级检索与关系化召回}
+
+图结构检索将记忆或文档从平面片段集合推进到关系化组织。GraphRAG 通过实体图、社区摘要和全局查询组织私有语料，说明关系化索引可以改善面向全局问题的查询聚合能力 \citep{edge2024graphrag}。LightRAG 强调用图结构同时支持低层实体关系和高层主题关系，以降低重复索引成本并提升检索效率 \citep{guo2024lightrag}。RAPTOR 使用树状摘要组织多粒度证据，说明层级结构能帮助系统在局部事实与全局概括之间切换 \citep{sarthi2024raptor}。HippoRAG 则从海马体启发出发，将知识图谱、个性化 PageRank 和检索增强生成结合，用图上的关联路径支持多跳证据聚合 \citep{gutierrez2024hipporag}。
+
+对于智能体长期记忆而言，图结构提供了关系化组织与可解释召回能力。图边可以将时间相邻、同任务、证据支持、范围重叠、修正替代和显式冲突转化为可检索、可解释和可治理的对象。与普通向量库相比，图谱能够返回局部子图，帮助模型判断一条记忆为何被召回、它支持哪些 claims、是否被后来的经验修正以及是否与当前任务范围匹配。因此，本文采用记忆胶囊与关系边组织长期记忆。
+
+\subsection{长期记忆评测与实验组织}
+
+长期记忆机制需要通过长程任务评测，而不宜仅用短上下文问答验证。LoCoMo 构造了跨长期会话的评测任务，覆盖单跳、多跳、时序和开放问题，并强调长期记忆能力应在跨 session 的历史中评估 \citep{maharana2024locomo}。LongMemEval 从长期记忆能力评估角度进一步强调真实会话中记忆定位、事实更新和时间推理的难度 \citep{wu2024longmemeval}。近期超图记忆研究以 topic--episode--fact 三层结构和粗到细检索组织长期对话记忆，并在主实验、消融、参数敏感性与 token 使用分析上提供了较完整的实验范式 \citep{yue2026hypermem}。
+
+本文采用上述工作的实验组织方式。三层超图方法重点表达多个 episode 或 fact 之间的高阶关联；星鸦图谱机制则采用记忆胶囊节点和成对关系边，重点处理工程智能体执行经验中的场景线索定位、修正与冲突治理、陈旧抑制和可解释子图返回。因此，相应实验沿用长期对话记忆评测的结构，评价问题、指标和结论边界则围绕本文机制展开。
+
+表 \ref{tab:related-work-diff} 进一步概括本文与代表性长期记忆系统的差异。该对比用于明确本文的技术落点：记忆对象为带有目标、结果、证据、状态和时间戳的智能体执行经验，返回结果为带治理状态的局部证据子图。
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{与代表性长期记忆系统的机制差异}
+\label{tab:related-work-diff}
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{P{0.13\linewidth}P{0.16\linewidth}P{0.17\linewidth}P{0.20\linewidth}P{0.15\linewidth}P{0.09\linewidth}}
+\toprule
+方法 & 记忆对象 & 结构 & 修正/冲突/陈旧治理 & 可解释返回 & agent 执行经验 \\
+\midrule
+RAG & 文档片段 & 向量或倒排索引 & 通常不显式建模 & 片段级证据 & 否 \\
+Generative Agents & 观察与反思 & 自然语言记忆流 & 依赖重要性与近因性 & 记忆文本 & 部分支持 \\
+MemoryBank & 用户画像与事件 & 会话长期记忆 & 偏向画像更新 & 记忆摘要 & 部分支持 \\
+MemGPT & 主存/外存内容 & 层级记忆调度 & 支持换入换出，不主打冲突边 & 被调入上下文的记忆 & 部分支持 \\
+Zep & 会话事实与实体 & temporal knowledge graph & 支持时间有效性 & 实体/关系事实 & 部分支持 \\
+GraphRAG & 私有语料实体 & 实体图与社区摘要 & 面向文档知识更新 & 社区摘要与证据 & 否 \\
+HippoRAG & 文档知识事实 & 知识图谱与图遍历 & 偏向关联路径检索 & 多跳路径证据 & 否 \\
+超图长期会话记忆 & topic、episode、fact & 三层超图 & 关注长对话事实组织 & 粗到细证据 & 部分支持 \\
+本研究方法 & 执行经验胶囊 & 胶囊节点与治理边 & 显式修正、冲突与陈旧抑制 & 胶囊、边与证据链 & 是 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{缓存鸟类空间记忆}
+
+食物缓存鸟类为长期记忆设计提供了自然启发。克拉克星鸦能够学习地标之间的几何关系，用于定位隐藏食物 \citep{kamil1997nutcracker}；早期行为研究也显示，克拉克星鸦具有长期空间位置记忆，能够在较长时间间隔后恢复缓存地点 \citep{balda1992spatial}。相关物种资料显示，其生态行为与松子缓存和回收高度相关 \citep{cornellClarksNutcracker,nps2018clarksnutcracker}。更广义的食物缓存鸟类研究表明，缓存行为与海马体、空间记忆和适应性专门化密切相关 \citep{sherry1989hippocampal,sherry1987multiple}。Clayton 和 Dickinson 关于 scrub jay 的经典实验显示，鸟类能够在缓存恢复中利用食物类型、缓存位置和时间信息 \citep{clayton1998episodic}。相关计算模型也尝试解释缓存鸟类如何通过记忆增强机制完成类似任务 \citep{brea2023computational}。
+
+本研究从上述现象中抽象出三层工程映射。第一，缓存地点映射为长期记忆胶囊的稳定存储位置。第二，空间线索和地标关系映射为任务场景索引与关系边。第三，回收行为映射为未来查询中的局部子图召回。该映射强调行为层启发，而不涉及神经机制复刻。
+
+\section{方法}
+
+图 \ref{fig:nutcracker-mechanism} 展示了本研究采用的生物启发来源：克拉克星鸦在秋季分散缓存食物，在冬季依靠地标和空间线索恢复缓存；对应到智能体长期记忆中，缓存位置被抽象为记忆胶囊，地标关系被抽象为场景索引和图边，高价值食物的优先记忆被抽象为提升判定与重要性权重，重复回收被抽象为长期记忆的可复用召回。
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.88\linewidth]{\detokenize{./figures/星鸦.pdf}}
+\caption{克拉克星鸦长时记忆机制的生物启发与工程抽象。图中分散缓存、地标线索、重要性权重和持续回收分别对应本研究的记忆胶囊、场景索引、提升判定和子图召回。}
+\label{fig:nutcracker-mechanism}
+\end{figure}
+
+\subsection{问题定义与方法边界}
+
+设智能体在时间 $t$ 产生执行轨迹 $\mathcal{H}_t$，其中包含用户请求、模型推理、工具调用、观测结果、子任务产物和反馈信号。长期记忆机制需要从轨迹中选择候选经验 $m$，判断其是否具有跨运行复用价值，并在满足条件时提升为长期记忆胶囊 $c$。未来查询 $q$ 到来时，系统从长期记忆图谱中返回规模受控、关系清楚、状态可信的局部子图 $G_q$。
+
+该过程可写为：
+\begin{equation}
+\mathcal{H}_t \rightarrow \mathcal{M}^{\text{candidate}}
+\rightarrow \mathcal{M}^{\text{long}}
+\rightarrow G_q .
+\end{equation}
+其中，$\mathcal{M}^{\text{candidate}}$ 表示候选经验集合，$\mathcal{M}^{\text{long}}$ 表示长期记忆图谱，$G_q$ 表示面向当前查询返回的局部子图。
+
+在通用智能体系统架构中，上游记忆治理器可承担候选经验的验证、提升、降级和废弃判断；星鸦图谱机制接收已具备跨运行复用价值的经验，并负责长期表示、关系组织和未来召回。这一分层有助于避免将运行内上下文治理、记忆提升判断和长期图谱存储混合为单一模块，从而提高系统可维护性。
+
+\subsection{记忆胶囊表示}
+
+本研究将长期记忆的基本单元定义为记忆胶囊。对于被提升的经验 $m$，其胶囊表示为：
+\begin{equation}
+c = \langle id, g, s, o, K, T, E, Q, R, \sigma, \tau \rangle .
+\end{equation}
+其中，$id$ 为唯一标识；$g$ 表示任务目标；$s$ 表示摘要；$o$ 表示执行结果；$K$ 表示知识范围；$T$ 表示标签集合；$E$ 表示实体集合；$Q$ 表示结构化 claims；$R$ 表示证据引用；$\sigma$ 表示状态；$\tau$ 表示创建或验证时间。
+
+胶囊化将一次经验转化为可索引、可比较、可校验和可治理的对象。与普通摘要相比，记忆胶囊显式保留目标、证据、状态和结构化 claims，因此更适合关系构边、冲突检测和陈旧控制。
+
+\subsection{场景索引与提升判定}
+
+为了抽象克拉克星鸦依靠空间线索定位缓存位置的能力，本研究为每个胶囊构造场景索引：
+\begin{equation}
+\mathrm{scene}(c)=h(g,K,T,E,\mathrm{thread\_family},\mathrm{task\_family}) .
+\end{equation}
+其中，$h(\cdot)$ 是稳定哈希函数。该索引提供补充性的任务线索，并编码记忆在未来任务中的潜在复用范围。召回过程因此同时依赖语义相似度、任务族、知识范围和实体线索。
+
+对于候选经验 $m$，定义长期提升分数：
+\begin{equation}
+\mu(m)=
+\rho_1\mathrm{Val}(m)
++\rho_2\mathrm{Reuse}(m)
++\rho_3\mathrm{Out}(m)
++\rho_4\mathrm{Gen}(m)
+-\rho_5\mathrm{Noise}(m).
+\end{equation}
+其中，$\mathrm{Val}$ 表示证据验证强度，$\mathrm{Reuse}$ 表示复用信号，$\mathrm{Out}$ 表示结果贡献，$\mathrm{Gen}$ 表示跨任务泛化价值，$\mathrm{Noise}$ 表示局部噪声或低置信惩罚。当 $\mu(m)\geq\theta_{\text{long}}$ 时，候选经验才会被提升为长期记忆胶囊。
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{算法 1：Memory Capsule Promotion}
+\label{alg:capsule-promotion}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{P{0.16\linewidth}P{0.75\linewidth}}
+\toprule
+输入 & 候选经验集合 $\mathcal{M}^{\text{candidate}}$、当前执行轨迹 $\mathcal{H}_t$、提升阈值 $\theta_{\text{long}}$、权重 $\rho_1\ldots\rho_5$。 \\
+输出 & 长期记忆胶囊集合 $\mathcal{C}^{+}$ 与未提升候选集合 $\mathcal{M}^{-}$。 \\
+步骤 & 对每个候选经验抽取目标、结果、知识范围、标签、实体、claims、证据与状态；计算 $\mathrm{Val}$、$\mathrm{Reuse}$、$\mathrm{Out}$、$\mathrm{Gen}$ 和 $\mathrm{Noise}$；若 $\mu(m)\geq\theta_{\text{long}}$，则生成胶囊 $c$、场景索引 $\mathrm{scene}(c)$ 和初始状态，否则保留为短期或中期记录。 \\
+成本 & 若抽取结果已缓存，排序与阈值判断对候选条数近似线性；若需要模型抽取，主要成本随候选经验数量线性增长。 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{关系构边与 Neo4j 可插拔存储}
+
+胶囊写入长期记忆图谱后，系统依据规则构造六类边：
+\begin{equation}
+\mathcal{R}_{G}=\{
+\texttt{TEMPORAL\_NEXT},
+\texttt{SAME\_TASK},
+\texttt{EVIDENCE\_SUPPORTS},
+\texttt{SCOPE\_OVERLAP},
+\texttt{REVISES},
+\texttt{CONFLICTS\_WITH}
+\}.
+\end{equation}
+\texttt{TEMPORAL\_NEXT} 保留时间顺序，\texttt{SAME\_TASK} 连接同一任务或任务族下的经验，\texttt{EVIDENCE\_SUPPORTS} 连接共享证据或来源的胶囊，\texttt{SCOPE\_OVERLAP} 表示知识范围、标签或实体重叠，\texttt{REVISES} 表示新经验对旧经验的修正，\texttt{CONFLICTS\_WITH} 表示 claims 层面的显式冲突。
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{算法 2：Graph Construction with Revises/Conflicts/Stale States}
+\label{alg:graph-construction}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{P{0.16\linewidth}P{0.75\linewidth}}
+\toprule
+输入 & 新胶囊 $c$、历史胶囊邻域 $\mathcal{N}_k(c)$、关系规则集合 $\mathcal{R}_{G}$、陈旧阈值 $\theta_{\text{stale}}$。 \\
+输出 & 更新后的长期记忆图谱 $\mathcal{M}^{\text{long}}$。 \\
+步骤 & 先按时间顺序连接 \texttt{TEMPORAL\_NEXT}；再依据任务族、标签、实体和证据重叠生成 \texttt{SAME\_TASK}、\texttt{SCOPE\_OVERLAP} 与 \texttt{EVIDENCE\_SUPPORTS}；随后在 claims 层比较新旧胶囊，若新证据替代旧结论则建立 \texttt{REVISES} 并下调旧胶囊状态，若 claims 互斥则建立 \texttt{CONFLICTS\_WITH}；最后根据时间、验证状态和修正链标记 stale 或 deprecated 候选。 \\
+成本 & 只与候选邻域规模 $k$、claims 数量和实体/标签集合规模相关；通过场景索引限制邻域后，避免对全图做两两比较。 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+在工程实现上，该机制可落地为 Neo4j 可插拔模块。长期记忆以 \texttt{:MemoryCapsule} 节点形式保存，\texttt{capsule\_id} 作为唯一主键；节点记录目标、摘要、结果、知识范围、标签、实体、claims、证据、场景哈希、置信度、状态和时间戳；边记录上述六类关系。索引层可同时提供主键约束、全文索引、向量索引以及面向任务族、线程族、状态与时间字段的范围索引。需要强调的是，Neo4j 在本研究中仅作为持久化、索引和图查询后端，并非方法创新本身；核心贡献在于胶囊 schema、状态感知关系治理和线索触发的召回策略。公共入口保持在插件门面层，核心接口包括写入胶囊、召回子图、查询详情和从历史 SQLite 记录回填，从而避免侵入 AgentTorch 核心运行时。
+
+\subsection{线索触发的子图召回与安全过滤}
+
+给定查询 $q$ 和当前上下文 $\mathcal{H}_t$，系统先执行向量召回与全文召回，再按场景线索、置信度、复用信号、陈旧惩罚和冲突惩罚进行重排。候选胶囊 $c$ 的召回分数定义为：
+\begin{equation}
+\begin{aligned}
+r(c,q,\mathcal{H}_t)=&
+\alpha_1\mathrm{Sem}(c,q)
++\alpha_2\mathrm{Lex}(c,q)
++\alpha_3\mathrm{Scene}(c,\mathcal{H}_t) \\
+&+\alpha_4\mathrm{Conf}(c)
++\alpha_5\mathrm{Reuse}(c)
+-\alpha_6\mathrm{Stale}(c)
+-\alpha_7\mathrm{Conflict}(c).
+\end{aligned}
+\end{equation}
+其中，$\mathrm{Sem}$ 和 $\mathrm{Lex}$ 分别来自语义向量和全文匹配；$\mathrm{Scene}$ 衡量当前任务线索与胶囊场景索引的一致性；$\mathrm{Conf}$ 和 $\mathrm{Reuse}$ 鼓励高置信和已复用经验；$\mathrm{Stale}$ 与 $\mathrm{Conflict}$ 用于抑制陈旧或冲突节点。
+
+召回过程分为三步。第一，从向量索引和全文索引中获取候选胶囊，并按上述分数重排。第二，从 top seed 节点出发进行一跳子图扩展，将时间、任务、证据、范围、修正和冲突关系纳入返回候选。第三，在注入提示前执行安全过滤：状态为 deprecated 的节点、低置信且超出陈旧阈值的节点、以及在冲突裁决中失败的节点被抑制。最终返回局部子图摘要、节点索引、边列表与可选详情查询入口，而非原始长日志。
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{算法 3：Cue-triggered Subgraph Retrieval and Safety Filtering}
+\label{alg:subgraph-retrieval}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{P{0.16\linewidth}P{0.75\linewidth}}
+\toprule
+输入 & 查询 $q$、当前上下文 $\mathcal{H}_t$、长期记忆图谱 $\mathcal{M}^{\text{long}}$、seed 数量 $k_s$、扩展边数量 $k_e$、返回预算 $B$。 \\
+输出 & 可注入提示的局部子图 $G_q$、胶囊索引、边列表和证据摘要。 \\
+步骤 & 先用向量索引和全文索引获取候选 seed；计算 $\mathrm{Sem}$、$\mathrm{Lex}$、$\mathrm{Scene}$、$\mathrm{Conf}$、$\mathrm{Reuse}$、$\mathrm{Stale}$ 与 $\mathrm{Conflict}$ 后重排；从 top-$k_s$ seed 沿六类关系扩展最多 $k_e$ 条边；过滤 deprecated、低置信陈旧和冲突裁决失败节点；按预算 $B$ 返回节点、边和证据链，并保留详情回查入口。 \\
+成本 & 候选召回依赖后端索引；图扩展成本近似为 $O(k_s k_e)$，安全过滤对返回候选线性扫描。 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{实验设计}
+
+\subsection{实验设计依据}
+
+实验部分用于验证克拉克星鸦长时记忆图谱机制的证据闭环。长期对话记忆研究通常同时报告主结果、强基线、消融、参数敏感性和 token 使用效率 \citep{maharana2024locomo,yue2026hypermem}。本文采用这一实验组织方式，所有实验对象、指标和结论边界均围绕星鸦图谱机制展开。
+
+本文在实验部分给出可复现的实验协议、指标体系和统计要求，不填入未运行数值。已有模块级 benchmark、稳定性脚本和图规模脚本可作为正式实验基础；LoCoMo-style 主实验、专项冲突/修正/陈旧场景和最终汇总结果仍需由正式运行产物支撑。结果表需要能够追溯到原始 CSV、JSON/Markdown 报告和运行命令。对于公开论文已经报告的强基线表格，本文将其单列为公开结果，用于记录已有方法在原始设置下的表现与评测配置；这类数值不混入本文独立运行结果，也不作为同一数据、同一预算、同一 judge 下的直接比较结论。
+
+本文将五组实验对应到五个研究问题。RQ1 评估长期记忆问答在长程历史中的经验定位能力；RQ2 评估完整机制与可实现强基线的比较结果；RQ3 考察关系命中、陈旧抑制和冲突裁决的作用；RQ4 考察场景索引、构边和过滤策略的独立贡献；RQ5 评估 token 预算、召回延迟和图规模扩展下的部署约束。所有研究问题均需由正式实验回答，相应结论在完整运行结果产生后依据统计证据给出。
+
+主结果采用分问题类型、总体均值和运行成本并列呈现的指标结构。问答能力以 LLM-as-a-judge accuracy（\%）为主指标，评测时固定同一 judge 模型、同一评分提示和同一标准答案字段，并报告三次独立运行的平均值；问题类型与 LoCoMo-style 设置保持一致，分为单跳、多跳、时序和开放问题。消融实验除报告各问题类型 accuracy 外，还报告 Overall（\%）和相对完整方法的 $\Delta$；参数敏感性实验扫描场景/结构融合权重、种子节点 top-k、扩展关系 top-k 和最终胶囊 top-k；效率实验绘制 token usage--accuracy 对照，并记录相对 token 倍数、平均输入 token、平均返回节点数和平均延迟。
+
+为降低 LLM-as-a-judge 单点评价带来的可靠性风险，正式实验还需要加入评测一致性控制。第一，judge prompt、评分 rubric、标准答案字段和拒判规则应进入附录，并保存每条样本的原始 judge 输出。第二，主结果至少运行三次，报告平均值、标准差，并对 Overall 指标给出 bootstrap 95\% 置信区间或等价显著性检验。第三，从主实验中抽取约 100 条样本进行人工复核，或使用第二个 judge 模型进行一致性检查，并报告一致率或 Cohen's kappa。第四，所有结论应同时查看答案质量、目标胶囊命中、目标关系命中和 token 成本，避免只凭 judge accuracy 判断长期记忆机制有效。
+
+\subsection{公开数据集边界与文献指标口径说明}
+
+本文当前使用的数据文件为 \texttt{artifacts/long\_term\_memory\_graph/datasets/longmemeval\_oracle.jsonl}。结合转换脚本与公开基准协议可知，该文件并非原始 LongMemEval 全量 500 题的逐字镜像，而是面向本文实验框架整理后的 \textbf{oracle 变体}：默认跳过 abstention 样本，仅保留可直接形成标准答案监督的题目，因此本地文件当前为 470 条。换言之，它属于\textbf{真实来源的公开 benchmark 派生测试集}，但不是“未经裁剪的原始完整公开测试文件”。若论文需要严格表述，建议写为：“本文使用 LongMemEval 公开基准的 oracle 转换版本；按默认协议剔除 abstention 样本后，共 470 条有效测试题。”
+
+进一步地，本文调研的长期记忆相关方法并不是都在该 470 条 LongMemEval oracle 变体上公开报告过结果。相当一部分方法只报告了 LoCoMo、产品内部 benchmark、README 宣传分数，或根本未公布与本文同口径的公开测试数字。因此，表 \ref{tab:public-benchmark-metrics-cn} 只汇总\textbf{当前仓库可核验的公开结果}，并明确标记“是否为 LongMemEval 同口径结果”。未见公开同口径结果的条目一律记为“未报告”，避免把不同数据集、不同 judge、不同模型预算下的数字混写为可直接对比的主结论。
+
+\begin{table*}[t]
+\centering
+\scriptsize
+\caption{公开数据集边界与已检索文献指标汇总（中文口径）}
+\label{tab:public-benchmark-metrics-cn}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{P{0.11\linewidth}P{0.20\linewidth}P{0.09\linewidth}P{0.12\linewidth}P{0.15\linewidth}P{0.23\linewidth}}
+\toprule
+方法/文献 & 公开来源 & 数据集口径 & 已见公开指标 & 是否与本文 470 条 LongMemEval oracle 同口径 & 备注 \\
+\midrule
+LoCoMo 基准协议 \citep{maharana2024locomo} & LoCoMo 论文 & LoCoMo & 提供任务划分与评测协议 & 否 & 是长期记忆公开评测协议来源，不是本文对比方法分数。 \\
+RAG \citep{lewis2020rag} & 原始论文 & 非长期对话专门基准 & 未见该文在 LongMemEval/LoCoMo 上公开统一分数 & 否 & 作为经典检索增强基线被引用，但原论文不报告本文所需公开同口径长期记忆问答指标。 \\
+GraphRAG \citep{edge2024graphrag} & 原始论文 & 图检索/摘要任务 & 未见该文在 LongMemEval/LoCoMo 上公开统一分数 & 否 & 论文聚焦图检索增强，不直接给出本文同口径长期记忆公开测试结果。 \\
+LightRAG \citep{guo2024lightrag} & 原始论文 & 通用 RAG 任务 & 未见该文在 LongMemEval/LoCoMo 上公开统一分数 & 否 & 可作为方法参考，但当前未检索到同口径公开长期记忆分数。 \\
+HippoRAG2 / RAG to Memory & 原始论文 & 持续学习/记忆任务 & 未见该文在本文口径数据集上公开统一分数 & 否 & 与长期记忆思想相关，但不是本文 470 条公开测试的现成指标来源。 \\
+HyperGraphRAG & 原始论文 & 超图 RAG 任务 & 未见该文在 LongMemEval/LoCoMo 上公开统一分数 & 否 & 方法相关，但当前未检索到可直接抄录的同口径公开 benchmark 分数。 \\
+OpenAI Memory & 官方博客/帮助文档 & 产品功能说明 & 未报告公开学术 benchmark 分数 & 否 & 属于产品功能说明，不应当写成公开论文基线数值。 \\
+LangMem & 官方 README & SDK/框架说明 & 未报告公开 LongMemEval/LoCoMo 分数 & 否 & 当前能确认其能力边界，但不能从 README 提取同口径公开精度。 \\
+Zep \citep{rasmussen2025zep} & 原始论文 & 时间知识图谱记忆 & 未见该文在本文口径数据集上公开统一分数 & 否 & 论文强调架构，不等于已给出本文数据集上的公开主结果。 \\
+A-MEM \citep{xu2025amem} & 原始论文 & Agent memory 任务 & 未见该文在本文口径数据集上公开统一分数 & 否 & 可作为相关方法，但当前未检索到可直接并表的同口径公开指标。 \\
+Mem0 / Mem0G \citep{chhikara2025mem0} & 原始论文 & 生产记忆系统 & 未见该文在本文口径数据集上公开统一分数 & 否 & 论文更偏系统与案例，不能直接写成 LongMemEval 470 条公开测试分数。 \\
+MIRIX & 原始论文 & 多智能体记忆系统 & 未见该文在本文口径数据集上公开统一分数 & 否 & 目前未检索到 LongMemEval/LoCoMo 同口径公开结果。 \\
+Memobase & 官方 LoCoMo benchmark README & LoCoMo & 例示行可见 Temporal：BLEU 0.4758、F1 0.6423、LLM Judge 0.8505（README 截图/示例） & 否 & 这是公开 LoCoMo 结果，不是本文 470 条 LongMemEval oracle 结果；且当前仓库仅能稳定核验 README 中展示的 LoCoMo 指标。 \\
+MemU & 官方 README & LoCoMo & 平均准确率 92.09\% & 否 & README 明确写的是 LoCoMo average accuracy，不应转写成 LongMemEval 分数。 \\
+MemOS & 原始论文 & Memory OS 架构 & 未见该文在本文口径数据集上公开统一分数 & 否 & 当前未检索到与本文数据文件同口径的公开结果。 \\
+本文当前本地数据文件 & 本地转换产物 + 公开 LongMemEval 来源 & LongMemEval oracle 派生版 & 470 条有效测试题 & 是 & 来源真实且公开，但默认剔除了 abstention 样本，因此不是原始 500 条完整文件。 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+基于上述边界，正式论文中的主比较表应区分两类数字：第一类是\textbf{本文独立运行结果}，必须在统一模型、统一 judge、统一 token 预算和统一数据文件下生成；第二类是\textbf{文献公开结果}，只能作为背景参考或公开上界/下界对照，不能与本文独立运行结果混写为同口径主结论。若后续你完成 `compare --paper-mode` 的全量正式实验，则推荐另起一张“本文统一协议下强基线对比表”，与表 \ref{tab:public-benchmark-metrics-cn} 分开呈现。
+
+如果正式汇报还需要一张更像“SOTA 类模型公开成绩单”的表，则建议继续拆成两层：第一层使用\textbf{统一复评口径}，即同一论文中在统一基础模型与统一评测流程下重跑多个系统的对比结果；第二层使用\textbf{官方最新公开自报口径}，即仓库 README、官方 benchmark 仓库或产品方公开页面中的最新数字。前者可作为论文正文里的公开强基线背景，后者更适合写成“截至某日的公开成绩观察”，不能直接与本文主实验结果混写。
+
+\begin{table*}[t]
+\centering
+\caption{LoCoMo 上的公开统一复评指标（中文整理）}
+\label{tab:locomo-public-sota-cn}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccc}
+\toprule
+方法 & Tokens & Single-hop & Multi-hop & Temporal & Open-domain & Overall & Overall F1 \\
+\midrule
+MIRIX & -- & 68.22 & 54.26 & 68.54 & 46.88 & 64.33 & 28.10 \\
+Mem0 & 1172 & 73.33 & 58.75 & 52.34 & 45.83 & 64.57 & 43.46 \\
+Zep & 2701 & 66.23 & 52.12 & 54.82 & 33.33 & 59.22 & 41.23 \\
+Memobase & 2102 & 73.12 & 64.65 & 81.20 & 53.12 & 72.01 & 50.18 \\
+MemU & 617 & 66.34 & 63.12 & 27.10 & 50.01 & 56.55 & 35.15 \\
+Supermemory & 500 & 67.30 & 51.12 & 31.77 & 42.67 & 55.34 & 34.87 \\
+MemOS-1031 & 1589 & 81.09 & 67.49 & 75.18 & 55.90 & 75.80 & 45.27 \\
+\bottomrule
+\end{tabular}}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+\caption{LongMemEval 上的公开统一复评指标（中文整理）}
+\label{tab:longmemeval-public-sota-cn}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+方法 & Tokens & 单轮偏好 & 单轮助手 & 时间推理 & 多轮会话 & 知识更新 & 单轮用户 & Overall \\
+\midrule
+MIRIX & -- & 53.3 & 63.6 & 25.6 & 30.1 & 52.6 & 72.9 & 43.49 \\
+Zep & 1.6k & 53.3 & 75.0 & 54.1 & 47.4 & 74.4 & 92.9 & 63.8 \\
+Mem0 & 1.1k & 90.0 & 26.8 & 72.2 & 63.2 & 66.7 & 82.9 & 66.4 \\
+Memobase & 1.5k & 80.1 & 23.2 & 75.9 & 66.9 & 89.7 & 92.9 & 72.4 \\
+Supermemory & 0.4k & 89.9 & 58.9 & 44.4 & 52.6 & 55.1 & 85.7 & 58.4 \\
+MemU & 0.5k & 76.7 & 19.6 & 17.3 & 42.1 & 41.0 & 67.1 & 38.4 \\
+MemOS-1031 & 1.4k & 96.7 & 67.9 & 77.4 & 70.7 & 74.3 & 95.7 & 77.8 \\
+\bottomrule
+\end{tabular}}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+\caption{截至 2026 年 5 月 29 日可核验的官方最新公开自报成绩}
+\label{tab:latest-public-claims-cn}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{P{0.14\linewidth}P{0.24\linewidth}P{0.12\linewidth}P{0.12\linewidth}P{0.28\linewidth}}
+\toprule
+系统 & 公开来源 & LoCoMo & LongMemEval & 备注 \\
+\midrule
+Memobase & 官方 LoCoMo benchmark README & 75.78 & 未披露 & README 同时给出 Single-hop 70.92、Multi-hop 46.88、Temporal 85.05、Open-domain 77.17，以及 Overall F1 0.5145。 \\
+MemU & 官方 README & 92.09 & 未披露 & README 明示为 LoCoMo average accuracy。 \\
+Zep & 原始论文公开表格 & 未披露 & 63.8（gpt-4o-mini）/ 71.2（gpt-4o） & 原文同时报告 full-context 对照 55.4 / 60.2，且平均上下文长度约 1.6k。 \\
+MemOS-1031 & 原始论文公开表格 & 75.80 & 77.8 & 同一论文中给出 LoCoMo 与 LongMemEval 统一复评结果。 \\
+MIRIX & 原始论文摘要 & 85.38 & 未披露 & 摘要明确写明在 LoCoMo 上达到 85.38\% overall accuracy；正文另给同模型统一复评表。 \\
+\bottomrule
+\end{tabular}}
+\end{table*}
+
+因此，如果你现在就要在论文或答辩里展示“公开 SOTA 类结果”，最稳妥的做法是：正文优先引用表 \ref{tab:locomo-public-sota-cn} 与表 \ref{tab:longmemeval-public-sota-cn} 这类\textbf{统一复评表}；表 \ref{tab:latest-public-claims-cn} 则作为“截至 2026 年 5 月 29 日的官方公开成绩观察”。二者服务的论证目的不同，不能直接合并成一张主结论表。
+
+\begin{table}[t]
+\centering
+\small
+\caption{克拉克星鸦长时记忆图谱机制的实验协议}
+\label{tab:nutcracker-experiments}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{P{0.08\linewidth}P{0.21\linewidth}P{0.33\linewidth}P{0.18\linewidth}}
+\toprule
+编号 & 实验名称 & 评估目标 & 输出形式 \\
+\midrule
+E1 & 长期记忆问答主实验 & Single-hop、Multi-hop、Temporal、Open Domain 和 Overall 的 LLM-as-a-judge accuracy & 分类型主结果表 \\
+E2 & 强基线对比 & 同一 case 集下比较各方法的分类型 accuracy、Overall、平均 token 和相对 token 倍数 & 主对比表与文献对照表 \\
+E3 & 结构化机制指标 & 胶囊召回、关系命中、证据完整性、陈旧抑制、冲突裁决和返回记忆可用性 & 机制指标表 \\
+E4 & 消融与参数敏感性 & 报告各消融变体的 Overall、$\Delta$，并扫描融合权重与多级 top-k 参数 & 消融表与敏感性曲线 \\
+E5 & 效率与规模 & token usage--accuracy、召回延迟、详情回查延迟和 Neo4j 图规模扩展 & 效率曲线与规模表 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{E1：长期记忆问答主实验}
+
+第一组实验评估机制是否能在长程历史中取回正确经验并支持回答。数据应组织为 LoCoMo-style case，每条样本至少包含问题类型、长程对话或记忆序列、查询、标准答案、目标胶囊、目标边、陈旧节点和冲突失败节点。问题类型固定为 Single-hop、Multi-hop、Temporal 和 Open Domain。主指标按问题类型分别报告 LLM-as-a-judge accuracy（\%），再报告 Overall（\%）；同时记录 capsule recall@k、relation hit@k、平均输入 token、相对 token 倍数和平均端到端延迟。结果表预留为按问题类型分列的主结果表。
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{E1 长期记忆问答主实验的指标设计与统计输出}
+\label{tab:e1-main-qa}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{P{0.15\linewidth}P{0.25\linewidth}P{0.34\linewidth}P{0.13\linewidth}}
+\toprule
+问题类型 & 数据构造 & 指标 & 统计输出 \\
+\midrule
+Single-hop & 单个胶囊即可回答，目标证据唯一 & LLM-as-a-judge accuracy、capsule recall@k、avg token & 均值、标准差、置信区间 \\
+Multi-hop & 需要跨胶囊和关系边聚合证据 & LLM-as-a-judge accuracy、relation hit@k、evidence completeness & 均值、标准差、置信区间 \\
+Temporal & 需要区分最新状态、旧状态和修正链 & LLM-as-a-judge accuracy、stale injection rate、revision hit@k & 均值、标准差、置信区间 \\
+Open Domain & 需要综合长期记忆给出解释性回答 & LLM-as-a-judge accuracy、returned memory usefulness、avg latency & 均值、标准差、置信区间 \\
+Overall & 四类问题加权或宏平均 & mean accuracy、relative token ratio、3-run average & 宏平均与显著性检验 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{E2：强基线对比}
+
+第二组实验检验完整星鸦图谱机制是否优于可实现强基线。比较对象固定为无长期记忆、纯向量记忆、平面摘要记忆、朴素图记忆、文档图检索记忆、生产型 agent 记忆系统、可复现三层超图或其代理实现，以及完整星鸦图谱机制。本研究将 E2 明确分为两类：第一类是在本研究代码与数据上独立运行的核心基线，包括无长期记忆、向量记忆、平面摘要、朴素图记忆和完整星鸦图谱；第二类是公开结果中的文献报告基线，包括 GraphRAG、Mem0、Zep、HippoRAG、LightRAG 或三层超图长期会话记忆等已有系统。文献报告表格需要注明原始论文、数据集、judge 或评分方式、基础模型和 token 统计口径，仅用于背景对照和配置记录；只有在本研究同一批 case、同一首屏返回预算、同一答案评测流程和同一 token 统计方式下重新运行的结果，才能写入主对比表并用于优劣结论。基线对比应同时输出 Single-hop、Multi-hop、Temporal、Open Domain、Overall、Avg Tokens 和 Relative Tokens；其中 Relative Tokens 可选择 \texttt{no\_long\_term\_memory} 或 \texttt{vector\_memory} 作为 1.0x 基准，但需要在实验报告中固定说明。若公开系统无法完整复现，则使用接口兼容或结构近似的替代版本，并在实验表中标注 proxy，避免将弱替代实现表述为原方法复现。已有模块级 baseline 可作为实现基础，但其历史数值不直接进入本研究主结果表，以避免将尚未对齐 LoCoMo-style 数据的结果写成主实验结论。
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{E2 强基线对比实验的基线范围、来源边界与使用方式}
+\label{tab:e2-baselines}
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{P{0.22\linewidth}P{0.28\linewidth}P{0.17\linewidth}P{0.20\linewidth}P{0.07\linewidth}}
+\toprule
+方法 & 记忆机制 & 来源边界 & 需报告指标 & 使用方式 \\
+\midrule
+\texttt{no\_long\_term\_memory} & 不读取长期记忆，仅使用当前上下文 & 本研究运行 & 四类准确率、Overall、平均/相对 token & 主对比 \\
+\texttt{vector\_memory} & 只按向量相似度返回片段 & 本研究运行 & 四类准确率、Overall、平均/相对 token & 主对比 \\
+\texttt{flat\_summary\_memory} & 返回平面摘要，不显式建边 & 本研究运行 & 四类准确率、Overall、平均/相对 token & 主对比 \\
+\texttt{naive\_graph\_memory} & 使用图扩展，但不启用完整治理策略 & 本研究运行 & 四类准确率、Overall、平均/相对 token & 主对比 \\
+\texttt{graph\_rag\_memory} & 文档实体图或社区摘要式检索 & 文献报告或 proxy & 原文指标；若独立运行则同本研究指标 & 文献对照/扩展对比 \\
+\texttt{mem0\_memory} & 生产型 agent 长期记忆基线 & 文献报告或 proxy & 原文指标；若独立运行则同本研究指标 & 文献对照/扩展对比 \\
+\texttt{zep\_memory} & temporal KG agent 记忆基线 & 文献报告或 proxy & 原文指标；若独立运行则同本研究指标 & 文献对照/扩展对比 \\
+\texttt{hypergraph\_proxy} & 可复现三层超图记忆或结构近似代理 & 文献报告或 proxy & 原文指标；若独立运行则同本研究指标 & 文献对照/扩展对比 \\
+\texttt{clarks\_nutcracker\_graph} & 完整胶囊图谱、场景线索和安全过滤 & 本研究运行 & 四类准确率、Overall、平均/相对 token & 主对比 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{E3：结构化机制指标}
+
+第三组实验用于避免仅依赖最终问答准确率而掩盖图谱治理贡献。除 LLM-as-a-judge accuracy 外，实验应报告胶囊召回率、关系命中率、证据完整性、返回记忆可用性、陈旧节点注入率、冲突裁决成功率、平均延迟与上下文 token 数。其中，陈旧节点注入率越低越好，冲突裁决成功率越高越好。专项 case 至少覆盖 \texttt{REVISES}、\texttt{CONFLICTS\_WITH}、stale suppression 和 scene match 四类机制。该组实验单独观察胶囊内容、关系边、场景线索和安全过滤对答案质量的贡献。
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{E3 结构化机制指标与专项 case 设计}
+\label{tab:e3-metrics}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{P{0.24\linewidth}P{0.40\linewidth}P{0.17\linewidth}}
+\toprule
+指标或专项机制 & 解释 & 统计输出 \\
+\midrule
+\texttt{capsule\_recall@k} & 目标胶囊是否进入返回集合 & recall@k 与置信区间 \\
+\texttt{relation\_hit\_rate} & 关键边是否进入返回子图 & 命中率与错误类型 \\
+\texttt{evidence\_completeness} & 多跳或时序问题所需证据是否完整返回 & 完整性比例 \\
+\texttt{returned\_memory\_usefulness} & 返回记忆是否实际支撑答案 & 人工或 judge 一致性 \\
+\texttt{stale\_node\_injection\_rate} & 陈旧节点污染率，越低越好 & 注入率与案例分析 \\
+\texttt{conflict\_resolution\_success} & 冲突场景中是否选中新版本或高置信版本 & 成功率与失败原因 \\
+\texttt{REVISES} case & 新记忆修正旧记忆 & 修正链命中率 \\
+\texttt{CONFLICTS\_WITH} case & 显式冲突记忆裁决 & 冲突裁决成功率 \\
+scene match case & 场景线索定位是否提升召回 & 召回增益与误召回率 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{E4：消融与参数敏感性}
+
+第四组实验用于解释机制收益来源。消融组至少包括去掉场景匹配、去掉时间相邻边、去掉修正边、去掉冲突抑制、去掉陈旧抑制、保留图扩展但移除治理策略。消融表采用 Configuration、Overall（\%）和 $\Delta$ 的格式，并可追加四类问题的 accuracy。参数敏感性实验扫描候选数量、种子节点数量、最大返回节点数、场景匹配权重、陈旧惩罚权重和冲突惩罚权重；其中场景/结构融合权重对应 embedding fusion weight，种子节点、关系扩展和最终胶囊返回规模对应多级 top-k 扫描。该组实验用于分离各机制贡献，并报告不同配置下的效果差异。每个消融变体应复用 E1/E2 的同一 case 集，并输出相同指标，以避免数据或预算变化造成伪差异。
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{E4 消融与参数敏感性实验设计}
+\label{tab:e4-ablation}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{P{0.26\linewidth}P{0.34\linewidth}P{0.14\linewidth}P{0.10\linewidth}}
+\toprule
+变体或参数 & 改动内容 & Overall/$\Delta$ & 统计输出 \\
+\midrule
+\texttt{full} & 完整星鸦图谱机制 & 基准值 & 均值、标准差 \\
+\texttt{w/o scene\_match} & 去掉场景线索匹配 & 相对 full 的 $\Delta$ & 显著性检验 \\
+\texttt{w/o temporal\_edges} & 去掉时间相邻边 & 相对 full 的 $\Delta$ & 显著性检验 \\
+\texttt{w/o revision\_edges} & 去掉修正边 & 相对 full 的 $\Delta$ & 显著性检验 \\
+\texttt{w/o conflict\_suppression} & 不做冲突裁决 & 相对 full 的 $\Delta$ & 显著性检验 \\
+\texttt{w/o stale\_suppression} & 不做陈旧抑制 & 相对 full 的 $\Delta$ & 显著性检验 \\
+\texttt{graph\_no\_policy} & 保留图扩展，移除治理策略 & 相对 full 的 $\Delta$ & 失败案例分析 \\
+\texttt{multi\_level\_topk} & 扫描 seed、关系扩展和胶囊返回的 top-k 规模 & 最优区间 & 敏感性曲线 \\
+\texttt{scene/structure/safety weight} & 扫描融合权重和惩罚权重 & 最优区间 & 敏感性曲线 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{E5：效率与规模}
+
+第五组实验评估部署可行性。效率分析以 token usage--accuracy 曲线呈现，因此本文比较不同记忆返回策略在同等上下文预算下的 LLM-as-a-judge accuracy 变化，并给出相对 token 倍数。Neo4j 图规模实验报告节点数、边数、召回延迟、详情回查延迟和吞吐变化。实验至少设置三档图规模，并保持每档 case 分布、召回预算和统计口径一致。该组实验用于评估部署成本与规模变化，不替代 E1/E2 的能力结论。
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{E5 效率与规模实验设计}
+\label{tab:e5-efficiency}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{P{0.22\linewidth}P{0.40\linewidth}P{0.17\linewidth}}
+\toprule
+维度 & 记录内容 & 统计输出 \\
+\midrule
+token usage--accuracy & LLM-as-a-judge accuracy、平均输入 token、相对 token 倍数 & 曲线与相关性 \\
+返回规模 & 返回胶囊数、返回关系边数、返回证据片段数 & 均值与分布 \\
+召回延迟 & seed 召回、重排、一跳扩展和安全过滤耗时 & P50/P95 延迟 \\
+详情回查 & 按 capsule id 回查证据和原始详情的延迟 & P50/P95 延迟 \\
+图规模档位一 & 小规模节点/边数量、QPS、P50/P95 延迟 & 规模基准 \\
+图规模档位二 & 中规模节点/边数量、QPS、P50/P95 延迟 & 扩展趋势 \\
+图规模档位三 & 大规模节点/边数量、QPS、P50/P95 延迟 & 扩展趋势 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{实验完成标准}
+
+每组实验完成后均应输出 CSV 明细、JSON 或 Markdown 报告、可直接进入正文的 LaTeX 表格，以及对应的运行命令和环境说明。CSV 至少包含 case id、问题类型、方法名、答案、标准答案、judge 分数、judge 原始输出、是否命中目标胶囊、是否命中目标关系、输入 token、输出 token、返回节点数、返回边数、延迟和运行轮次。主结果还应保存 judge prompt、人工复核或双 judge 一致性记录、三次独立运行明细、均值、标准差和置信区间。所有本文独立运行数值均应来自实际运行产物，不得手工补数。若某组实验只完成模块级基础版，正文应明确标注为基础结果，不能替代最终主实验结论。引用公开论文表格时，应单独标注为公开结果，保留原文引用、数据集、模型、judge 和指标口径，不与本文独立运行结果合并计算均值、显著性或相对提升。
+
+\section{讨论与局限性}
+
+该机制提供了面向执行经验的受治理图谱表示与子图召回框架。记忆胶囊提供可治理的存储单元，关系边提供可解释的上下文结构，场景索引提供任务线索，陈旧与冲突抑制提供安全边界。这些设计共同构成可插拔、可解释且可评估的长期记忆图谱机制。
+
+本文仍存在明确边界。第一，相关实证结论需要由正式实验产物支撑。第二，克拉克星鸦仅作为行为层启发来源，不应表述为神经认知模型。第三，本文采用 pairwise 图边，不等价于超图记忆结构。第四，在 E1--E5 完成之前，不宜声称该机制已经全面优于所有强基线。正式投稿阶段的证据强度取决于长期记忆问答主实验、核心基线独立运行、文献报告对照、消融、效率分析以及 LLM-as-a-judge 可靠性验证是否完整成立。在这些结果产生之前，该机制可以被表述为已经形成明确的理论动机、工程表示和实验协议，实证闭环仍需由长期记忆问答、核心基线、结构指标、消融、效率实验和文献报告边界说明共同完成。
+
+\section{结论}
+
+本研究面向长时程智能体长期记忆问题，系统阐述了克拉克星鸦启发的长时记忆图谱机制。该机制从缓存鸟类的分散缓存、线索定位和安全回收行为中抽象出长期记忆设计原则，将高价值执行经验封装为记忆胶囊，并通过时间、任务、证据、范围、修正和冲突关系组织为可召回的长期记忆图谱。方法部分给出胶囊表示、场景索引、提升判定、关系构边、Neo4j 可插拔存储、子图召回和安全过滤；实验部分给出五组实证评估任务、强基线范围、统计约束和完成标准。总体而言，星鸦图谱机制已经具备清晰的理论与方法基础，强实证结论仍需在真实实验和评测可靠性检查完成后写入。
+
+\begin{thebibliography}{00}
+
+\bibitem[Balda and Kamil(1992)]{balda1992spatial}
+Balda, R. P., Kamil, A. C. (1992). Long-term spatial memory in Clark's nutcracker, Nucifraga columbiana. Animal Behaviour 44, 761--769. \url{https://doi.org/10.1016/S0003-3472(05)80302-1}.
+
+\bibitem[Brea et~al.(2023)]{brea2023computational}
+Brea, J., Clayton, N. S., Gerstner, W. (2023). Computational models of episodic-like memory in food-caching birds. Nature Communications 14, 2979. \url{https://doi.org/10.1038/s41467-023-38570-x}.
+
+\bibitem[Chhikara et~al.(2025)]{chhikara2025mem0}
+Chhikara, P., Khant, D., Aryan, S., Singh, T., Yadav, D. (2025). Mem0: Building production-ready AI agents with scalable long-term memory. arXiv preprint arXiv:2504.19413. \url{https://arxiv.org/abs/2504.19413}.
+
+\bibitem[Clayton and Dickinson(1998)]{clayton1998episodic}
+Clayton, N. S., Dickinson, A. (1998). Episodic-like memory during cache recovery by scrub jays. Nature 395, 272--274. \url{https://doi.org/10.1038/26216}.
+
+\bibitem[Cornell Lab of Ornithology(n.d.)]{cornellClarksNutcracker}
+Cornell Lab of Ornithology. (n.d.). Clark's Nutcracker life history. All About Birds. \url{https://www.allaboutbirds.org/guide/Clarks_Nutcracker/lifehistory}.
+
+\bibitem[Edge et~al.(2024)]{edge2024graphrag}
+Edge, D., Trinh, H., Cheng, N., Bradley, J., Chao, A., Mody, A., Truitt, S., Larson, J. (2024). From local to global: A graph RAG approach to query-focused summarization. arXiv preprint arXiv:2404.16130. \url{https://arxiv.org/abs/2404.16130}.
+
+\bibitem[Gao et~al.(2023)]{gao2023ragsurvey}
+Gao, Y., Xiong, Y., Gao, X., Jia, K., Pan, J., Bi, Y., Dai, Y., Sun, J., Wang, M., Wang, H. (2023). Retrieval-augmented generation for large language models: A survey. arXiv preprint arXiv:2312.10997. \url{https://arxiv.org/abs/2312.10997}.
+
+\bibitem[Guo et~al.(2024)]{guo2024lightrag}
+Guo, Z., Xia, L., Yu, Y., Ao, T., Huang, C. (2024). LightRAG: Simple and fast retrieval-augmented generation. arXiv preprint arXiv:2410.05779. \url{https://arxiv.org/abs/2410.05779}.
+
+\bibitem[Gutierrez et~al.(2024)]{gutierrez2024hipporag}
+Gutierrez, B. J., Shu, Y., Gu, Y., Yasunaga, M., Su, Y. (2024). HippoRAG: Neurobiologically inspired long-term memory for large language models. Advances in Neural Information Processing Systems 37. \url{https://arxiv.org/abs/2405.14831}.
+
+\bibitem[Kamil and Jones(1997)]{kamil1997nutcracker}
+Kamil, A. C., Jones, J. E. (1997). The seed-storing corvid Clark's nutcracker learns geometric relationships among landmarks. Nature 390, 276--279. \url{https://doi.org/10.1038/36840}.
+
+\bibitem[Lewis et~al.(2020)]{lewis2020rag}
+Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Kuttler, H., Lewis, M., Yih, W., Rocktaschel, T., Riedel, S., Kiela, D. (2020). Retrieval-augmented generation for knowledge-intensive NLP tasks. Advances in Neural Information Processing Systems 33, 9459--9474. \url{https://arxiv.org/abs/2005.11401}.
+
+\bibitem[Maharana et~al.(2024)]{maharana2024locomo}
+Maharana, A., Lee, D.-H., Tulyakov, S., Bansal, M., Barbieri, F., Fang, Y. (2024). Evaluating very long-term conversational memory of LLM agents. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics, 13851--13870. \url{https://aclanthology.org/2024.acl-long.747/}.
+
+\bibitem[National Park Service(2018)]{nps2018clarksnutcracker}
+National Park Service. (2018). Clark's Nutcracker. Rocky Mountain National Park. \url{https://www.nps.gov/romo/learn/nature/clarks_nutcracker.htm}.
+
+\bibitem[Packer et~al.(2023)]{packer2023memgpt}
+Packer, C., Fang, V., Patil, S. G., Lin, K., Wooders, S., Gonzalez, J. E. (2023). MemGPT: Towards LLMs as operating systems. arXiv preprint arXiv:2310.08560. \url{https://arxiv.org/abs/2310.08560}.
+
+\bibitem[Park et~al.(2023)]{park2023generative}
+Park, J. S., O'Brien, J. C., Cai, C. J., Morris, M. R., Liang, P., Bernstein, M. S. (2023). Generative agents: Interactive simulacra of human behavior. In Proceedings of the 36th Annual ACM Symposium on User Interface Software and Technology. \url{https://doi.org/10.1145/3586183.3606763}.
+
+\bibitem[Rasmussen et~al.(2025)]{rasmussen2025zep}
+Rasmussen, P., Paliychuk, P., Beauvais, T., Ryan, J., Chalef, D. (2025). Zep: A temporal knowledge graph architecture for agent memory. arXiv preprint arXiv:2501.13956. \url{https://arxiv.org/abs/2501.13956}.
+
+\bibitem[Sarthi et~al.(2024)]{sarthi2024raptor}
+Sarthi, P., Abdullah, S., Tuli, A., Khanna, S., Goldie, A., Manning, C. D. (2024). RAPTOR: Recursive abstractive processing for tree-organized retrieval. In International Conference on Learning Representations. \url{https://arxiv.org/abs/2401.18059}.
+
+\bibitem[Sherry and Schacter(1987)]{sherry1987multiple}
+Sherry, D. F., Schacter, D. L. (1987). The evolution of multiple memory systems. Psychological Review 94(4), 439--454. \url{https://doi.org/10.1037/0033-295X.94.4.439}.
+
+\bibitem[Sherry et~al.(1989)]{sherry1989hippocampal}
+Sherry, D. F., Vaccarino, A. L., Buckenham, K., Herz, R. S. (1989). The hippocampal complex of food-storing birds. Brain, Behavior and Evolution 34(5), 308--317. \url{https://pubmed.ncbi.nlm.nih.gov/2611638/}.
+
+\bibitem[Shinn et~al.(2023)]{shinn2023reflexion}
+Shinn, N., Cassano, F., Gopinath, A., Narasimhan, K., Yao, S. (2023). Reflexion: Language agents with verbal reinforcement learning. Advances in Neural Information Processing Systems 36. \url{https://arxiv.org/abs/2303.11366}.
+
+\bibitem[Wang et~al.(2023)]{wang2023voyager}
+Wang, G., Xie, Y., Jiang, Y., Mandlekar, A., Xiao, C., Zhu, Y., Fan, L., Anandkumar, A. (2023). Voyager: An open-ended embodied agent with large language models. arXiv preprint arXiv:2305.16291. \url{https://arxiv.org/abs/2305.16291}.
+
+\bibitem[Wu et~al.(2024)]{wu2024longmemeval}
+Wu, Z., Wang, R., Ustun, A., Le, S. Q., Zhang, D., Radev, D., Chen, W. (2024). LongMemEval: Benchmarking chat assistants on long-term interactive memory. arXiv preprint arXiv:2410.10813. \url{https://arxiv.org/abs/2410.10813}.
+
+\bibitem[Xu et~al.(2025)]{xu2025amem}
+Xu, W., Liang, Z., Mei, K., Gao, H., Tan, J., Zhang, Y. (2025). A-MEM: Agentic memory for LLM agents. arXiv preprint arXiv:2502.12110. \url{https://arxiv.org/abs/2502.12110}.
+
+\bibitem[Yue et~al.(2026)]{yue2026hypermem}
+Yue, J., Hu, C., Sheng, J., Zhou, Z., Zhang, W., Liu, T., Guo, L., Deng, Y. (2026). HyperMem: Hypergraph Memory for Long-Term Conversations. arXiv preprint arXiv:2604.08256. \url{https://arxiv.org/abs/2604.08256}.
+
+\bibitem[Zhang et~al.(2024)]{zhang2024memorysurvey}
+Zhang, Z., Bo, X., Ma, C., Li, R., Chen, X., Dai, Q., Zhu, J., Dong, Z., Wen, J.-R. (2024). A survey on the memory mechanism of large language model based agents. arXiv preprint arXiv:2404.13501. \url{https://arxiv.org/abs/2404.13501}.
+
+\bibitem[Zhong et~al.(2024)]{zhong2024memorybank}
+Zhong, W., Guo, L., Gao, Q., Ye, H., Wang, Y. (2024). MemoryBank: Enhancing large language models with long-term memory. In Proceedings of the AAAI Conference on Artificial Intelligence, 19724--19731. \url{https://doi.org/10.1609/aaai.v38i17.29946}.
+
+\end{thebibliography}
+
+\end{CJK*}
+\end{document}

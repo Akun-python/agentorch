@@ -23,6 +23,10 @@
 
 `agentorch` 是一个代码优先、异步优先的 Python 多智能体编排框架。
 
+<p align="center">
+  <img src="resource/brand/agentorch-logo.svg" alt="agentorch logo" width="420">
+</p>
+
 它面向“需要真实工程边界”的系统，而不是只靠提示词拼接的黑盒流程。
 
 当你的场景需要工具调用、检索证据、记忆治理、工作流和多角色协作同时存在时，`agentorch` 提供了明确可控的运行时模型。
@@ -30,6 +34,10 @@
 PyPI 发行名是 `masarch`，Python 导入包名仍然是 `agentorch`。用户安装时使用 `pip install masarch`，代码里继续使用 `import agentorch`。
 
 ![agentorch Architecture Overview](resource/architecture_overview.svg)
+
+架构能力与技术栈图标位于 [`resource/brand`](resource/brand)，可直接复用到文档、演示和前端项目中。
+
+> 数据集、数据库、模型文件和实验运行产物默认不上传 GitHub。请先阅读 [`data/README.md`](data/README.md)，只提交字段说明、下载脚本、版本号和脱敏样例。
 
 ## WHY
 

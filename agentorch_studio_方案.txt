@@ -1,0 +1,612 @@
+文件名：agentorch_studio_方案.txt
+
+AgentTorch 可视化编排平台方案
+============================
+
+一、目标定位
+------------
+基于现有 AgentTorch 框架，建设一个类似 Dify 的可视化智能体编排平台。
+平台目标不是重写 AgentTorch 内核，而是在其上增加一层产品化能力，使用户可以通过拖拽式画布完成：
+
+1. 单智能体应用构建
+2. 多智能体团队构建
+3. 工作流编排
+4. 调试、发布、运行追踪
+5. 知识库、工具、模型、记忆的统一配置
+6. 导出可运行代码，支持二次开发与脱离平台部署
+
+第一版定位：
+- 前后端分仓
+- 单组织私有化部署
+- 平台化产品，不是 Demo
+- 优先完成“编排 + 调试 + 发布 + 导出代码”闭环
+- 提供“简化模式 + 专家模式”双层配置
+
+二、核心思路
+------------
+AgentTorch 当前已经具备较强的后端编排能力，包括：
+
+- create_agent(...)
+- create_multi_agent(...)
+- AgentDesign / RoleDesign / TeamDesign
+- Workflow / Node / Edge / WorkflowRunner
+- export_blueprint()
+
+因此，正确路线不是改造 AgentTorch 成前端平台，而是：
+
+1. 保持 AgentTorch 作为执行内核
+2. 新建独立产品仓，暂命名为 agentorch-studio
+3. 在 agentorch-studio 中实现：
+   - 可视化画布
+   - 平台 DSL
+   - DSL 到 AgentTorch 的编译器
+   - IR 到代码工程的导出器
+   - 调试执行网关
+   - 版本发布与运行观测
+
+本质上：
+前端拖拽 -> 生成平台 DSL -> 编译为 IR -> 一路装配 AgentTorch 运行对象，一路导出代码工程 -> 启动运行 / 下载代码 -> 返回事件与结果
+
+三、总体架构
+------------
+建议拆分为两个仓库：
+
+1. agentorch
+   责任：
+   - 框架内核
+   - agent / multi-agent / workflow / runtime / memory / tools
+   - 保持高层 API 稳定
+   - 只做少量平台友好增强
+
+2. agentorch-studio
+   责任：
+   - 前端画布
+   - 后端 API
+   - 项目与版本管理
+   - 运行调试
+   - 发布与观测
+   - AgentTorch 编译适配层
+
+平台内部再分五层：
+
+1. Canvas DSL 层
+   定义画布保存格式，表达节点、边、角色、工具、知识源、模型绑定、输入输出映射。
+
+2. Compiler 层
+   将 DSL 编译为统一 IR，并进一步编译为：
+   - AgentDesign
+   - TeamDesign
+   - Workflow
+
+3. Code Export 层
+   基于 IR 生成可运行代码包、最小示例工程、配置文件与测试脚本。
+
+4. Execution Gateway 层
+   统一调试运行、正式运行、事件流、状态回写。
+
+5. Product 层
+   负责项目、草稿、版本、发布、回滚、运行历史、组织权限。
+
+四、第一版范围
+--------------
+第一版必须覆盖三类编排对象：
+
+1. 单智能体
+   - 一个 Agent
+   - 支持模型、系统提示词、工具、技能、记忆、知识库、推理方式
+
+2. 多智能体
+   - 基于 TeamDesign / RoleDesign
+   - 第一版只支持 supervisor 拓扑
+   - 支持多个角色、共享知识、共享记忆、委派深度控制
+
+3. 工作流
+   - 基于 Workflow / Node / Edge
+   - 第一版只开放稳定节点子集
+
+第一版重点完成：
+- 项目创建
+- 画布搭建
+- 保存草稿
+- 编译校验
+- 调试运行
+- 节点级执行日志查看
+- 发布版本
+- 导出代码包
+- 运行历史查看
+
+第一版暂不优先做：
+- 多租户 SaaS
+- 插件市场
+- 在线 Python 自定义代码节点
+- 大规模分布式调度
+- 多种复杂多智能体拓扑
+- 完整商业化运营功能
+
+五、节点体系设计
+----------------
+第一版建议开放的节点：
+
+1. start
+2. llm_agent
+3. tool
+4. router
+5. knowledge_retrieve
+6. memory_read
+7. memory_write
+8. sub_agent
+9. aggregate
+10. human_input
+11. human_approval
+12. end
+
+建议映射关系：
+
+- llm_agent -> AgentDesign 或 workflow 的 model 节点
+- tool -> workflow 的 tool 节点
+- router -> workflow 的 router 节点
+- knowledge_retrieve -> retrieve 节点
+- memory_read / memory_write -> memory 节点
+- sub_agent -> workflow 的 agent 节点或 team role 调用
+- aggregate -> aggregate 节点
+- human_input / human_approval -> 对应人工反馈节点
+
+设计原则：
+- 节点配置要区分“用户可见配置”和“底层运行配置”
+- 连接线不能只表示流向，还要表示字段映射
+- 每个节点都必须有统一输入输出结构，便于调试和回放
+
+六、平台 DSL 设计
+-----------------
+建议平台定义独立 DSL，而不是直接保存 AgentTorch 原始对象。
+
+顶层结构建议：
+
+{
+  "schema_version": "v1",
+  "app_type": "agent|team|workflow",
+  "meta": {},
+  "canvas": {
+    "nodes": [],
+    "edges": [],
+    "groups": []
+  },
+  "bindings": {
+    "models": [],
+    "tools": [],
+    "knowledge_sources": [],
+    "secrets": []
+  },
+  "export": {
+    "target": "blueprint|python_project|sdk_snippet",
+    "entry_style": "cli|api",
+    "include_tests": true
+  },
+  "runtime": {
+    "mode": "draft|published",
+    "debug": {},
+    "policies": {}
+  }
+}
+
+这样做的原因：
+1. 前端结构稳定
+2. 后端可演进
+3. 能做版本迁移
+4. 不被 AgentTorch 内部实现细节绑死
+
+七、双层配置模式
+----------------
+为了兼顾易用性与专业能力，平台采用双层配置：
+
+1. 简化模式
+   面向普通用户，暴露：
+   - 模型
+   - 提示词
+   - 工具
+   - 知识库
+   - 是否记忆
+   - 输出格式
+   - 是否允许工具调用
+   - 是否多轮
+
+2. 专家模式
+   面向高级用户，映射到底层：
+   - reasoning
+   - context_policy
+   - state_policy
+   - coordination_policy
+   - memory_policy
+   - skill_routing
+   - knowledge_scope
+   - observability
+
+原则：
+- 默认使用简化模式
+- 需要精细控制时切换专家模式
+- 专家模式配置由编译器映射到 AgentTorch 对象
+
+八、编译器设计
+--------------
+需要在 agentorch-studio 中单独实现 compiler 模块。
+
+职责：
+1. 校验 DSL 结构
+2. 做语义校验
+3. 检查节点合法性
+4. 检查连接合法性
+5. 检查环路与不可达节点
+6. 填充默认值
+7. 生成中间表示 IR
+8. 从 IR 编译成 AgentTorch 对象
+9. 从 IR 生成导出代码工程
+
+编译目标：
+- 单智能体 -> AgentDesign
+- 多智能体 -> TeamDesign
+- 工作流 -> Workflow
+- 如有需要，再装配到 create_agent(...) / create_multi_agent(...)
+
+建议编译器内部明确拆成四段：
+- validator：做结构与语义校验
+- normalizer：补默认值、统一字段
+- ir_builder：产出稳定 IR
+- target_builder：分别产出 runtime object 与 code artifact
+
+建议保留中间表示 IR，便于：
+- 调试
+- 升级迁移
+- 前后端联调
+- 未来扩展其他执行后端
+- 未来扩展其他代码导出目标
+
+九、后端系统设计
+----------------
+建议技术栈：
+
+- Python 3.11+
+- FastAPI
+- PostgreSQL
+- Redis
+- SQLAlchemy / SQLModel
+- SSE 或 WebSocket
+- 独立 worker 执行进程
+
+后端模块建议拆分：
+
+- api/
+- services/projects/
+- services/compiler/
+- services/runtime_gateway/
+- services/publish/
+- services/observability/
+- repositories/
+- schemas/
+- workers/
+
+核心 API 建议：
+
+1. POST /projects
+2. GET /projects/{id}
+3. POST /projects/{id}/drafts
+4. PUT /drafts/{id}
+5. POST /drafts/{id}/validate
+6. POST /drafts/{id}/compile
+7. POST /drafts/{id}/debug-runs
+8. GET /debug-runs/{id}
+9. GET /debug-runs/{id}/events
+10. POST /drafts/{id}/publish
+11. GET /apps/{id}
+12. POST /apps/{id}/runs
+13. GET /runs/{id}
+14. GET /runs/{id}/events
+15. POST /runs/{id}/cancel
+16. POST /drafts/{id}/exports
+17. GET /exports/{id}
+18. GET /exports/{id}/download
+
+十、运行模型
+------------
+平台运行分成两类：
+
+1. Debug Run
+   用于编辑器内调试
+   特点：
+   - 保留更多中间信息
+   - 支持单节点试跑
+   - 支持查看变量面板
+   - 支持查看工具调用和错误信息
+
+2. Published Run
+   用于正式发布后的应用调用
+   特点：
+   - 配置固定
+   - 执行更稳定
+   - 更严格的超时和配额
+   - 更收敛的日志输出
+
+十一、前端方案
+--------------
+建议技术栈：
+
+- React
+- TypeScript
+- React Flow
+- Zustand 或 Redux Toolkit
+- TanStack Query
+- Monaco Editor
+- shadcn/ui 或同类组件方案
+
+页面建议包括：
+
+1. 项目列表页
+2. 应用编辑页
+3. 调试运行页
+4. 发布版本页
+5. 运行历史页
+6. 配置中心页
+7. 导出中心 / 代码预览抽屉
+
+编辑页建议采用三栏结构：
+
+- 左栏：节点、角色、工具、知识库素材面板
+- 中栏：拖拽画布
+- 右栏：节点配置、边映射、专家参数
+
+底部增加调试面板：
+- 输出预览
+- 节点事件
+- 变量状态
+- 错误信息
+- 工具调用记录
+
+导出交互建议补一块：
+- 右上角提供“导出代码”动作
+- 导出前先强制执行 validate + compile
+- 支持预览入口文件、依赖清单、环境变量清单
+- 支持下载 zip 包或复制 SDK 接入片段
+
+十二、多智能体可视化表达
+------------------------
+多智能体第一版不建议做过于复杂的自由拓扑。
+
+建议方式：
+- Team 作为外层容器
+- Role 作为容器内节点
+- Supervisor 作为固定协调核心
+- 每个 Role 可配置模型、提示词、工具、知识范围
+- 必要时 Role 可绑定局部工作流
+
+这样可以兼顾：
+- 画布清晰
+- 结构稳定
+- 与 AgentTorch 当前能力匹配
+- 第一版落地成本可控
+
+十三、调试与观测
+----------------
+第一版必须实现的调试能力：
+
+1. 单节点试跑
+2. 全链路试跑
+3. 节点输入查看
+4. 节点输出查看
+5. 节点耗时查看
+6. 工具调用记录查看
+7. 错误摘要查看
+8. 编译后蓝图查看
+
+第一版必须沉淀的观测数据：
+
+- run 状态
+- node 状态
+- token 用量
+- 执行耗时
+- 工具失败率
+- 错误类型统计
+- 人工审批等待时间
+
+十四、发布与版本管理
+--------------------
+发布流程建议：
+
+1. 用户编辑草稿
+2. 保存 DSL 草稿
+3. 执行校验
+4. 执行编译
+5. 生成不可变版本
+6. 绑定发布环境
+7. 创建 PublishedApp
+8. 正式运行固定命中版本
+9. 支持版本回滚
+
+关键要求：
+- 草稿与发布版本必须分离
+- 发布版本必须不可变
+- 任何线上运行都能追溯到具体版本
+- 回滚必须简单明确
+- 导出产物必须能追溯到具体 draft_version / published_version / compiler_version
+
+十五、AgentTorch 需要补的能力
+-----------------------------
+AgentTorch 不需要大改，但建议补少量平台友好能力：
+
+1. 提供更稳定的 blueprint 输出结构
+2. 对 Workflow / Node 增加更清晰的 JSON-friendly 导出
+3. 统一运行事件字段
+4. 节点级事件中稳定携带：
+   - run_id
+   - node_id
+   - task_id
+   - parent_task_id
+5. 对 export_blueprint() 的可依赖字段做稳定约束
+6. 对 create_agent(...) / create_multi_agent(...) / Workflow 装配参数提供更稳定的公开装配范式，便于代码导出器生成可读代码
+
+原则：
+- 小幅增强
+- 不重写框架
+- 不把产品逻辑塞回 AgentTorch
+
+十六、实施阶段
+--------------
+Phase 1：内核适配与 DSL 定义
+- 定义 DSL v1
+- 实现 compiler 原型
+- 打通单智能体、团队、工作流三类编译链路
+- 验证与 AgentTorch 高层 API 对接
+- 明确 IR 到代码工程的最小导出模板
+
+Phase 2：后端闭环
+- 实现项目、草稿、版本、运行记录
+- 打通 debug run
+- 打通事件流
+- 打通 publish
+- 打通 export artifact 存储与下载
+
+Phase 3：前端画布 MVP
+- 实现 React Flow 编辑器
+- 实现节点拖拽与连线
+- 实现配置面板
+- 实现调试台
+- 实现运行回放
+- 实现代码预览与下载
+
+Phase 4：产品化强化
+- 版本比较
+- 回滚
+- 运行筛选
+- 组织级权限
+- 知识源和工具绑定管理
+- 多种导出模板与接入方式
+
+十七、测试计划
+--------------
+需要至少覆盖：
+
+1. 编译器测试
+- 合法 DSL 正确编译
+- 非法 DSL 准确报错
+- 环路检测正确
+- 字段映射正确
+
+2. 后端集成测试
+- 保存草稿 -> 校验 -> 编译 -> 调试运行 -> 发布 全链路通过
+- published run 正确绑定版本
+- 取消运行和异常运行状态正确回写
+
+3. 前端 E2E
+- 拖拽节点
+- 建立连接
+- 编辑配置
+- 发起调试
+- 查看日志
+- 发布版本
+- 查看历史运行
+
+4. AgentTorch 兼容回归
+- 单智能体路径可运行
+- 多智能体 supervisor 路径可运行
+- workflow 路径可运行
+- export_blueprint() 满足平台依赖
+
+5. 代码导出测试
+- agent 导出工程可直接运行
+- team 导出工程可直接运行
+- workflow 导出工程可直接运行
+- 导出包不包含明文 secret
+- 生成代码与当前 DSL/IR/版本号一致
+
+十八、代码导出方案
+------------------
+“拖拽式构建后导出代码”不应理解为导出一份难维护的大脚本，而应输出可读、可运行、可继续开发的小型工程。
+
+建议第一版支持三种导出目标：
+
+1. blueprint 包
+   - 内容：dsl.json、ir.json、blueprint.json、manifest.json
+   - 用途：迁移、审计、版本归档
+
+2. Python 工程包
+   - 内容：可直接运行的 AgentTorch 工程
+   - 用途：脱离 Studio 部署、二次开发、接入现有后端
+
+3. SDK 接入片段
+   - 内容：最小 `create_agent(...)` / `create_multi_agent(...)` / `Workflow` 装配代码
+   - 用途：嵌入已有项目
+
+代码导出链路建议固定为：
+DSL -> Validator -> Normalizer -> IR -> Renderer -> Artifact
+
+其中 Renderer 不要写成一个超大模板文件，建议按目标拆模块：
+- renderers/python_project/
+- renderers/sdk_snippet/
+- renderers/blueprint_bundle/
+- templates/
+
+Python 工程包建议结构：
+
+my_agentorch_app/
+  app/
+    main.py
+    runtime.py
+    agents/
+    workflows/
+    bindings/
+  configs/
+    app.json
+    models.json
+    tools.json
+  tests/
+    test_smoke.py
+  .env.example
+  pyproject.toml
+  README.md
+
+导出规则建议：
+
+1. 代码生成必须确定性
+   第一版优先采用模板渲染，不依赖 LLM 即时生成代码，避免同一 DSL 多次导出结果漂移。
+
+2. 代码可读性优先
+   生成代码要按 agent、workflow、bindings 分文件，不导出一个几千行主文件。
+
+3. Secret 只导出引用，不导出明文
+   例如只保留 `OPENAI_API_KEY=os.getenv(...)` 这类读取方式，真实值仍留在平台密钥管理或部署环境。
+
+4. 导出结果必须可追溯
+   生成文件头或 manifest 中写入：
+   - project_id
+   - draft_id / published_version
+   - compiler_version
+   - export_time
+
+5. 第一版先做单向导出
+   即“画布 -> 代码”单向成立，不要求“任意修改后的代码再导回画布”。
+   否则复杂度会迅速失控。
+
+6. 导出前必须先编译成功
+   不允许跳过 validate / compile 直接导出，确保代码包与实际运行语义一致。
+
+7. 导出包默认附带最小 smoke test
+   让用户拿到代码后可以先验证依赖、配置、入口是否正常。
+
+推荐的产品动作是：
+- 编辑器内完成拖拽搭建
+- 点击“校验并导出代码”
+- 后端固化当前 draft 的 IR
+- 生成 zip artifact
+- 提供代码预览、下载、版本追溯信息
+
+这样，“可视化编排”与“工程化交付”才能真正闭环。
+
+十九、结论
+----------
+这套平台最关键的原则是：
+
+AgentTorch 继续做执行内核，
+agentorch-studio 负责可视化产品层。
+
+不要把二者混成一个大仓，也不要在 AgentTorch 内部直接堆前端和平台逻辑。
+正确做法是建立清晰的分层、稳定的 DSL、明确的编译器和完整的调试发布闭环。
+
+这是最适合当前 AgentTorch 基础的产品化路线。

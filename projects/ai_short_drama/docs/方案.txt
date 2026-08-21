@@ -1,0 +1,559 @@
+文件名：方案.txt
+
+AI 短剧制作独立项目方案
+======================
+
+一、结论先行
+------------
+这个项目不要在 `agentorch/` 框架目录下面新增业务代码。
+
+正确边界是：
+
+1. `agentorch/`
+   继续只保留通用框架能力
+
+2. `projects/ai_short_drama/`
+   作为一个独立项目目录，承载短剧产品的方案、后端、前端、配置、脚本、产物
+
+也就是说，这个短剧项目是“基于 AgentTorch 使用和组装能力”的项目，不是“把短剧能力写进 AgentTorch 框架本体”的项目。
+
+
+二、项目目标
+------------
+基于现有 AgentTorch，建设一个 AI 短剧制作项目，覆盖以下能力：
+
+1. 角色管理
+   - AI 生成角色形象
+   - 批量角色生成
+   - 角色图片上传和管理
+   - 角色音色分配与试听
+
+2. 分镜制作
+   - AI 自动拆解分镜脚本
+   - 场景描述和镜头设计
+   - 分镜图片生成
+   - 宫格图生成、切分与分配
+   - 帧类型选择
+
+3. 视频生成
+   - 图生视频自动生成
+   - TTS 配音生成
+   - FFmpeg 单镜头合成
+   - 整集拼接导出
+
+4. 资源管理
+   - 素材库统一管理
+   - 本地存储支持
+   - 任务进度追踪
+
+
+三、项目定位
+------------
+这个项目的定位不是框架能力扩展，而是一个独立的场景化应用。
+
+它和 `agentorch/` 的关系应当是：
+
+1. `agentorch/` 提供：
+   - agent
+   - workflow
+   - runtime
+   - tool abstraction
+   - model abstraction
+
+2. `projects/ai_short_drama/` 负责：
+   - 短剧业务对象
+   - 短剧业务流程
+   - 短剧前后端
+   - 素材和任务管理
+   - 导出与交付
+
+一句话：
+AgentTorch 是底座，`ai_short_drama` 是独立产品项目。
+
+
+四、边界原则
+------------
+1. 不往 `agentorch/` 里塞短剧业务代码
+   不新增 `agentorch/drama/`、`agentorch/storyboard/` 这类目录。
+
+2. 不为短剧场景改写框架核心语义
+   不因为一个业务项目去改造 `runtime`、`workflow`、`studio` 主链。
+
+3. 短剧项目所有业务实现尽量收口在：
+   `projects/ai_short_drama/`
+
+4. 只有当某个能力已经明显是“通用框架能力”时，才考虑后续回抽到 `agentorch/`。
+
+例如：
+   - 通用任务队列抽象
+   - 通用媒体工具协议
+   - 通用工作流节点适配器
+
+首版不做这种抽象回收。
+
+
+五、推荐目录结构
+----------------
+建议直接按独立项目目录组织：
+
+projects/ai_short_drama/
+  README.txt
+  docs/
+    方案.txt
+    接口草案.txt
+    阶段拆解.txt
+  backend/
+    app/
+      api/
+      domain/
+      services/
+      providers/
+      workflows/
+      repositories/
+      schemas/
+      utils/
+    tests/
+    requirements.txt
+    main.py
+  frontend/
+    src/
+    public/
+    package.json
+  configs/
+    app.example.json
+    providers.example.json
+  scripts/
+    run_backend.ps1
+    run_frontend.ps1
+    bootstrap_project.ps1
+  artifacts/
+    drama_projects/
+
+说明：
+
+1. `docs/`
+   放方案、接口和阶段说明
+
+2. `backend/`
+   放短剧项目自己的服务端代码
+
+3. `frontend/`
+   放短剧项目自己的页面
+
+4. `configs/`
+   放项目配置模板，不读根目录 `.env`
+
+5. `scripts/`
+   放一键启动和初始化脚本
+
+6. `artifacts/`
+   放项目运行产物和生成结果
+
+
+六、后端架构
+------------
+后端建议做成“独立应用 + 适配 AgentTorch”的结构，而不是直接把脚本散着写。
+
+建议分 6 层：
+
+1. API 层
+   对外暴露项目接口
+
+2. Service 层
+   编排角色生成、分镜生成、TTS、视频合成等业务流程
+
+3. Workflow 层
+   用 AgentTorch workflow 或 agent 组装短剧任务链
+
+4. Provider 层
+   封装文生图、TTS、图生视频、存储能力
+
+5. Repository 层
+   负责项目状态、任务状态、素材索引落盘
+
+6. Domain 层
+   定义项目、角色、场景、镜头、任务、资源这些核心对象
+
+
+七、为什么后端要独立
+--------------------
+因为这个项目不是简单 Demo，而是会长出很多业务细节：
+
+1. 角色形象管理
+2. 分镜中间结果落盘
+3. 宫格图切分结果管理
+4. TTS 音色分配
+5. 视频任务重试
+6. FFmpeg 合成失败恢复
+7. 项目级任务状态可视化
+
+这些都属于应用层职责，不属于框架层职责。
+
+
+八、核心数据对象
+----------------
+建议在 `backend/app/domain/` 里先定义这些对象：
+
+1. Project
+   - project_id
+   - name
+   - premise
+   - style
+   - episode_count
+   - target_duration
+   - status
+
+2. Role
+   - role_id
+   - name
+   - description
+   - personality
+   - avatar_prompt
+   - avatar_path
+   - voice_id
+
+3. Episode
+   - episode_id
+   - episode_no
+   - title
+   - summary
+   - status
+
+4. Scene
+   - scene_id
+   - episode_id
+   - scene_no
+   - summary
+   - location
+   - mood
+
+5. Shot
+   - shot_id
+   - scene_id
+   - shot_no
+   - shot_type
+   - frame_type
+   - visual_prompt
+   - subtitle_text
+   - narration_text
+
+6. Asset
+   - asset_id
+   - project_id
+   - asset_type
+   - file_path
+   - provider
+   - metadata
+
+7. Task
+   - task_id
+   - project_id
+   - stage
+   - status
+   - progress
+   - error_message
+
+
+九、能力模块拆分
+----------------
+建议至少拆成以下模块：
+
+1. project_service
+   负责创建项目、读取项目、状态总览
+
+2. role_service
+   负责角色设定生成、角色形象生成、角色音色绑定
+
+3. storyboard_service
+   负责剧本拆场、拆镜头、镜头描述和分镜图生成
+
+4. audio_service
+   负责 TTS 和试听
+
+5. video_service
+   负责图生视频、镜头合成、全集拼接
+
+6. asset_service
+   负责素材路径、素材索引、上传和引用
+
+7. task_service
+   负责任务状态流转和进度追踪
+
+8. export_service
+   负责整集导出和打包
+
+
+十、与 AgentTorch 的集成方式
+--------------------------
+这个项目可以使用 AgentTorch，但方式应该是“依赖调用”，不是“内嵌改造”。
+
+推荐两种用法：
+
+1. 用 `agentorch` 创建单个 agent
+   适合做：
+   - 角色设定生成
+   - 镜头描述生成
+   - 字幕润色
+   - 质量检查
+
+2. 用 `agentorch` workflow 组织多步骤任务
+   适合做：
+   - 从 premise 到角色卡
+   - 从分集剧情到场景和镜头
+   - 从镜头图到音视频成片
+
+注意：
+这些调用应放在 `projects/ai_short_drama/backend/` 的项目代码里完成，而不是回写进 `agentorch/`。
+
+
+十一、建议的流程主链
+--------------------
+首版建议按一条清晰的主链打通：
+
+1. 创建项目
+2. 生成角色设定
+3. 生成角色图
+4. 分配音色
+5. 拆解分集
+6. 拆解场景
+7. 拆解镜头
+8. 生成分镜图
+9. 生成配音文本
+10. 生成 TTS
+11. 图生视频
+12. 单镜头合成
+13. 整集拼接
+14. 导出成片
+
+这个主链必须保证：
+
+1. 每一步可单独重跑
+2. 每一步有产物落盘
+3. 每一步有状态记录
+4. 每一步有错误信息
+
+
+十二、Provider 设计
+------------------
+建议项目里自己定义 provider 抽象：
+
+1. image_provider
+   - generate_role_image
+   - generate_storyboard_image
+   - generate_grid_image
+
+2. speech_provider
+   - list_voices
+   - preview_voice
+   - synthesize_speech
+
+3. video_provider
+   - create_video_task
+   - query_video_task
+   - download_video
+
+4. storage_provider
+   - save_file
+   - load_file
+   - list_assets
+
+原则：
+
+1. provider 统一接口
+2. 平台差异藏在实现里
+3. service 只依赖抽象，不依赖具体厂商
+
+
+十三、产物目录结构
+------------------
+建议所有运行产物放到：
+
+projects/ai_short_drama/artifacts/drama_projects/{project_id}/
+
+目录结构建议：
+
+project.json
+roles/
+  roles.json
+  images/
+script/
+  episodes.json
+storyboard/
+  scenes.json
+  shots.json
+  images/
+  grids/
+audio/
+video/
+  shots/
+  episodes/
+subtitles/
+logs/
+  tasks.jsonl
+exports/
+
+这样做的价值：
+
+1. 中间结果可检查
+2. 失败后可续跑
+3. 前端可直接消费这些路径
+
+
+十四、API 设计
+--------------
+建议后端至少提供这些接口：
+
+1. `POST /projects`
+   创建项目
+
+2. `GET /projects/{project_id}`
+   查询项目
+
+3. `POST /projects/{project_id}/roles/generate`
+   生成角色
+
+4. `POST /projects/{project_id}/storyboard/generate`
+   生成分镜
+
+5. `POST /projects/{project_id}/voices/assign`
+   分配音色
+
+6. `POST /projects/{project_id}/audio/generate`
+   生成音频
+
+7. `POST /projects/{project_id}/shots/render`
+   生成镜头视频
+
+8. `POST /projects/{project_id}/episodes/export`
+   导出整集
+
+9. `GET /projects/{project_id}/tasks`
+   查看任务状态
+
+10. `GET /projects/{project_id}/assets`
+   查看素材
+
+
+十五、前端建议
+--------------
+前端也应是独立项目目录下的应用，不要耦合进框架本体。
+
+建议先做 4 个页面：
+
+1. 项目页
+   输入 premise、风格、集数、角色数、目标时长
+
+2. 角色页
+   展示角色卡、角色图、音色试听、手动替换
+
+3. 分镜页
+   展示场景、镜头、分镜图、宫格切分结果
+
+4. 成片页
+   展示音频、单镜头视频、整集视频、导出结果、任务日志
+
+首版前端重点是：
+
+1. 能看见中间结果
+2. 能触发分步骤执行
+3. 能定位失败环节
+
+
+十六、分阶段实施
+----------------
+P0：方案和项目骨架
+1. 建好独立目录
+2. 建后端骨架
+3. 建前端骨架
+4. 建配置模板
+5. 建脚本入口
+
+P1：后端最小闭环
+1. 项目创建
+2. 角色生成
+3. 分镜拆解
+4. 中间结果落盘
+5. 任务状态记录
+
+P2：完整单集生成
+1. 分镜图
+2. TTS
+3. 图生视频
+4. 单镜头合成
+5. 整集拼接
+
+P3：前端可视化
+1. 项目页
+2. 角色页
+3. 分镜页
+4. 成片页
+
+P4：产品化增强
+1. 批量生成
+2. 局部重跑
+3. 多 provider 切换
+4. 素材替换
+5. 导出打包
+
+
+十七、首版 MVP
+--------------
+首版最小可用闭环建议定义为：
+
+输入：
+- premise
+- 风格
+- 集数
+- 角色数量
+
+输出：
+- 角色卡
+- 分镜 JSON
+- 分镜图
+- TTS 音频
+- 单镜头视频
+- 一集 MP4
+
+只要这条链路跑通，项目就已经具备验证价值。
+
+
+十八、不要一开始就做的内容
+--------------------------
+1. 不做多租户 SaaS
+2. 不做复杂权限系统
+3. 不做在线时间线编辑器
+4. 不做海量 provider 全接入
+5. 不做复杂云调度
+6. 不做框架级节点重构
+
+首版先证明：
+“独立项目目录 + 调用 AgentTorch + 本地产物闭环”这条路线是通的。
+
+
+十九、下一步最合理的落地动作
+----------------------------
+如果按这个方案继续，下一步不该去改 `agentorch/`，而是直接在：
+
+`projects/ai_short_drama/`
+
+下面补齐：
+
+1. `backend/`
+2. `frontend/`
+3. `configs/`
+4. `scripts/`
+5. `artifacts/`
+
+然后先做 `backend/` 的最小服务骨架。
+
+
+二十、最终结论
+--------------
+这个项目要严格保持“项目”和“框架”的边界：
+
+1. `agentorch/` 是底层框架
+2. `projects/ai_short_drama/` 是独立短剧项目
+3. 短剧业务实现全部优先落在独立项目目录
+4. 首版目标是打通单集闭环，不是改造框架
+
+这样做，结构才干净，后续才可维护，也符合当前这个任务的真实边界。

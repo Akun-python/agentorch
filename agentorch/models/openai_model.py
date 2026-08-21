@@ -522,6 +522,7 @@ class OpenAIModel(
             reasoning_delta_text = ""
             tool_calls: list[ToolCall] = []
             finish_reason = None
+            usage = UsageInfo()
             if chunk.choices:
                 choice = chunk.choices[0]
                 finish_reason = choice.finish_reason
@@ -565,11 +566,19 @@ class OpenAIModel(
                                 arguments=arguments,
                             )
                         )
+            raw_usage = getattr(chunk, "usage", None)
+            if raw_usage is not None:
+                usage = UsageInfo(
+                    prompt_tokens=getattr(raw_usage, "prompt_tokens", 0) or 0,
+                    completion_tokens=getattr(raw_usage, "completion_tokens", 0) or 0,
+                    total_tokens=getattr(raw_usage, "total_tokens", 0) or 0,
+                )
             yield StreamChunk(
                 delta_text=delta_text,
                 reasoning_delta_text=reasoning_delta_text,
                 tool_calls=tool_calls,
                 finish_reason=finish_reason,
+                usage=usage,
                 raw=chunk,
             )
 
@@ -595,6 +604,8 @@ class OpenAIModel(
         extra_body = provider_options.get("extra_body")
         if isinstance(extra_body, dict):
             payload.update(extra_body)
+        if stream:
+            payload["stream_options"] = {"include_usage": True}
         return {key: value for key, value in payload.items() if value is not None}
 
     def _message_to_openai(self, message: Message) -> dict[str, Any]:

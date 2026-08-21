@@ -1633,6 +1633,9 @@ class Runtime:
                 accumulated_text += chunk.delta_text or ""
                 accumulated_reasoning_text += chunk.reasoning_delta_text or ""
                 finish_reason = chunk.finish_reason or finish_reason
+                context.usage.prompt_tokens += chunk.usage.prompt_tokens
+                context.usage.completion_tokens += chunk.usage.completion_tokens
+                context.usage.total_tokens += chunk.usage.total_tokens
                 for tool_call in chunk.tool_calls:
                     key = tool_call.id or f"{tool_call.name}:{len(accumulated_tool_calls)}"
                     existing = tool_call_by_id.get(key)
