@@ -74,6 +74,10 @@ node_modules/
 **/download/
 **/outputs_*/
 **/outputs*/
+**/download_*.json
+**/download_*.csv
+**/*_summary.csv
+**/*_manifest.json
 
 # 大型媒体与本地导出
 *.mp4
