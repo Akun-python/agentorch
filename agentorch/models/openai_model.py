@@ -1025,7 +1025,12 @@ class OpenAIModel(
                     await outcome
             self._embedding_client = None
         if self._speech_http_client is not None:
-            await self._speech_http_client.aclose()
+            try:
+                await self._speech_http_client.aclose()
+            except RuntimeError as exc:
+                # 同步 facade 可能在不同事件循环中关闭已失效连接。
+                if "Event loop is closed" not in str(exc):
+                    raise
             self._speech_http_client = None
         for client in self._image_http_clients.values():
             close_async = getattr(client, "aclose", None)

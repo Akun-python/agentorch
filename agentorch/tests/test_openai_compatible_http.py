@@ -122,3 +122,19 @@ def test_http_adapter_surfaces_non_success_status() -> None:
         await model.aclose()
 
     asyncio.run(scenario())
+
+
+def test_http_adapter_sync_facade_can_close_after_run_sync() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"finish_reason": "stop", "message": {"content": "ok"}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+
+    model = _request_model(httpx.MockTransport(handler))
+    response = asyncio.run(model.generate(ModelRequest(messages=[Message(role="user", content="hi")])) )
+    assert response.content == "ok"
+    asyncio.run(model.aclose())
