@@ -525,13 +525,17 @@ class OpenAIModel(
             usage = UsageInfo()
             if chunk.choices:
                 choice = chunk.choices[0]
-                finish_reason = choice.finish_reason
-                if choice.delta and choice.delta.content:
-                    delta_text = choice.delta.content
-                if choice.delta and getattr(choice.delta, "reasoning_content", None):
-                    reasoning_delta_text = choice.delta.reasoning_content
-                if choice.delta and getattr(choice.delta, "tool_calls", None):
-                    for position, tool_call in enumerate(choice.delta.tool_calls):
+                finish_reason = getattr(choice, "finish_reason", None)
+                delta = getattr(choice, "delta", None)
+                content = getattr(delta, "content", None) if delta is not None else None
+                if content:
+                    delta_text = content
+                reasoning = getattr(delta, "reasoning_content", None) if delta is not None else None
+                if reasoning:
+                    reasoning_delta_text = reasoning
+                raw_tool_calls = getattr(delta, "tool_calls", None) if delta is not None else None
+                if raw_tool_calls:
+                    for position, tool_call in enumerate(raw_tool_calls):
                         keys = self._stream_tool_call_keys(tool_call, position=position)
                         state = None
                         for key in keys:
@@ -547,12 +551,14 @@ class OpenAIModel(
                             }
                         for key in keys:
                             partial_tool_calls[key] = state
-                        if tool_call.id:
-                            state["id"] = tool_call.id
-                        fragment_name = (tool_call.function.name if tool_call.function else "") or ""
+                        tool_call_id = getattr(tool_call, "id", None)
+                        if tool_call_id:
+                            state["id"] = tool_call_id
+                        function = getattr(tool_call, "function", None)
+                        fragment_name = (getattr(function, "name", None) if function else "") or ""
                         if fragment_name:
                             state["name"] = self._merge_stream_tool_name(state["name"], fragment_name)
-                        fragment_arguments = (tool_call.function.arguments if tool_call.function else "") or ""
+                        fragment_arguments = (getattr(function, "arguments", None) if function else "") or ""
                         if fragment_arguments:
                             state["arguments_text"] += fragment_arguments
                         tool_name = state["name"]
@@ -643,23 +649,38 @@ class OpenAIModel(
         return data_url
 
     def _normalize_response(self, raw: Any) -> ModelResponse:
-        choice = raw.choices[0]
-        content = choice.message.content or ""
-        reasoning_content = getattr(choice.message, "reasoning_content", "") or ""
+        choices = getattr(raw, "choices", None) or []
+        if not choices:
+            raise ValueError("OpenAI-compatible response contains no choices.")
+        choice = choices[0]
+        message = getattr(choice, "message", None)
+        if message is None:
+            raise ValueError("OpenAI-compatible response choice contains no message.")
+        content = getattr(message, "content", None) or ""
+        reasoning_content = getattr(message, "reasoning_content", "") or ""
         tool_calls: list[ToolCall] = []
-        for tool_call in getattr(choice.message, "tool_calls", None) or []:
+        for tool_call in getattr(message, "tool_calls", None) or []:
             arguments = {}
-            if tool_call.function and tool_call.function.arguments:
+            function = getattr(tool_call, "function", None)
+            raw_arguments = getattr(function, "arguments", None) if function else None
+            if raw_arguments:
                 try:
-                    parsed_arguments = json.loads(tool_call.function.arguments)
+                    parsed_arguments = json.loads(raw_arguments)
                     arguments = parsed_arguments if isinstance(parsed_arguments, dict) else {"raw": parsed_arguments}
                 except json.JSONDecodeError:
-                    arguments = {"raw": tool_call.function.arguments}
-            tool_calls.append(ToolCall(id=tool_call.id, name=tool_call.function.name, arguments=arguments))
+                    arguments = {"raw": raw_arguments}
+            tool_calls.append(
+                ToolCall(
+                    id=getattr(tool_call, "id", "") or "",
+                    name=getattr(function, "name", "") if function else "",
+                    arguments=arguments,
+                )
+            )
+        raw_usage = getattr(raw, "usage", None)
         usage = UsageInfo(
-            prompt_tokens=getattr(raw.usage, "prompt_tokens", 0) or 0,
-            completion_tokens=getattr(raw.usage, "completion_tokens", 0) or 0,
-            total_tokens=getattr(raw.usage, "total_tokens", 0) or 0,
+            prompt_tokens=getattr(raw_usage, "prompt_tokens", 0) or 0,
+            completion_tokens=getattr(raw_usage, "completion_tokens", 0) or 0,
+            total_tokens=getattr(raw_usage, "total_tokens", 0) or 0,
         )
         message = Message(
             role="assistant",
@@ -676,7 +697,7 @@ class OpenAIModel(
             content=content,
             reasoning_content=reasoning_content,
             tool_calls=tool_calls,
-            finish_reason=choice.finish_reason,
+            finish_reason=getattr(choice, "finish_reason", None),
             usage=usage,
             raw=raw,
         )
