@@ -343,10 +343,121 @@ team.close()
 
 ### 4) Next Steps
 
-- Add RAG with `knowledge_paths` and `enable_rag=True`
-- Add workflow DAG when task steps need explicit control
-- Add observability storage for trace and usage analysis
-- Move policy objects into code for predictable behavior
+The recommended path from a prototype to a maintainable system is to make one
+new boundary explicit at a time:
+
+#### A. Mount project knowledge with RAG
+
+Use `knowledge_paths` for local Markdown, text, code, or supported documents.
+`enable_rag=True` makes retrieval part of the runtime contract instead of
+leaving it to prompt assembly. Keep the source directory small, versioned, and
+safe to share; do not point it at raw datasets or generated artifacts.
+
+```python
+from agentorch import create_agent
+
+agent = create_agent(
+    model="gpt-4.1-mini",
+    enable_rag=True,
+    knowledge_paths=["docs/", "src/"],
+    knowledge_scope=["public-docs", "source-code"],
+)
+result = agent.run_sync("根据项目文档解释认证流程。", thread_id="rag-001")
+print(result.output_text)
+agent.close()
+```
+
+#### B. Make important steps deterministic with a workflow DAG
+
+Use a workflow when the order, retry boundary, approval point, or handoff must
+be inspectable. Keep open-ended reasoning inside a model node, and use explicit
+tool, retrieval, approval, and aggregation nodes for system boundaries.
+
+```python
+from agentorch import WorkflowBuilder, create_agent
+from agentorch.workflow import Node
+
+workflow = (
+    WorkflowBuilder(max_steps=8)
+    .add(Node.retrieve("retrieve", question="用户问题"), entry=True)
+    .then(Node.model_node("draft", prompt="基于检索证据形成初稿。"))
+    .then(Node.model_node("review", prompt="检查事实、引用和风险。"))
+    .build()
+)
+agent = create_agent(model="gpt-4.1-mini", workflow=workflow)
+result = agent.run_sync("整理本次变更", thread_id="workflow-001")
+agent.close()
+```
+
+#### C. Turn on observability before cost or quality tuning
+
+Observability records runtime events, usage, handoffs, and failure context in a
+local SQLite store. Use a project-local path, redact secrets, and compare
+traces by model, prompt version, workflow version, and thread type.
+
+```python
+from agentorch import create_agent
+from agentorch.config import ObservabilityConfig
+
+agent = create_agent(
+    model="gpt-4.1-mini",
+    observability=ObservabilityConfig(
+        enabled=True,
+        sqlite_path=".agentorch/observability.db",
+        console_mode="important_only",
+    ),
+)
+```
+
+Track at least: success rate, tool failure rate, latency, prompt/completion
+tokens, estimated cost, retrieval hit quality, citation coverage, and human
+fallback rate. Do not put API keys, raw personal data, or datasets into trace
+payloads.
+
+#### D. Encode team boundaries with policy objects
+
+Policies are executable configuration. Pin them in code or a reviewed config
+file so a multi-agent team has predictable context, state, routing, memory,
+and tool behavior.
+
+```python
+from agentorch import (
+    ContextPolicy,
+    CoordinationPolicy,
+    MemoryPolicy,
+    StatePolicy,
+    create_multi_agent,
+)
+
+team = create_multi_agent(
+    model="gpt-4.1-mini",
+    roles=[
+        {"name": "planner", "description": "Plans work", "capabilities": ["plan"]},
+        {"name": "reviewer", "description": "Reviews work", "capabilities": ["review"]},
+    ],
+    context_policy=ContextPolicy.evidence_friendly(),
+    state_policy=StatePolicy(retention_mode="state_plus_memory"),
+    coordination_policy=CoordinationPolicy.distributed(),
+    memory_policy=MemoryPolicy.long_horizon(),
+)
+```
+
+Start with least privilege: narrow tool allowlists, explicit knowledge scopes,
+bounded delegation depth, and `summary_only` handoffs. Only widen a policy when
+an evaluation demonstrates a real benefit.
+
+#### E. Close the production loop
+
+- Add unit and contract tests for adapters, tools, policies, and workflow edges.
+- Add end-to-end tests with a mock provider before spending on live models.
+- Maintain a small, versioned evaluation set for task success, grounding,
+  safety, latency, and cost; pin model and prompt versions during comparisons.
+- Persist thread IDs and workflow versions so failed runs can be reproduced or
+  resumed without uploading local data.
+- Add human approval nodes for destructive actions, external messages, and
+  high-risk tool calls.
+- Deploy the runtime with bounded concurrency, timeouts, retries, rate limits,
+  health checks, and a clear shutdown path.
 
 ### Quick FAQ
 

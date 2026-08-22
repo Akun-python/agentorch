@@ -321,9 +321,108 @@ team.close()
 
 ### 4) 下一步建议
 
-- 加入 `knowledge_paths` 与 `enable_rag=True`
-- 引入 workflow DAG 固化步骤顺序
-- 开启 observability 做成本/质量分析
-- 用策略对象固定团队行为边界
+从原型走向可维护系统时，建议一次只明确一个新的工程边界：
+
+#### A. 使用 RAG 挂载项目知识
+
+通过 `knowledge_paths` 指向本地 Markdown、文本、代码或框架支持的文档，
+并设置 `enable_rag=True`，让检索成为运行时契约，而不是散落在提示词拼接中。
+目录应保持小而清晰，只放可复现、可共享的资料；不要直接指向原始数据集或生成产物。
+
+```python
+from agentorch import create_agent
+
+agent = create_agent(
+    model="gpt-4.1-mini",
+    enable_rag=True,
+    knowledge_paths=["docs/", "src/"],
+    knowledge_scope=["public-docs", "source-code"],
+)
+result = agent.run_sync("根据项目文档解释认证流程。", thread_id="rag-001")
+print(result.output_text)
+agent.close()
+```
+
+#### B. 用 Workflow DAG 固化关键步骤
+
+当步骤顺序、重试边界、人工审批点或智能体交接需要被检查时，使用 Workflow。
+将开放式推理放在 model 节点中，将工具、检索、审批和聚合等系统边界写成显式节点。
+
+```python
+from agentorch import WorkflowBuilder, create_agent
+from agentorch.workflow import Node
+
+workflow = (
+    WorkflowBuilder(max_steps=8)
+    .add(Node.retrieve("retrieve", question="用户问题"), entry=True)
+    .then(Node.model_node("draft", prompt="基于检索证据形成初稿。"))
+    .then(Node.model_node("review", prompt="检查事实、引用和风险。"))
+    .build()
+)
+agent = create_agent(model="gpt-4.1-mini", workflow=workflow)
+result = agent.run_sync("整理本次变更", thread_id="workflow-001")
+agent.close()
+```
+
+#### C. 开启 Observability 做成本与质量分析
+
+Observability 会将运行事件、Token 使用量、交接记录和失败上下文写入本地 SQLite。
+建议使用项目内路径、启用脱敏，并按模型版本、提示词版本、工作流版本和任务类型比较追踪结果。
+
+```python
+from agentorch import create_agent
+from agentorch.config import ObservabilityConfig
+
+agent = create_agent(
+    model="gpt-4.1-mini",
+    observability=ObservabilityConfig(
+        enabled=True,
+        sqlite_path=".agentorch/observability.db",
+        console_mode="important_only",
+    ),
+)
+```
+
+至少关注：成功率、工具失败率、延迟、输入/输出 Token、估算成本、检索命中质量、
+引用覆盖率和人工兜底率。不要把 API Key、原始个人信息或数据集写入追踪 payload。
+
+#### D. 用策略对象固定团队行为边界
+
+策略对象是可执行配置。建议将其写入代码或经过评审的配置文件，固定团队的上下文、状态、
+路由、记忆和工具行为，使多智能体协作结果可预测、可回归。
+
+```python
+from agentorch import (
+    ContextPolicy,
+    CoordinationPolicy,
+    MemoryPolicy,
+    StatePolicy,
+    create_multi_agent,
+)
+
+team = create_multi_agent(
+    model="gpt-4.1-mini",
+    roles=[
+        {"name": "planner", "description": "负责规划", "capabilities": ["plan"]},
+        {"name": "reviewer", "description": "负责审查", "capabilities": ["review"]},
+    ],
+    context_policy=ContextPolicy.evidence_friendly(),
+    state_policy=StatePolicy(retention_mode="state_plus_memory"),
+    coordination_policy=CoordinationPolicy.distributed(),
+    memory_policy=MemoryPolicy.long_horizon(),
+)
+```
+
+建议从最小权限开始：收紧工具白名单、显式设置知识范围、限制委派深度、使用 `summary_only`
+交接。只有评估证明确有收益时，再扩大策略边界。
+
+#### E. 补齐生产闭环
+
+- 为模型适配器、工具、策略和 Workflow 边补充单元测试与契约测试。
+- 在消耗真实模型额度前，用 Mock Provider 完成端到端测试。
+- 维护小型、版本化评估集，覆盖任务成功率、事实 grounding、安全、延迟和成本；对比时固定模型和提示词版本。
+- 持久化 thread ID 与 workflow 版本，使失败运行可以复现或恢复，同时不上传本地数据。
+- 对破坏性操作、外部消息和高风险工具调用增加人工审批节点。
+- 部署时设置并发上限、超时、重试、限流、健康检查和明确的优雅关闭流程。
 
 MIT License.
